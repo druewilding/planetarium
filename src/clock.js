@@ -2,9 +2,9 @@
 // smooth easing when it jumps.
 
 export const RATES = [
-  { rate: -2629800, label: "−1 month / s" },
-  { rate: -604800, label: "−1 week / s" },
-  { rate: -86400, label: "−1 day / s" },
+  { rate: -43200, label: "−12 hours / s" },
+  { rate: -21600, label: "−6 hours / s" },
+  { rate: -10800, label: "−3 hours / s" },
   { rate: -3600, label: "−1 hour / s" },
   { rate: -600, label: "−10 min / s" },
   { rate: -60, label: "−1 min / s" },
@@ -12,9 +12,9 @@ export const RATES = [
   { rate: 60, label: "1 min / s" },
   { rate: 600, label: "10 min / s" },
   { rate: 3600, label: "1 hour / s" },
-  { rate: 86400, label: "1 day / s" },
-  { rate: 604800, label: "1 week / s" },
-  { rate: 2629800, label: "1 month / s" },
+  { rate: 10800, label: "3 hours / s" },
+  { rate: 21600, label: "6 hours / s" },
+  { rate: 43200, label: "12 hours / s" },
 ];
 const REAL_TIME = RATES.findIndex((r) => r.rate === 1);
 
