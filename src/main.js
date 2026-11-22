@@ -682,7 +682,9 @@ async function main() {
       const full = averageSkyLuminance(atm, [{ dir: sky.sun.trueDir, e: fullSunE }, lights[1]], ambient);
       adapt = adaptTo(full.average, full.peak) ** 0.4 * adapt ** 0.6;
     }
-    exposure = 0.7 / (adapt + 0.03);
+    // The constant stops the eye "turning up the gain" too far on dark nights; without
+    // it, faint moonlight scattered near the horizon shows as a grey glowing band.
+    exposure = 0.7 / (adapt + 0.5);
     shared.uExposure.value = exposure;
     shared.uScotopic.value = 0.6 * (1 - smooth(0.005, 1, average));
     // Labels and figures recede in daylight, like a printed overlay on a bright sky.
