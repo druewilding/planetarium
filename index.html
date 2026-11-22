@@ -28,7 +28,7 @@
       aria-label="Sky view. Drag to look around, scroll or pinch to zoom, click an object for details."
     ></canvas>
     <div id="labels" aria-hidden="true"></div>
-    <p id="sensor-hint" class="sensor-hint" role="status" hidden></p>
+    <p id="toast" class="toast" role="status" hidden></p>
 
     <div id="loading" class="loading">
       <div class="loading-dot"></div>
@@ -56,6 +56,13 @@
         <ul id="search-results" class="dropdown" hidden></ul>
       </div>
       <div class="topbar-right">
+        <button id="share-btn" class="icon-btn" title="Share this sky" aria-label="Share this sky">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M18 16a3 3 0 0 0-2.4 1.2l-6.7-3.4a3 3 0 0 0 0-1.6l6.7-3.4A3 3 0 1 0 15 7l-6.7 3.4a3 3 0 1 0 0 3.2L15 17a3 3 0 1 0 3-1z"
+            />
+          </svg>
+        </button>
         <button id="info-btn" class="icon-btn" title="Info panel" aria-label="Info panel" aria-pressed="true">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 15h-2v-6h2zm0-8h-2V7h2z" />

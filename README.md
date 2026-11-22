@@ -45,6 +45,10 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
 - **Point at sky:** on a phone, hold it up and the sky follows it, so you can aim at a star and read its name. It
   uses the compass for north (via `deviceorientationabsolute` on Android, `webkitCompassHeading` on iOS). Phone
   compasses are often a few degrees out and point to magnetic north, so dragging sideways turns the sky into line.
+- **Share links:** the address always holds where you're standing, the moment, which way you're looking, the zoom
+  and whatever you've picked out, so a link opens exactly the sky you saw. The **Share** button sends it (or copies
+  it). Layer toggles stay out of the link, since those are each person's own preferences. Positions are rounded to
+  about a kilometre.
 - Works with mouse, keyboard and touch.
 
 ### Controls
@@ -59,6 +63,17 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
 | Play / pause     | ▶ button                     | Space      |
 | Faster / slower  | ⏩ / ⏪                      | `]` / `[`  |
 | Back to now      | Now                          | `n`        |
+
+### Link format
+
+```
+#body=earth&lat=59.91&lon=10.74&tz=Europe/Oslo&t=2026-12-04T19:22:12Z&az=182.3&alt=21.2&fov=80.0&sel=star:Sirius
+```
+
+Every part is optional; whatever a link leaves out stays as it is (here and now, the usual view). `body` is the world
+you're standing on, so `lat` and `lon` will mean the same thing on the Moon or Mars. `sel` is `sun`, `moon`,
+`planet:Mars`, `star:Sirius` (or a Hipparcos number, `star:32349`) or `con:Ori`. Editing the address in place jumps
+there.
 
 From the browser console, `planetarium.clock.set(Date.parse("2027-08-02T10:00Z"))` jumps to any instant (that one
 is a total solar eclipse over Spain and North Africa).
@@ -120,4 +135,4 @@ planetarium/
 5. Planets and moons: Jupiter's Galilean moons, Saturn's rings and Titan, Mars' moons
 6. The Martian sky, with its blue sunset
 7. Eclipses: find them, jump to them, see the shadow on Earth
-8. Shareable links (place, time, view in the URL)
+8. ✅ Shareable links (place, time, view in the URL)

@@ -1170,13 +1170,13 @@ button.info-head:hover {
   color: #6fe0c8;
 }
 
-/* Point your phone at the sky */
+/* Point your phone at the sky; short messages */
 .sensor-btn[aria-pressed="true"] {
   border-color: var(--accent);
   color: var(--accent);
 }
 
-.sensor-hint {
+.toast {
   position: fixed;
   top: calc(64px + env(safe-area-inset-top, 0px));
   left: 50%;
