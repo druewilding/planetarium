@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#05070d" />
+    <meta
+      name="description"
+      content="An accurate, explorable sky: the Sun, Moon, planets and stars from anywhere on Earth at any time."
+    />
+    <title>Planetarium</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="css/styles.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+          "astronomy-engine": "https://cdn.jsdelivr.net/npm/astronomy-engine@2.1.19/esm/astronomy.js"
+        }
+      }
+    </script>
+    <script type="module" src="src/main.js"></script>
+  </head>
+
+  <body>
+    <canvas
+      id="sky"
+      aria-label="Sky view. Drag to look around, scroll or pinch to zoom, click an object for details."
+    ></canvas>
+    <div id="labels" aria-hidden="true"></div>
+
+    <div id="loading" class="loading">
+      <div class="loading-dot"></div>
+      <p>Loading the sky…</p>
+    </div>
+
+    <!-- Top bar -->
+    <header class="topbar">
+      <button id="location-btn" class="chip" title="Change location">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"
+          />
+        </svg>
+        <span id="location-name">Locating…</span>
+      </button>
+      <div class="search">
+        <input
+          id="search"
+          type="search"
+          placeholder="Find Moon, Mars, Sirius, Orion…"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <ul id="search-results" class="dropdown" hidden></ul>
+      </div>
+      <div class="topbar-right">
+        <button id="info-btn" class="icon-btn" title="Info panel" aria-label="Info panel" aria-pressed="true">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 15h-2v-6h2zm0-8h-2V7h2z" />
+          </svg>
+        </button>
+        <button id="layers-btn" class="icon-btn" title="Layers & settings" aria-label="Layers and settings">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 3 2 8.5l10 5.5 10-5.5zM4.2 12 2 13.2l10 5.5 10-5.5L19.8 12 12 16.3z" />
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <div id="heading" class="heading" aria-live="off"></div>
+
+    <!-- Zoom -->
+    <div class="zoom">
+      <button id="zoom-in" class="icon-btn" aria-label="Zoom in">+</button>
+      <span id="fov-label">60°</span>
+      <button id="zoom-out" class="icon-btn" aria-label="Zoom out">−</button>
+    </div>
+
+    <!-- Info panel -->
+    <aside id="info" class="panel info-panel">
+      <div id="info-content"></div>
+    </aside>
+
+    <!-- Layers panel -->
+    <aside id="layers" class="panel layers-panel" hidden>
+      <div class="panel-head">
+        <h2>Layers</h2>
+        <button class="icon-btn small" data-close="layers" aria-label="Close">×</button>
+      </div>
+      <div id="layers-content"></div>
+    </aside>
+
+    <!-- Bottom time bar -->
+    <footer class="timebar">
+      <div class="dials">
+        <div class="dial" id="day-dial" title="Drag around to change the time of day"></div>
+        <div class="dial" id="year-dial" title="Drag around to change the date"></div>
+      </div>
+      <div class="time-main">
+        <button id="time-readout" class="time-readout" title="Type in a date and time">
+          <span id="time-clock">--:--</span>
+          <span id="time-date">—</span>
+          <span id="time-zone"></span>
+        </button>
+        <input id="datetime-input" type="datetime-local" step="60" class="visually-hidden" tabindex="-1" />
+        <div class="speed">
+          <button id="slower" class="icon-btn" aria-label="Slower / reverse">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 6v12l-8.5-6zm9.5 0v12L12 12z" /></svg>
+          </button>
+          <button id="play" class="icon-btn play" aria-label="Pause">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path id="play-icon" d="M6 5h4v14H6zm8 0h4v14h-4z" /></svg>
+          </button>
+          <button id="faster" class="icon-btn" aria-label="Faster">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 6v12l8.5-6zM3.5 6v12L12 12z" /></svg>
+          </button>
+          <span id="rate-label" class="rate-label">Real time</span>
+          <button id="now" class="chip small">Now</button>
+        </div>
+      </div>
+      <div class="dimmer" title="Dim the Sun to see what the sky holds right now">
+        <label for="sun-level">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="4.5" />
+            <path
+              d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3M4.6 4.6l2.1 2.1M17.3 17.3l2.1 2.1M4.6 19.4l2.1-2.1M17.3 6.7l2.1-2.1"
+              stroke-width="2"
+              stroke-linecap="round"
+            />
+          </svg>
+          <span>Sunlight <output id="sun-level-out">100%</output></span>
+        </label>
+        <input id="sun-level" type="range" min="0" max="1" step="0.001" value="1" />
+      </div>
+    </footer>
+
+    <!-- Location dialog -->
+    <dialog id="location-dialog" class="dialog">
+      <form method="dialog" class="dialog-inner">
+        <div class="panel-head">
+          <h2>Where are you standing?</h2>
+          <button class="icon-btn small" value="cancel" aria-label="Close">×</button>
+        </div>
+        <div class="loc-search">
+          <input id="city-search" type="search" placeholder="Search for a city…" autocomplete="off" />
+          <ul id="city-results" class="dropdown" hidden></ul>
+        </div>
+        <canvas id="map" width="1024" height="512" aria-label="World map. Click to choose a location."></canvas>
+        <p class="hint">Click the map to stand anywhere. The shading shows where it is night right now.</p>
+        <div class="loc-row">
+          <label>Latitude <input id="lat-input" type="number" min="-90" max="90" step="0.01" /></label>
+          <label>Longitude <input id="lon-input" type="number" min="-180" max="180" step="0.01" /></label>
+          <button id="geo-btn" type="button" class="chip">Use my location</button>
+        </div>
+      </form>
+    </dialog>
+
+    <noscript>This planetarium needs JavaScript and WebGL.</noscript>
+  </body>
+</html>

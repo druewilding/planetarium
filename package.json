@@ -1,0 +1,20 @@
+{
+  "name": "planetarium",
+  "version": "0.1.0",
+  "description": "An accurate, explorable sky: the Sun, Moon, planets and stars from anywhere on Earth at any time",
+  "license": "ISC",
+  "author": "Drue Wilding",
+  "type": "module",
+  "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint --fix",
+    "lint:check": "eslint",
+    "package:lint": "npx npm-package-json-lint .",
+    "start": "live-server --port=3000 --no-browser"
+  },
+  "devDependencies": {
+    "eslint-config-plus-prettier": "4.2.4"
+  },
+  "prettier": "eslint-config-plus-prettier/prettier"
+}
