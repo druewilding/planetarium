@@ -3,11 +3,23 @@
 
 import { A, AU_KM, Body, compassPoint, R2D } from "../astro.js";
 import { seasonAt } from "../season.js";
+import { skylineAt, spansAboveSkyline } from "../terrain.js";
 import { formatDateTime, formatDuration, formatShortDate, formatTime, startOfLocalDay } from "../timezone.js";
 
 const ENTITIES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\u0022": "&quot;" };
 const esc = (s) => String(s).replace(/[&<>\u0022]/g, (c) => ENTITIES[c]);
 
+const goButton = (text) => `<button class='chip small' data-action=go>${text}</button>`;
+const FEATURE_KIND = {
+  peak: "Mountain",
+  city: "City",
+  town: "Town",
+  village: "Village",
+  lighthouse: "Lighthouse",
+  observatory: "Observatory",
+  tower: "Tower",
+  mast: "Mast",
+};
 const NO_PLANETS = "<p class=note>None above the horizon right now.</p>";
 const DIM_TIP =
   "<p class=note>Slide <strong>Sunlight</strong> down to see the stars and planets that are up there right now.</p>";
@@ -46,7 +58,7 @@ export function phaseIcon(angle, southern, litAngle) {
   </svg>`;
 }
 
-export function createInfo({ container, getState, onLook, onClear, onSelect, catalog }) {
+export function createInfo({ container, getState, onLook, onClear, onSelect, onGo, catalog }) {
   const cache = new Map();
   let lastHtml = "";
   let lastBuild = 0;
@@ -71,8 +83,26 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, cat
     };
   }
 
-  function position(obj) {
-    return `<dt>Now</dt><dd>${obj.alt.toFixed(1)}° ${obj.alt >= 0 ? "up" : "below horizon"}, ${compassPoint(obj.az)} (${obj.az.toFixed(0)}°)</dd>`;
+  function position(obj, skyline) {
+    let where = obj.alt >= 0 ? "up" : "below horizon";
+    if (obj.alt >= 0 && skyline && obj.alt < skylineAt(skyline, obj.az)) where = "up, behind the mountains";
+    return `<dt>Now</dt><dd>${obj.alt.toFixed(1)}° ${where}, ${compassPoint(obj.az)} (${obj.az.toFixed(0)}°)</dd>`;
+  }
+
+  /** When the body is actually in sight over the hills today (only if they hide it a while). */
+  function skylineRow(body, s, start, radiusDeg) {
+    const { sky, loc, skyline } = s;
+    if (!skyline) return "";
+    const r = cached(`skyline|${body}|${start}|${skyline.key}`, () =>
+      spansAboveSkyline(body, sky.obs, start, skyline, radiusDeg)
+    );
+    if (r.hiddenMinutes < 4) return "";
+    const tm = (ms) => formatTime(ms, loc);
+    const span = ([a, b]) => (a <= start ? `until ${tm(b)}` : b >= r.endMs ? `from ${tm(a)}` : `${tm(a)} – ${tm(b)}`);
+    const text = r.spans.length
+      ? r.spans.slice(0, 3).map(span).join(", ") + (r.spans.length > 3 ? ", …" : "")
+      : "Hidden all day";
+    return `<dt>Over the mountains</dt><dd>${text}</dd>`;
   }
 
   function riseSetRows(rs, loc, obj, label = "") {
@@ -137,7 +167,7 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, cat
       covered > 0 && sun.alt > -1
         ? `<dt>Eclipse</dt><dd>${covered >= 0.9999 ? "Total!" : `${(covered * 100).toFixed(covered > 0.99 ? 1 : 0)}% covered`}</dd>`
         : "";
-    let html = `<dl>${position(sun)}${eclipseRow}${riseSetRows(ev.rs, loc, bodyRef(Body.Sun, obs))}${dayLen}</dl>`;
+    let html = `<dl>${position(sun, s.skyline)}${eclipseRow}${riseSetRows(ev.rs, loc, bodyRef(Body.Sun, obs))}${skylineRow(Body.Sun, s, start, 0.27)}${dayLen}</dl>`;
     html += daylightBar(start, obs, ms);
     if (!full) return html;
     const twRow = (name, pair) => `<dt>${name}</dt><dd>${t(pair[0], loc)} – ${t(pair[1], loc)}</dd>`;
@@ -182,7 +212,7 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, cat
     const head = full
       ? `<div class="info-head">${headInner}</div>`
       : `<button class="info-head jump" data-select="moon" title="Look at the Moon">${headInner}</button>`;
-    let html = `${head}<dl>${position(moon)}${riseSetRows(rs, loc, bodyRef(Body.Moon, obs))}</dl>`;
+    let html = `${head}<dl>${position(moon, s.skyline)}${riseSetRows(rs, loc, bodyRef(Body.Moon, obs))}${skylineRow(Body.Moon, s, start, 0.26)}</dl>`;
     if (!full) return html;
     const phases = cached(`quarters|${Math.floor(ms / 3600000)}`, () => {
       const list = [];
@@ -220,7 +250,7 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, cat
     const con = A.Constellation(p.ra, p.dec);
     const visible = p.mag < 6;
     const lightMin = (p.dist * AU_KM) / 299792.458 / 60;
-    return `<dl>${position(p)}${riseSetRows(rs, loc, bodyRef(body, obs))}</dl>
+    return `<dl>${position(p, s.skyline)}${riseSetRows(rs, loc, bodyRef(body, obs))}${skylineRow(body, s, start, 0)}</dl>
       <div class="section"><h4>Facts</h4><dl>
         <dt>Brightness</dt><dd>mag ${p.mag.toFixed(1)}${visible ? "" : " (needs a telescope)"}</dd>
         <dt>Distance</dt><dd>${p.dist.toFixed(3)} AU · ${((p.dist * AU_KM) / 1e6).toFixed(0)} M km</dd>
@@ -245,7 +275,7 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, cat
     const pos = star.position(sky);
     const always = !rs.rise && !rs.set;
     const ref = bodyRef(Body.Star1, obs);
-    return `<dl>${position(pos)}${always ? `<dt>Rise / set</dt><dd>${rs.transit.hor.altitude > 0 ? "Never sets here" : "Never rises here"}</dd>` : riseSetRows(rs, loc, ref)}</dl>
+    return `<dl>${position(pos, s.skyline)}${always ? `<dt>Rise / set</dt><dd>${rs.transit.hor.altitude > 0 ? "Never sets here" : "Never rises here"}</dd>` : riseSetRows(rs, loc, ref)}</dl>
       <div class="section"><h4>Facts</h4><dl>
         <dt>Brightness</dt><dd>mag ${star.mag.toFixed(2)}</dd>
         <dt>Colour (B−V)</dt><dd>${star.bv.toFixed(2)}</dd>
@@ -254,10 +284,22 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, cat
       </dl></div>`;
   }
 
+  /** A mountain, town or landmark on the land. */
+  function featureDetails(s, f) {
+    const m = (v) => `${Math.round(v).toLocaleString()} m`;
+    let rows = "";
+    if (f.group === "peak") rows += `<dt>Height</dt><dd>${m(f.ele ?? f.height)}</dd>`;
+    else if (f.tall) rows += `<dt>Height</dt><dd>${m(f.tall)} tall</dd>`;
+    if (f.population) rows += `<dt>Population</dt><dd>${f.population.toLocaleString()}</dd>`;
+    rows += `<dt>Distance</dt><dd>${f.distance < 10 ? f.distance.toFixed(1) : Math.round(f.distance)} km</dd>`;
+    if (f.otherNames) rows += `<dt>Also called</dt><dd>${esc(f.otherNames)}</dd>`;
+    return `<dl>${position(f, null)}${rows}</dl><p class="note">From OpenStreetMap.</p>`;
+  }
+
   function constellationDetails(s, c) {
     const pos = c.position(s.sky);
     const stars = catalog.starsIn(c.id).slice(0, 5);
-    return `<dl>${position(pos)}</dl>
+    return `<dl>${position(pos, s.skyline)}</dl>
       ${stars.length ? `<div class="section"><h4>Brightest stars</h4><dl>${stars.map((st) => `<dt>${esc(st.label)}</dt><dd>mag ${st.mag.toFixed(1)}</dd>`).join("")}</dl></div>` : ""}`;
   }
 
@@ -285,7 +327,7 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, cat
       <div class="section"><h4><button class="jump" data-select="moon" title="Look at the Moon">Moon</button></h4>${moonDetails(s, false)}</div>
       <div class="section"><h4>Planets up now</h4>${visible ? `<dl>${visible}</dl>` : NO_PLANETS}</div>
       ${sunUp ? DIM_TIP : ""}
-      <p class="note">Tap anything in the sky for details.</p>`;
+      <p class="note">Tap anything to look at it.</p>`;
   }
 
   function build() {
@@ -311,10 +353,14 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, cat
     } else if (sel.type === "constellation") {
       kind = "Constellation";
       body = constellationDetails(s, sel.constellation);
+    } else if (sel.type === "feature") {
+      kind = FEATURE_KIND[sel.feature.kind];
+      body = featureDetails(s, sel.feature);
     }
     return `<h3>${esc(title)}</h3><p class="kind">${esc(kind)}</p>${body}
       <div class="info-actions">
         <button class="chip small" data-action="look">Look at it</button>
+        ${sel.type === "feature" ? goButton(sel.feature.group === "peak" ? "Go to the summit" : "Go there") : ""}
         <button class="chip small" data-action="clear">Back to overview</button>
       </div>`;
   }
@@ -323,6 +369,7 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, cat
     const action = e.target.closest("[data-action]")?.dataset.action;
     if (action === "look") onLook();
     if (action === "clear") onClear();
+    if (action === "go") onGo?.();
     const jump = e.target.closest("[data-select]");
     if (jump) onSelect(jump.dataset.select, jump.dataset.id);
   });

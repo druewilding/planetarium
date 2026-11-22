@@ -34,6 +34,7 @@ export function createMilkyWay(shared, glsl, texture) {
     `,
     fragmentShader: /* glsl */ `
       ${glsl.SKY_LOOKUP}
+      ${glsl.LAND}
       uniform sampler2D uMap;
       uniform float uExtK;
       uniform float uOpacity;
@@ -59,6 +60,8 @@ export function createMilkyWay(shared, glsl, texture) {
         float sky = max(dot(skyAt(w), vec3(0.2126, 0.7152, 0.0722)), 1e-7);
         float contrast = rel * ${PEAK_LUMINANCE.toExponential()} * trans / sky;
         float vis = smoothstep(0.04, 0.6, contrast);
+        // Seeing through the earth shows stars, but not the Milky Way's glow.
+        vis *= 1.0 - throughEarth(w);
 
         // To the dark-adapted eye it's a soft, mostly colourless glow.
         vec3 tint = mix(vec3(rel), c, 0.35);

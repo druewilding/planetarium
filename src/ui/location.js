@@ -188,6 +188,7 @@ export function createLocation({ cities, land, onChange, getTime }) {
     dialog.showModal();
     $("city-search").value = "";
     $("city-results").hidden = true;
+    $("city-search").focus(); // ready to type a city straight away
   });
 
   let dragging = false;

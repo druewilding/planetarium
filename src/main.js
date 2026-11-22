@@ -9,14 +9,17 @@ import {
   averageSkyLuminance,
   createAtmosphere,
   createSkyDome,
+  luminance,
   NONE,
+  skyRadiance,
   transmittance,
 } from "./scene/atmosphere.js";
-import { createGround, createMoon, createSun } from "./scene/bodies.js";
+import { createGround, createMoon, createSkylineTexture, createSun } from "./scene/bodies.js";
 import * as glsl from "./scene/glsl.js";
 import { createMilkyWay } from "./scene/milkyway.js";
 import { createOverlays } from "./scene/overlays.js";
 import { createPlanetPoints, createPointsMaterial, createStars } from "./scene/points.js";
+import { computeProfile, createTerrain, skylineAt } from "./terrain.js";
 import { formatDateTime, formatTime, startOfLocalDay } from "./timezone.js";
 import { createCompass } from "./ui/compass.js";
 import { createInfo } from "./ui/info.js";
@@ -172,6 +175,10 @@ async function main() {
     uBoost: { value: 0 },
     uPixelRatio: { value: renderer.getPixelRatio() },
     uSizeScale: { value: 1 },
+    // The land's skyline, for every sky shader (see glsl.LAND).
+    uHorizon: { value: createSkylineTexture() },
+    uTerrain: { value: 0 },
+    uSeeThrough: { value: 0 },
   };
 
   scene.add(createSkyDome(shared, glsl));
@@ -193,7 +200,52 @@ async function main() {
   const ground = createGround(shared, glsl);
   scene.add(moon.mesh, moon.glow, sun.mesh, ground.mesh);
 
+  // Hills and mountains on the horizon, loaded for wherever you're standing.
+  const terrain = createTerrain({ onReady: () => info?.update(true) });
+  let skyline = null; // the profile the ground is showing
+  let skylineFade = 0;
+  let flight = null; // a flight across the land: skylines along the way (see flyTo)
+  /** Altitude (degrees) of the land's skyline towards an azimuth; 0 for a flat horizon. */
+  const skylineAlt = (az) => (skyline && skylineFade > 0.5 ? skylineAt(skyline, az) : 0);
+  /** Is this direction behind solid ground (or the hills)? */
+  function behindLand(dir, margin = 0.25) {
+    if (!layers.ground) return false;
+    const { alt, az } = altAz(dir);
+    return alt < skylineAlt(az) - margin;
+  }
+  function updateSkyline(dt) {
+    if (flight) {
+      // Flying: blend between the skylines worked out along the way.
+      const n = flight.frames.length - 1;
+      const x = (locTween ? locTween.k : 1) * n;
+      const i = Math.min(n - 1, Math.floor(x));
+      const f = x - i;
+      const [a, b] = [flight.frames[i], flight.frames[i + 1]];
+      const out = flight.view.altitude;
+      for (let j = 0; j < out.length; j++) out[j] = a[j] + (b[j] - a[j]) * f;
+      ground.setSkylineAltitudes(out, flight.top);
+      skyline = flight.view;
+      skylineFade = 1;
+      if (!locTween) {
+        skyline = flight.final; // landed
+        ground.setSkyline(skyline);
+        flight = null;
+      }
+      return;
+    }
+    const want = layers.terrain && !locTween ? terrain.profileFor(loc) : null;
+    if (want !== skyline) {
+      // Fade the old skyline out, swap, then fade the new one in.
+      skylineFade = Math.max(0, skylineFade - dt * 4);
+      if (skylineFade === 0) {
+        skyline = want;
+        ground.setSkyline(skyline);
+      }
+    } else if (skyline) skylineFade = Math.min(1, skylineFade + dt * 2.5);
+  }
+
   const labels = createLabels($("labels"));
+  let info = null;
 
   // ---- State ----
   const clock = new Clock();
@@ -213,7 +265,9 @@ async function main() {
     onChange: (next, { animate } = {}) => setLocation(next, animate),
   });
 
-  function setLocation(next, animate) {
+  function setLocation(next, animate, { duration = 1.6 } = {}) {
+    // Mountains belong to where you were standing.
+    if (selection?.type === "feature") select(null);
     location.set(next);
     if (!loc || !animate) {
       loc = { ...next };
@@ -225,13 +279,14 @@ async function main() {
     // Crossing the equator: turn around, so you keep facing the Sun's side of the sky
     // (south in the north, north in the south) and its daily path still makes sense.
     if (Math.sign(next.lat || 1) !== Math.sign(loc.lat || 1)) view.lookTo({ az: view.state.az + 180 });
-    locTween = { from: { ...loc }, to: next, dLon, t: 0 };
+    locTween = { from: { ...loc }, to: next, dLon, t: 0, k: 0, duration };
   }
 
   function updateLocationTween(dt) {
     if (!locTween) return;
-    locTween.t = Math.min(1, locTween.t + dt / 1.6);
+    locTween.t = Math.min(1, locTween.t + dt / locTween.duration);
     const k = locTween.t < 0.5 ? 2 * locTween.t ** 2 : 1 - (-2 * locTween.t + 2) ** 2 / 2;
+    locTween.k = k;
     const lon = locTween.from.lon + locTween.dLon * k;
     loc = {
       ...locTween.to,
@@ -313,12 +368,13 @@ async function main() {
   const timebar = createTimebar({ clock, getLocation: () => loc });
 
   const infoPanel = $("info");
-  const info = createInfo({
+  info = createInfo({
     container: $("info-content"),
     catalog,
-    getState: () => ({ sky, loc, ms: clock.ms, selection }),
+    getState: () => ({ sky, loc, ms: clock.ms, selection, skyline: !flight && skylineFade > 0.5 ? skyline : null }),
     onLook: () => lookAtSelection(),
     onClear: () => select(null),
+    onGo: () => selection?.type === "feature" && flyTo(selection.feature),
     onSelect: (type, id) => {
       if (type === "sun") select(selectSun(), { look: true });
       else if (type === "moon") select(selectMoon(), { look: true });
@@ -369,7 +425,7 @@ async function main() {
     onFace: (az) => view.lookTo({ az, alt: Math.max(view.state.alt, 5) }),
     onFaceBody: (id) => {
       const b = id === "sun" ? sky.sun : sky.moon;
-      if (layers.ground && b.alt < 0) view.lookTo({ az: b.az, alt: 12 });
+      if (behindLand(b.dir, 0)) view.lookTo({ az: b.az, alt: Math.max(12, skylineAlt(b.az) + 8) });
       else view.lookAt(b.dir);
     },
   });
@@ -564,6 +620,8 @@ async function main() {
         return selection.star.position(sky).dir;
       case "constellation":
         return selection.constellation.position(sky).dir;
+      case "feature":
+        return (selection.feature.dir ??= dirFromAltAz(selection.feature.alt, selection.feature.az));
       default:
         return null;
     }
@@ -586,9 +644,10 @@ async function main() {
     let fov = view.state.fov;
     if (selection.type === "moon" || selection.type === "sun") fov = Math.min(fov, 20);
     if (selection.type === "constellation") fov = Math.max(fov, 50);
-    const { alt, az } = altAz(d);
-    // Below a solid horizon: face its direction, just above the ground.
-    if (layers.ground && alt < 0) view.lookTo({ alt: 12, az, fov: Math.max(fov, 60) });
+    const { az } = altAz(d);
+    // Behind the ground or the hills: face its direction, just above the skyline.
+    if (selection.type !== "feature" && behindLand(d, 0))
+      view.lookTo({ alt: Math.max(12, skylineAlt(az) + 8), az, fov: Math.max(fov, 60) });
     else view.lookAt(d, fov);
   }
 
@@ -597,6 +656,66 @@ async function main() {
   const selectPlanet = (p) => ({ type: "planet", id: p.id, name: p.name });
   const selectStar = (s) => ({ type: "star", name: s.name, star: s });
   const selectConstellation = (c) => ({ type: "constellation", name: c.name, constellation: c });
+  const selectFeature = (f) => ({ type: "feature", name: f.name, feature: f });
+
+  /** Mountains, towns and landmarks to label, as the layers allow. */
+  function shownFeatures() {
+    if (flight || skylineFade <= 0.5 || !skyline?.features) return [];
+    return skyline.features.filter((f) => (f.group === "peak" ? layers.peakNames : layers.placeNames));
+  }
+  const FEATURE_PRIORITY = { city: 37, town: 33, village: 27, lighthouse: 34, observatory: 36, tower: 25, mast: 24 };
+  const featurePriority = (f) =>
+    f.group === "peak" ? 30 + Math.min(8, f.height / 200) : FEATURE_PRIORITY[f.kind] + (f.named ? 2 : 0);
+
+  /**
+   * Fly to a mountain's summit (or a town, or a lighthouse), still facing the same way.
+   * Skylines are worked out at points along the route first, climbing up and over and
+   * down again, then the view blends through them as you go: peaks ahead grow, the
+   * land drops away.
+   */
+  let takingOff = false;
+  async function flyTo(p) {
+    if (takingOff || flight) return;
+    const here = location.fromPoint(p.lat, p.lon);
+    const dest = { ...here, name: p.named ? p.name : here.name };
+    if (p.group === "peak") dest.ele = p.ele ?? p.height;
+    const from = locTween ? locTween.to : loc;
+    const start = skyline;
+    if (!start || !layers.terrain) return setLocation(dest, true);
+    takingOff = true;
+    showToast(`Taking off for ${p.name}…`, 30000);
+    try {
+      const final = await terrain.ensure(dest);
+      if (!final) throw new Error("No terrain there");
+      const steps = Math.max(6, Math.min(14, Math.round(p.distance * 1.2)));
+      const startEye = start.ground + 2;
+      const endEye = final.ground + 2;
+      const climb = Math.min(1200, 150 + 60 * p.distance); // metres above the straight line
+      const frames = [start.altitude];
+      for (let i = 1; i < steps; i++) {
+        const t = i / steps;
+        const eye = startEye + (endEye - startEye) * t + climb * Math.sin(Math.PI * t);
+        const lat = from.lat + (dest.lat - from.lat) * t;
+        const lon = from.lon + (dest.lon - from.lon) * t;
+        const frame = await computeProfile(lat, lon, { eye, fast: true });
+        if (!frame) throw new Error("No terrain along the way");
+        frames.push(frame.altitude);
+      }
+      frames.push(final.altitude);
+      let top = 0;
+      for (const f of frames) for (const v of f) top = Math.max(top, v);
+      const view = { altitude: new Float32Array(final.altitude.length), max: top, ground: final.ground };
+      flight = { frames, final, top, view };
+      toast.hidden = true;
+      setLocation(dest, true, { duration: Math.min(7, Math.max(3, 2.5 + p.distance * 0.3)) });
+    } catch (err) {
+      console.warn("Couldn't plan the flight", err);
+      toast.hidden = true;
+      setLocation(dest, true);
+    } finally {
+      takingOff = false;
+    }
+  }
 
   createSearch([
     { name: "Sun", kind: "Star", select: () => select(selectSun(), { look: true }) },
@@ -623,7 +742,7 @@ async function main() {
 
   function pick(x, y) {
     if (!sky) return;
-    const below = (d) => layers.ground && d.y < -0.005;
+    const below = (d) => behindLand(d);
     let best = null;
     let bestScore = Infinity;
     const consider = (dir, radiusPx, bonus, make) => {
@@ -639,6 +758,19 @@ async function main() {
     consider(sky.sun.dir, Math.max(20, shownRadius(sky.sun) * pxPerRad + 6), 10, selectSun);
     consider(sky.moon.dir, Math.max(20, shownRadius(sky.moon) * pxPerRad + 6), 10, selectMoon);
     for (const p of sky.planets) consider(p.dir, 18, 6, () => selectPlanet(p));
+    // Mountains, towns and landmarks: the label sits centred just above the spot.
+    {
+      for (const p of shownFeatures()) {
+        const s = p.dir && screenOf(p.dir);
+        if (!s) continue;
+        const dx = x - s[0];
+        const dy = y - (s[1] - 16);
+        const onLabel = Math.abs(dx) < p.name.length * 3.5 + 6 && Math.abs(dy) < 10;
+        if (!onLabel && Math.hypot(x - s[0], y - s[1]) > 12) continue;
+        const score = Math.min(Math.hypot(dx, dy), Math.hypot(x - s[0], y - s[1])) - 8;
+        if (score < bestScore) [bestScore, best] = [score, () => selectFeature(p)];
+      }
+    }
     for (const s of catalog.stars) {
       if (s.mag > globalLimit + 0.5) break; // sorted by magnitude
       consider(s.position(sky).dir, 14, Math.max(0, 4 - s.mag) * 1.5, () => selectStar(s));
@@ -715,7 +847,7 @@ async function main() {
 
   function buildLabels() {
     const items = [];
-    const hidden = (d) => layers.ground && d.y < -0.004;
+    const hidden = (d) => behindLand(d);
     if (layers.planetLabels) {
       if (!hidden(sky.sun.dir))
         items.push({
@@ -773,6 +905,21 @@ async function main() {
         });
       }
     }
+    {
+      for (const p of shownFeatures()) {
+        p.dir ??= dirFromAltAz(p.alt, p.az);
+        const chosen = selection?.type === "feature" && selection.feature === p;
+        items.push({
+          key: `f${p.id}`,
+          text: p.name,
+          dir: p.dir,
+          cls: `feature ${p.group} ${p.kind}${chosen ? " selected" : ""}`,
+          priority: chosen ? 1000 : featurePriority(p),
+          always: chosen,
+          offset: [-p.name.length * 3, -16],
+        });
+      }
+    }
     if (layers.compass) {
       for (const c of COMPASS) items.push({ ...c, priority: 200, always: true, offset: [-5, -14] });
     }
@@ -796,7 +943,8 @@ async function main() {
       }
     }
     const sd = selectionDir();
-    if (sd && selection.type !== "constellation") {
+    // (A chosen mountain's name is highlighted instead of ringed.)
+    if (sd && selection.type !== "constellation" && selection.type !== "feature") {
       const angR =
         selection.type === "moon" ? shownRadius(sky.moon) : selection.type === "sun" ? shownRadius(sky.sun) : 0;
       const px = angR * (canvas.clientHeight / (view.state.fov * (Math.PI / 180)));
@@ -813,7 +961,44 @@ async function main() {
           width: 0,
         });
     }
+    // Dark text where the sky behind a label is bright, light text where it's dark.
+    for (const it of items) if (it.cls !== "selected-ring" && litBehind(it.dir)) it.cls += " lit";
     return items;
+  }
+
+  // ---- How bright the sky is behind labels ----
+  // At dusk the glow over the sunset is far brighter than the sky overall, so each
+  // label looks at the sky right behind it, sampled a few times a second on a
+  // coarse grid (overhead, the top row stands in).
+  const GLOW_ALTS = [1, 5, 12, 25, 45, 70];
+  const GLOW_AZ = 24;
+  const glow = new Float32Array(GLOW_AZ * GLOW_ALTS.length);
+  let glowAt = -Infinity;
+  function updateGlow(now, atm, lights, ambient) {
+    if (now - glowAt < 300) return;
+    glowAt = now;
+    for (let j = 0; j < GLOW_ALTS.length; j++) {
+      for (let i = 0; i < GLOW_AZ; i++) {
+        dirFromAltAz(GLOW_ALTS[j], (i * 360) / GLOW_AZ, tmp);
+        glow[j * GLOW_AZ + i] = luminance(skyRadiance(atm, tmp, lights, 8, 4, ambient));
+      }
+    }
+  }
+  function litBehind(dir) {
+    const { alt, az } = altAz(dir);
+    // Below the skyline it's the land behind the label (or the dark seen through it).
+    if (alt < skylineAlt(az) - 0.3) return false;
+    const a = Math.min(GLOW_ALTS[GLOW_ALTS.length - 1] - 1e-6, Math.max(GLOW_ALTS[0], alt));
+    let j = 0;
+    while (a > GLOW_ALTS[j + 1]) j++;
+    const fy = (a - GLOW_ALTS[j]) / (GLOW_ALTS[j + 1] - GLOW_ALTS[j]);
+    const x = (az / 360) * GLOW_AZ;
+    const i = Math.floor(x) % GLOW_AZ;
+    const i2 = (i + 1) % GLOW_AZ;
+    const fx = x - Math.floor(x);
+    const row = (r) => glow[r * GLOW_AZ + i] * (1 - fx) + glow[r * GLOW_AZ + i2] * fx;
+    // Brightness on screen, before tone mapping: a mid-tone sky and up wants dark text.
+    return (row(j) * (1 - fy) + row(j + 1) * fy) * exposure > 0.22;
   }
 
   // ---- Resize ----
@@ -830,9 +1015,17 @@ async function main() {
   resize();
 
   // Handy from the browser console, e.g. planetarium.clock.set(Date.parse("2027-08-02T10:00Z"))
-  window.planetarium = { clock, view, scene, setLocation: (l) => setLocation(l, true), getSky: () => sky };
+  window.planetarium = {
+    clock,
+    view,
+    scene,
+    setLocation: (l) => setLocation(l, true),
+    getSky: () => sky,
+    getSkyline: () => skyline,
+  };
 
   // ---- Frame loop ----
+  const ZENITH = new THREE.Vector3(0, 1, 0);
   let last = performance.now();
   let firstFrame = true;
   let lastNight = -1;
@@ -893,22 +1086,30 @@ async function main() {
     const night = 1 - smooth(0.3, 300, average);
     if (Math.abs(night - lastNight) > 0.01) {
       lastNight = night;
-      document.body.classList.toggle("bright-sky", night < 0.5);
       overlays.layers.constellations.material.uniforms.uOpacity.value = 0.14 + 0.24 * night;
     }
     globalLimit = 7.93 - 5 * Math.log10(1 + 63 * Math.sqrt(zenith));
+    updateGlow(now, atm, lights, ambient);
 
-    const tSun = transmittance(atm, sky.sun.trueDir);
-    const tMoon = transmittance(atm, sky.moon.trueDir);
+    // Seen through the earth, the Sun and Moon are drawn as if from above the air.
+    const throughEarth = (b) => !layers.ground && b.alt < skylineAlt(b.az) - 0.3;
+    const sunThrough = throughEarth(sky.sun);
+    const moonThrough = throughEarth(sky.moon);
+    const tSun = transmittance(atm, sunThrough ? ZENITH : sky.sun.trueDir);
+    const tMoon = transmittance(atm, moonThrough ? ZENITH : sky.moon.trueDir);
     const mean = (t) => (t[0] + t[1] + t[2]) / 3;
+    // Direct light only reaches the ground once the Sun or Moon is over the hills.
+    const overHills = (b) => smooth(-0.3, 0.3, b.alt - skylineAlt(b.az));
     const groundE =
       Math.PI * average +
-      sunE * Math.max(0, sky.sun.trueDir.y) * mean(tSun) +
-      moonE * Math.max(0, sky.moon.trueDir.y) * mean(tMoon);
-    ground.update(groundE, layers.ground);
+      sunE * Math.max(0, sky.sun.trueDir.y) * mean(tSun) * overHills(sky.sun) +
+      moonE * Math.max(0, sky.moon.trueDir.y) * mean(tMoon) * overHills(sky.moon);
+    updateSkyline(dt);
+    ground.update(groundE, skylineFade);
+    shared.uSeeThrough.value = layers.ground ? 0 : 1;
 
-    sun.update(sky.sun, tSun, sunLevel, exposure, camera, eclipse, bodyScale());
-    moon.update(sky.moon, sky, tMoon, exposure, camera, bodyScale());
+    sun.update(sky.sun, tSun, sunLevel, exposure, camera, eclipse, bodyScale(), sunThrough);
+    moon.update(sky.moon, sky, tMoon, exposure, camera, bodyScale(), moonThrough);
     planetPoints.update(sky.planets);
     overlays.updateFrames(sky);
     updatePaths(now);

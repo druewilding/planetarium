@@ -1,9 +1,16 @@
 // DOM labels positioned over the canvas. Each frame the app submits a list of
 // candidate labels; higher-priority labels claim screen space first and
 // overlapping lower-priority ones are hidden.
+//
+// Overlap is tested on the labels' real boxes (a coarse grid only finds the
+// neighbours), so panning, which moves labels together, doesn't change which
+// ones fit. Labels already showing get a small head start, so near-ties don't
+// flicker as you turn.
 
 const CELL_W = 40;
 const CELL_H = 16;
+const LABEL_H = 14;
+const STICKY = 3; // priority bonus for a label that was shown last frame
 
 export function createLabels(container) {
   const elements = new Map(); // key → { el, text, cls }
@@ -19,9 +26,12 @@ export function createLabels(container) {
    * items: [{ key, text, dir (world Vector3 unit), cls, priority, offset: [dx, dy], always }]
    */
   /** project(dir) → normalised device coords {x, y}, or null when not drawn. */
+  let shown = new Set();
+
   function render(items, project) {
-    items.sort((a, b) => b.priority - a.priority);
-    const occupied = new Set();
+    const rank = (it) => it.priority + (shown.has(it.key) ? STICKY : 0);
+    items.sort((a, b) => rank(b) - rank(a));
+    const occupied = new Map(); // cell → boxes touching it
     const used = new Set();
     for (const it of items) {
       const p = project(it.dir);
@@ -30,15 +40,20 @@ export function createLabels(container) {
       const y = (-p.y * 0.5 + 0.5) * height + (it.offset?.[1] ?? -8);
       if (x < -50 || x > width + 10 || y < -10 || y > height + 10) continue;
       const w = it.width ?? it.text.length * 7 + 4;
+      const box = [x, y - LABEL_H / 2, x + w, y + LABEL_H / 2];
       const cells = [];
-      let blocked = false;
-      for (let cx = Math.floor(x / CELL_W); cx <= Math.floor((x + w) / CELL_W); cx++) {
-        const k = `${cx},${Math.floor(y / CELL_H)}`;
-        if (occupied.has(k)) blocked = true;
-        cells.push(k);
+      for (let cx = Math.floor(box[0] / CELL_W); cx <= Math.floor(box[2] / CELL_W); cx++) {
+        for (let cy = Math.floor(box[1] / CELL_H); cy <= Math.floor(box[3] / CELL_H); cy++) cells.push(`${cx},${cy}`);
       }
+      const hits = (b) => b[0] < box[2] && box[0] < b[2] && b[1] < box[3] && box[1] < b[3];
+      const blocked = cells.some((k) => occupied.get(k)?.some(hits));
       if (blocked && !it.always) continue;
-      if (!it.noCollide) for (const k of cells) occupied.add(k);
+      if (!it.noCollide) {
+        for (const k of cells) {
+          if (occupied.has(k)) occupied.get(k).push(box);
+          else occupied.set(k, [box]);
+        }
+      }
       let rec = elements.get(it.key);
       if (!rec) {
         const el = document.createElement("div");
@@ -62,6 +77,7 @@ export function createLabels(container) {
     for (const [key, rec] of elements) {
       if (!used.has(key) && rec.el.style.display !== "none") rec.el.style.display = "none";
     }
+    shown = used;
   }
 
   return { render, resize };

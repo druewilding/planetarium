@@ -1,6 +1,7 @@
 import * as THREE from "three";
 
 import { moonOrientation } from "../astro.js";
+import { SAMPLES as SKYLINE_SAMPLES } from "../terrain.js";
 
 export const SUN_DISTANCE = 990;
 export const MOON_DISTANCE = 980;
@@ -80,7 +81,8 @@ export function createSun(shared, glsl) {
   mesh.frustumCulled = false;
 
   /** sky: computeSky().sun, transmit: RGB, dim: 0..1, exposure: current */
-  function update(sun, transmit, dim, exposure, camera, uncovered = 1, scale = 1) {
+  /** `throughEarth`: seen through see-through ground, as a plain disc with no glare. */
+  function update(sun, transmit, dim, exposure, camera, uncovered = 1, scale = 1, throughEarth = false) {
     const angR = sun.angularRadius * scale;
     const discRadius = Math.tan(angR) * SUN_DISTANCE;
     const glareScale = 12; // halo extends this many solar radii
@@ -94,8 +96,8 @@ export function createSun(shared, glsl) {
     uniforms.uSunL.value.set(transmit[0] * L, transmit[1] * L, transmit[2] * L);
     uniforms.uDiscExposure.value = Math.min(exposure, 4 / L);
     const E = (sun.illuminance * dim * uncovered * (transmit[0] + transmit[1] + transmit[2])) / 3;
-    uniforms.uGlare.value = 0.8 * (1 - Math.exp(-E * exposure * 0.02));
-    mesh.visible = sun.alt > -2;
+    uniforms.uGlare.value = throughEarth ? 0 : 0.8 * (1 - Math.exp(-E * exposure * 0.02));
+    mesh.visible = throughEarth || sun.alt > -2;
   }
   return { mesh, update };
 }
@@ -214,7 +216,8 @@ export function createMoon(shared, glsl, texture, textureMean) {
   glow.renderOrder = 6;
   glow.frustumCulled = false;
 
-  function update(moon, sky, transmit, exposure, camera, scale = 1) {
+  /** `throughEarth`: seen through see-through ground, with no glow around it. */
+  function update(moon, sky, transmit, exposure, camera, scale = 1, throughEarth = false) {
     const r = Math.tan(moon.angularRadius * scale) * MOON_DISTANCE;
     moonOrientation(moon.axis, sky.eqjToWorld, basis);
     mesh.matrix
@@ -230,7 +233,7 @@ export function createMoon(shared, glsl, texture, textureMean) {
     const earthPhase = 1 - moon.phaseFraction;
     uniforms.uEarthshine.value = FULL_MOON_LUMINANCE * 1.2e-4 * earthPhase * earthPhase;
     uniforms.uMoonExposure.value = Math.min(exposure, 0.9 / FULL_MOON_LUMINANCE);
-    mesh.visible = moon.alt > -3;
+    mesh.visible = throughEarth || moon.alt > -3;
 
     // Glow: grows with how bright the Moon is compared with what the eye is adapted to,
     // so it's strong on a dark night and gone in daylight.
@@ -241,7 +244,7 @@ export function createMoon(shared, glsl, texture, textureMean) {
     glow.position.copy(moon.dir).multiplyScalar(MOON_DISTANCE);
     faceViewer(glow, camera);
     glow.scale.setScalar(r * 2 * GLOW_RADII);
-    glow.visible = mesh.visible && glowUniforms.uGlow.value > 0.002;
+    glow.visible = mesh.visible && !throughEarth && glowUniforms.uGlow.value > 0.002;
     // Same as the glow shader's value at d = 0 (the limb), so the two meet without a seam.
     uniforms.uGlowLimb.value = glow.visible ? glowUniforms.uGlow.value * 0.62 : 0;
     uniforms.uGlowTint.value.copy(glowUniforms.uTint.value);
@@ -249,12 +252,27 @@ export function createMoon(shared, glsl, texture, textureMean) {
   return { mesh, glow, update };
 }
 
-/** Ground: a dark hemisphere that fades into horizon haze. Can be made see-through. */
+/** The skyline as a texture: altitude (degrees) every half degree of azimuth. Shared by every sky shader. */
+export function createSkylineTexture() {
+  const horizon = new THREE.DataTexture(new Uint16Array(SKYLINE_SAMPLES), SKYLINE_SAMPLES, 1);
+  horizon.format = THREE.RedFormat;
+  horizon.type = THREE.HalfFloatType;
+  horizon.magFilter = horizon.minFilter = THREE.LinearFilter;
+  horizon.wrapS = THREE.RepeatWrapping;
+  horizon.needsUpdate = true;
+  return horizon;
+}
+
+/**
+ * Ground: a dark hemisphere that fades into horizon haze, cut along the real
+ * skyline when there's terrain (see terrain.js). With solid ground off it's only
+ * a faint outline of the skyline, and you see through the earth.
+ */
 export function createGround(shared, glsl) {
+  const horizon = shared.uHorizon.value;
   const uniforms = {
     ...shared,
     uGroundL: { value: 0 },
-    uOpacity: { value: 1 },
   };
   const material = new THREE.ShaderMaterial({
     uniforms,
@@ -269,34 +287,81 @@ export function createGround(shared, glsl) {
     fragmentShader: /* glsl */ `
       ${glsl.DISPLAY}
       ${glsl.SKY_LOOKUP}
+      ${glsl.LAND}
       uniform float uGroundL;
-      uniform float uOpacity;
       varying vec3 vDir;
       void main() {
         vec3 d = normalize(vDir);
-        float dep = -d.y;                       // sine of depression angle
+        // The skyline appears at full height and fades in, rather than growing.
+        float hAlt = landAlt(d);
+        float alt = asin(clamp(d.y, -1.0, 1.0));
+
+        if (uSeeThrough > 0.5) {
+          // Peering through the earth: only a faint grey line along the hills.
+          float f = alt - max(hAlt, 0.0);
+          float px = abs(f) / max(length(vec2(dFdx(f), dFdy(f))), 1e-6);
+          float line = (1.0 - smoothstep(0.6, 1.6, px)) * 0.45 * uTerrain;
+          if (line <= 0.001) discard;
+          gl_FragColor = vec4(vec3(0.62, 0.64, 0.68), line);
+          return;
+        }
+        // Antialiased skyline. Where it dips below 0° (from up a hill, or flying) the
+        // land below eye level shows against the hazy far distance, drawn with the
+        // sky's colour at the horizon (the sky texture below 0° isn't meant to be seen).
+        float edge = max(fwidth(alt) * 0.75, 1e-5);
+        float top = max(hAlt, 0.0);
+        float cover = 1.0 - smoothstep(top - edge, top + edge, alt);
+        if (cover <= 0.0) discard;
+        float distance = smoothstep(hAlt - edge, hAlt + edge, alt);
+
+        // A flat horizon fades into haze; hills and mountains stay solid.
+        float hazeAmount = (1.0 - uTerrain) * (1.0 - smoothstep(0.0, 0.025, -d.y));
+        hazeAmount = max(hazeAmount, distance);
         vec3 albedo = vec3(0.11, 0.12, 0.09);
         vec3 ground = albedo * uGroundL;
         vec3 haze = skyAt(normalize(vec3(d.x, 0.003, d.z)));
-        vec3 L = mix(haze, ground, smoothstep(0.0, 0.025, dep));
-        vec4 c = display(L);
-        float a = mix(1.0, uOpacity, smoothstep(0.0, 0.03, dep));
-        gl_FragColor = vec4(c.rgb, a);
+        vec4 c = display(mix(ground, haze, hazeAmount));
+        float fadeIn = mix(1.0, uTerrain, smoothstep(-edge, edge, alt));
+        gl_FragColor = vec4(c.rgb, cover * fadeIn);
       }
     `,
     transparent: true,
     depthWrite: true,
     side: THREE.BackSide,
   });
-  const geom = new THREE.SphereGeometry(900, 96, 32, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2);
-  const mesh = new THREE.Mesh(geom, material);
+  const mesh = new THREE.Mesh(groundGeometry(1), material);
   mesh.renderOrder = 10;
   mesh.frustumCulled = false;
 
-  /** horizontal illuminance in lux → ground luminance */
-  function update(illuminance, opaque) {
-    uniforms.uGroundL.value = illuminance / Math.PI;
-    uniforms.uOpacity.value = opaque ? 1 : 0.35;
+  /** A dome from the nadir up to `topDeg` above the horizon. */
+  function groundGeometry(topDeg) {
+    const top = (topDeg * Math.PI) / 180;
+    return new THREE.SphereGeometry(900, 180, 48, 0, Math.PI * 2, Math.PI / 2 - top, Math.PI / 2 + top);
   }
-  return { mesh, update };
+
+  /** horizontal illuminance in lux → ground luminance */
+  function update(illuminance, terrain) {
+    uniforms.uGroundL.value = illuminance / Math.PI;
+    uniforms.uTerrain.value = terrain;
+  }
+
+  let geometryTop = 1;
+  /** Skyline altitudes (degrees, one per sample); `topDeg` is the highest the land will reach. */
+  function setSkylineAltitudes(altitudes, topDeg) {
+    const data = horizon.image.data;
+    for (let i = 0; i < SKYLINE_SAMPLES; i++) data[i] = THREE.DataUtils.toHalfFloat(altitudes ? altitudes[i] : 0);
+    horizon.needsUpdate = true;
+    const top = Math.min(85, Math.max(1, Math.ceil(topDeg + 2)));
+    if (top !== geometryTop) {
+      geometryTop = top;
+      mesh.geometry.dispose();
+      mesh.geometry = groundGeometry(top);
+    }
+  }
+
+  /** Show a skyline (from terrain.js), or null for a flat horizon. */
+  function setSkyline(profile) {
+    setSkylineAltitudes(profile?.altitude, profile?.max ?? 0);
+  }
+  return { mesh, update, setSkyline, setSkylineAltitudes };
 }

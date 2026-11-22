@@ -12,10 +12,13 @@ for (const f of rd("ne_110m_land.geojson").features) {
   for (const p of list) polys.push(p[0].map(([x, y]) => [r(x), r(y)]));
 }
 fs.writeFileSync(`${out}/land.json`, JSON.stringify(polys));
+// Natural Earth's points are sometimes off the town itself, which matters once the
+// hills around you are drawn. Tromsø's sits 400 m up the mountain across the sound.
+const PLACE_FIXES = { "Tromsø|Norway": [69.649, 18.955] };
 const cities = rd("ne_50m_populated_places.geojson")
   .features.map((f) => {
     const p = f.properties;
-    const [lon, lat] = f.geometry.coordinates;
+    const [lon, lat] = PLACE_FIXES[`${p.NAME_EN || p.NAME}|${p.ADM0NAME}`]?.slice().reverse() ?? f.geometry.coordinates;
     return [p.NAME_EN || p.NAME, p.ADM0NAME, +lat.toFixed(3), +lon.toFixed(3), p.TIMEZONE || "", p.POP_MAX];
   })
   .sort((a, b) => b[5] - a[5])

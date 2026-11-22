@@ -921,6 +921,44 @@ input[type="range"] {
   color: rgba(255, 170, 140, 0.75);
 }
 
+/* Things on the land: mountains in green, towns in lavender, landmarks in cyan. */
+.label.feature {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.label.peak {
+  color: #8fe39a;
+}
+
+.label.place {
+  color: #dcc2ff;
+}
+
+.label.place.city {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.label.place.village {
+  font-size: 10px;
+}
+
+.label.landmark {
+  font-size: 10px;
+  color: #86dcff;
+}
+
+.label.feature.selected {
+  margin-left: -6px;
+  padding: 1px 6px;
+  border-radius: 9px;
+  font-weight: 700;
+  background: rgba(10, 18, 30, 0.75);
+  box-shadow: 0 0 0 1px currentColor;
+  text-shadow: none;
+}
+
 .label.hour {
   font-size: 10px;
   color: rgba(255, 200, 120, 0.85);
@@ -1078,23 +1116,63 @@ input[type="range"] {
 }
 
 /* Labels over a daylight sky */
-.bright-sky .label {
-  text-shadow: 0 0 2px rgba(0, 0, 0, 0.35);
+.label.lit {
+  /* Dark text on a bright sky reads best with a soft light halo, not a shadow. */
+  text-shadow:
+    0 0 3px rgba(255, 255, 255, 0.6),
+    0 0 1px rgba(255, 255, 255, 0.5);
 }
 
-.bright-sky .label.constellation {
-  color: rgba(25, 45, 105, 0.6);
-  text-shadow: none;
+.label.lit.constellation {
+  color: rgba(25, 45, 105, 0.65);
 }
 
-.bright-sky .label.star {
-  color: rgba(20, 35, 85, 0.75);
-  text-shadow: none;
+.label.lit.star {
+  color: rgba(20, 35, 85, 0.8);
 }
 
-.bright-sky .label.hour {
+.label.lit.hour {
   color: rgba(140, 70, 0, 0.9);
-  text-shadow: none;
+}
+
+.label.lit.feature {
+  font-weight: 600;
+}
+
+.label.lit.peak {
+  color: #17632a;
+}
+
+.label.lit.place {
+  color: #5b2a8c;
+}
+
+.label.lit.landmark {
+  color: #0b5873;
+}
+
+.label.lit.feature.selected {
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.label.lit.compass {
+  color: #b0401c;
+}
+
+.label.lit.compass.minor {
+  color: rgba(150, 60, 30, 0.85);
+}
+
+.label.lit.body {
+  color: #7a4a00;
+}
+
+.label.lit.moon {
+  color: #2f3a5c;
+}
+
+.label.lit.path {
+  color: rgba(30, 35, 60, 0.7);
 }
 
 /* Clickable names in the info panel */
