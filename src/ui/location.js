@@ -50,6 +50,15 @@ export function createLocation({ cities, land, onChange, getTime }) {
     return { lat, lon, name, tz: zone };
   }
 
+  /** A place from a shared link: the city itself if it's one of ours, else a named point. */
+  function fromLink(lat, lon, tz) {
+    const { city, km } = nearestCity(lat, lon);
+    if (city && km < 2 && (!tz || tz === city.tz)) {
+      return { lat: city.lat, lon: city.lon, name: `${city.name}, ${city.country}`, tz: city.tz };
+    }
+    return fromPoint(lat, lon, tz ? { tz } : {});
+  }
+
   function requestGeolocation({ fromButton = false } = {}) {
     if (!navigator.geolocation) return;
     const btn = $("geo-btn");
@@ -265,5 +274,5 @@ export function createLocation({ cities, land, onChange, getTime }) {
     $("location-name").textContent = loc.name;
   }
 
-  return { initialGuess, requestGeolocation, set, fromPoint };
+  return { initialGuess, requestGeolocation, set, fromPoint, fromLink };
 }

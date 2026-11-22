@@ -2,6 +2,7 @@ import * as THREE from "three";
 
 import { A, altAz, Body, computeSky, dirFromAltAz, eqVector, PLANETS, R2D, refract } from "./astro.js";
 import { Clock } from "./clock.js";
+import { DEFAULT_BODY, readLink, writeLink } from "./link.js";
 import { createProjection } from "./projection.js";
 import {
   ATMOSPHERES,
@@ -16,7 +17,7 @@ import * as glsl from "./scene/glsl.js";
 import { createMilkyWay } from "./scene/milkyway.js";
 import { createOverlays } from "./scene/overlays.js";
 import { createPlanetPoints, createPointsMaterial, createStars } from "./scene/points.js";
-import { formatTime, startOfLocalDay } from "./timezone.js";
+import { formatDateTime, formatTime, startOfLocalDay } from "./timezone.js";
 import { createCompass } from "./ui/compass.js";
 import { createInfo } from "./ui/info.js";
 import { createLabels } from "./ui/labels.js";
@@ -243,8 +244,14 @@ async function main() {
     }
   }
 
-  setLocation(location.initialGuess(), false);
-  location.requestGeolocation();
+  // A shared link says where and when; otherwise it's here and now.
+  const link = readLink(window.location.hash);
+  if (link?.place) setLocation(location.fromLink(link.place.lat, link.place.lon, link.place.tz), false);
+  else {
+    setLocation(location.initialGuess(), false);
+    location.requestGeolocation();
+  }
+  if (link?.time != null) clock.set(link.time, { animate: false });
 
   // ---- View ----
   const DEFAULT_FOV = 80;
@@ -385,13 +392,13 @@ async function main() {
 
   // ---- Point your phone at the sky ----
   const sensorBtn = $("sensor-btn");
-  const sensorHint = $("sensor-hint");
-  let hintTimer = 0;
-  function showHint(text, ms = 6000) {
-    sensorHint.textContent = text;
-    sensorHint.hidden = false;
-    clearTimeout(hintTimer);
-    hintTimer = setTimeout(() => (sensorHint.hidden = true), ms);
+  const toast = $("toast");
+  let toastTimer = 0;
+  function showToast(text, ms = 6000) {
+    toast.textContent = text;
+    toast.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => (toast.hidden = true), ms);
   }
   function stopSensor() {
     sensor.stop();
@@ -410,21 +417,132 @@ async function main() {
         beforeLookUp = null;
         if (lookingUp()) view.lookTo({ fov: DEFAULT_FOV });
         if (!clock.following) clock.now(); // the real sky, right now
-        showHint("Hold your phone up to the sky. If it doesn't line up, drag sideways to turn the sky into place.");
+        showToast("Hold your phone up to the sky. If it doesn't line up, drag sideways to turn the sky into place.");
         // No readings at all usually means a desktop browser or a blocked sensor.
         setTimeout(() => {
           if (sensor.active && !sensor.orientation(new THREE.Quaternion())) {
             stopSensor();
-            showHint("No motion sensor readings came through on this device.");
+            showToast("No motion sensor readings came through on this device.");
           } else if (sensor.active && !sensor.hasCompass) {
-            showHint("No compass on this device, so north may be off. Drag sideways to line the sky up.");
+            showToast("No compass on this device, so north may be off. Drag sideways to line the sky up.");
           }
         }, 1500);
       } catch (err) {
-        showHint(err.message || "Couldn't start the motion sensor.", 12000);
+        showToast(err.message || "Couldn't start the motion sensor.", 12000);
       }
     });
   }
+
+  // ---- Share links: place, time, view and selection live in the URL fragment ----
+  const capitalise = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+  function selectionToLink(sel) {
+    switch (sel?.type) {
+      case "sun":
+      case "moon":
+        return { type: sel.type };
+      case "planet":
+        return { type: "planet", id: sel.id };
+      case "star":
+        return { type: "star", id: sel.star.proper || sel.star.hip };
+      case "constellation":
+        return { type: "con", id: sel.constellation.id };
+      default:
+        return null;
+    }
+  }
+
+  function selectionFromLink(s) {
+    const id = String(s?.id ?? "").toLowerCase();
+    switch (s?.type) {
+      case "sun":
+        return selectSun();
+      case "moon":
+        return selectMoon();
+      case "planet": {
+        const p = PLANETS.find((pp) => pp.id.toLowerCase() === id);
+        return p ? selectPlanet(p) : null;
+      }
+      case "star": {
+        const star = catalog.stars.find((st) => String(st.hip) === id || st.proper?.toLowerCase() === id);
+        return star ? selectStar(star) : null;
+      }
+      case "con": {
+        const c = catalog.constellations.find((cc) => cc.id.toLowerCase() === id);
+        return c ? selectConstellation(c) : null;
+      }
+      default:
+        return null;
+    }
+  }
+
+  function currentLink() {
+    const place = locTween ? locTween.to : loc;
+    return writeLink({
+      body: DEFAULT_BODY,
+      place,
+      time: clock.ms,
+      view: view.state,
+      selection: selectionToLink(selection),
+    });
+  }
+
+  /** Go to what a link describes. Anything it leaves out stays as it is. */
+  function applyLink(l, { animate }) {
+    if (!l) return;
+    if (l.body && l.body !== DEFAULT_BODY) {
+      showToast(`Standing on ${capitalise(l.body)} isn't possible yet, so here's the sky from Earth.`, 8000);
+    }
+    if (l.place) setLocation(location.fromLink(l.place.lat, l.place.lon, l.place.tz), animate);
+    if (l.time != null) clock.set(l.time, { animate });
+    select(selectionFromLink(l.selection));
+    if (l.view) {
+      if (sensor.active) stopSensor(); // a link says where to look
+      beforeLookUp = null;
+      view.lookTo(l.view);
+      if (!animate) view.update(10);
+    }
+  }
+
+  // Keep the address bar in step (about once a second; replaceState doesn't add history).
+  let lastLinkWrite = 0;
+  let writtenHash = "";
+  function updateLink(now) {
+    if (now - lastLinkWrite < 1000) return;
+    lastLinkWrite = now;
+    const hash = `#${currentLink()}`;
+    if (hash === writtenHash) return;
+    writtenHash = hash;
+    history.replaceState(null, "", hash);
+  }
+
+  // A link pasted into this tab, or edited by hand.
+  window.addEventListener("hashchange", () => {
+    if (window.location.hash === writtenHash) return;
+    applyLink(readLink(window.location.hash), { animate: true });
+  });
+
+  $("share-btn").addEventListener("click", async () => {
+    writtenHash = `#${currentLink()}`;
+    history.replaceState(null, "", writtenHash);
+    const url = window.location.href;
+    const what = selection ? `${selection.name} from ${loc.name}` : `The sky from ${loc.name}`;
+    const text = `${what}, ${formatDateTime(clock.ms, loc)}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "Planetarium", text, url });
+        return;
+      } catch (err) {
+        if (err.name === "AbortError") return; // closed the share sheet
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast("Link copied. Send it to a friend and they'll see this sky.");
+    } catch {
+      window.prompt("Copy this link to share this sky:", url);
+    }
+  });
 
   // Keep floating controls clear of the time bar, whatever height it wraps to.
   const timebarEl = document.querySelector(".timebar");
@@ -824,8 +942,9 @@ async function main() {
       firstFrame = false;
       view.lookTo(defaultView(sky));
       view.update(10);
+      applyLink(link, { animate: false });
       $("loading").classList.add("done");
-    }
+    } else updateLink(now);
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
