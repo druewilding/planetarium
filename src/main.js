@@ -1,7 +1,8 @@
 import * as THREE from "three";
 
-import { A, altAz, Body, compassPoint, computeSky, dirFromAltAz, eqVector, PLANETS, R2D, refract } from "./astro.js";
+import { A, altAz, Body, computeSky, dirFromAltAz, eqVector, PLANETS, R2D, refract } from "./astro.js";
 import { Clock } from "./clock.js";
+import { createProjection } from "./projection.js";
 import {
   ATMOSPHERES,
   averageSkyLuminance,
@@ -12,9 +13,11 @@ import {
 } from "./scene/atmosphere.js";
 import { createGround, createMoon, createSun } from "./scene/bodies.js";
 import * as glsl from "./scene/glsl.js";
+import { createMilkyWay } from "./scene/milkyway.js";
 import { createOverlays } from "./scene/overlays.js";
 import { createPlanetPoints, createPointsMaterial, createStars } from "./scene/points.js";
 import { formatTime, startOfLocalDay } from "./timezone.js";
+import { createCompass } from "./ui/compass.js";
 import { createInfo } from "./ui/info.js";
 import { createLabels } from "./ui/labels.js";
 import { createLocation } from "./ui/location.js";
@@ -137,12 +140,13 @@ function buildCatalog(starData, constellations) {
 
 async function main() {
   const canvas = $("sky");
-  const [starData, constellationData, cities, land, moonTex] = await Promise.all([
+  const [starData, constellationData, cities, land, moonTex, milkyWayTex] = await Promise.all([
     loadJSON("data/stars.json"),
     loadJSON("data/constellations.json"),
     loadJSON("data/cities.json"),
     loadJSON("data/land.json"),
     loadTexture("textures/moon.jpg"),
+    new THREE.TextureLoader().loadAsync("textures/milkyway.jpg"),
   ]);
   const catalog = buildCatalog(starData, constellationData);
 
@@ -155,7 +159,9 @@ async function main() {
   const camera = new THREE.PerspectiveCamera(70, 1, 0.5, 5000);
 
   const atmosphere = createAtmosphere(renderer, { coarse });
+  const projection = createProjection(camera);
   const shared = {
+    ...projection.uniforms,
     uSky: { value: atmosphere.texture },
     uExposure: { value: 1 },
     uScotopic: { value: 0 },
@@ -171,6 +177,8 @@ async function main() {
   scene.add(...overlays.groups);
 
   const starMaterial = createPointsMaterial(shared, glsl, 1000);
+  const milkyWay = createMilkyWay(shared, glsl, milkyWayTex);
+  overlays.eqj.add(milkyWay);
   overlays.eqj.add(createStars(starData, starMaterial));
   const planetPoints = createPlanetPoints(PLANETS, createPointsMaterial(shared, glsl, 1000));
   scene.add(planetPoints.points);
@@ -193,7 +201,7 @@ async function main() {
   let locTween = null;
   let layers = {};
   let sunLevel = 1;
-  let exposure = null;
+  let exposure = 1;
   let globalLimit = 6;
 
   const location = createLocation({
@@ -212,6 +220,9 @@ async function main() {
     }
     let dLon = next.lon - loc.lon;
     dLon = ((dLon + 540) % 360) - 180;
+    // Crossing the equator: turn around, so you keep facing the Sun's side of the sky
+    // (south in the north, north in the south) and its daily path still makes sense.
+    if (Math.sign(next.lat || 1) !== Math.sign(loc.lat || 1)) view.lookTo({ az: view.state.az + 180 });
     locTween = { from: { ...loc }, to: next, dLon, t: 0 };
   }
 
@@ -235,22 +246,51 @@ async function main() {
   location.requestGeolocation();
 
   // ---- View ----
-  const view = createView(camera, canvas, { onClick: pick });
+  const DEFAULT_FOV = 80;
+  /** Altitude to look at so the horizon sits just above the time controls. */
+  function horizonAltitude(fov) {
+    const h = window.innerHeight;
+    const barTop = document.querySelector(".timebar").getBoundingClientRect().top;
+    const y = Math.min(h * 0.85, barTop - 24); // horizon's screen position
+    return projection.altitudeForHorizonAt(-(y - h / 2) / (h / 2), fov);
+  }
+  /** Face the Sun or Moon if up (keeping the horizon in view), else the equator side of the sky. */
+  function defaultView(s, fov = DEFAULT_FOV) {
+    const base = horizonAltitude(fov);
+    const body = s.sun.alt > 3 ? s.sun : s.moon.alt > 3 ? s.moon : null;
+    if (!body) return { alt: base, az: loc.lat >= 0 ? 180 : 0, fov };
+    // Tilt up only as far as needed to keep the body comfortably on screen.
+    return { alt: Math.max(base, body.alt - fov / 2 + 12), az: body.az, fov };
+  }
+
+  const view = createView(camera, canvas, { onClick: pick, unproject: projection.unproject });
   {
-    const first = computeSky(clock.ms, loc);
-    if (first.sun.alt > 3) view.lookTo({ alt: Math.min(first.sun.alt, 50), az: first.sun.az, fov: 80 });
-    else if (first.moon.alt > 3) view.lookTo({ alt: Math.min(first.moon.alt, 50), az: first.moon.az, fov: 80 });
-    else view.lookTo({ alt: 30, az: loc.lat >= 0 ? 180 : 0, fov: 80 });
+    view.lookTo(defaultView(computeSky(clock.ms, loc)));
     view.update(10);
+    // (Aimed again after the first frame, once the time bar has its real height.)
   }
   $("zoom-in").addEventListener("click", () => view.zoom(0.6));
   $("zoom-out").addEventListener("click", () => view.zoom(1 / 0.6));
+
+  // ---- Reset: back to the normal field of view, keeping what you were looking at on screen ----
+  const resetBtn = $("reset-view");
+  function resetView() {
+    const base = horizonAltitude(DEFAULT_FOV);
+    const looking = view.state.alt > 80 ? base : view.state.alt;
+    beforeLookUp = null;
+    view.lookTo({ alt: Math.max(base, looking - DEFAULT_FOV / 2 + 12), fov: DEFAULT_FOV });
+  }
+  resetBtn.addEventListener("click", resetView);
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "0" && !e.target.closest("input, textarea, select, dialog, [role=slider]")) resetView();
+  });
 
   // ---- Panels ----
   createLayersPanel({
     onChange: (l) => {
       layers = { ...l };
       for (const [key, obj] of Object.entries(overlays.layers)) obj.visible = !!layers[key];
+      milkyWay.visible = !!layers.milkyWay;
     },
   });
 
@@ -263,6 +303,11 @@ async function main() {
     getState: () => ({ sky, loc, ms: clock.ms, selection }),
     onLook: () => lookAtSelection(),
     onClear: () => select(null),
+    onSelect: (type, id) => {
+      if (type === "sun") select(selectSun(), { look: true });
+      else if (type === "moon") select(selectMoon(), { look: true });
+      else if (type === "planet") select(selectPlanet(PLANETS.find((p) => p.id === id)), { look: true });
+    },
   });
   $("info-btn").addEventListener("click", () => {
     const collapsed = infoPanel.classList.toggle("collapsed");
@@ -273,16 +318,65 @@ async function main() {
     $("info-btn").setAttribute("aria-pressed", "false");
   }
 
-  // Sunlight dimmer: logarithmic, because the eye is.
+  // Sunlight dimmer: linear. (The daytime sky is so bright that stars only show
+  // through in the last percent or so; the Night sky button jumps straight there.)
   const slider = $("sun-level");
+  const nightBtn = $("night-sky");
+  let levelBeforeNight = 100;
   const updateSunLevel = () => {
-    const s = parseFloat(slider.value);
-    sunLevel = s <= 0 ? 0 : 10 ** (-7 * (1 - s));
-    const pct = sunLevel * 100;
-    $("sun-level-out").textContent = s <= 0 ? "off" : pct >= 1 ? `${pct.toFixed(0)}%` : `${pct.toPrecision(1)}%`;
+    const pct = parseFloat(slider.value);
+    sunLevel = pct / 100;
+    $("sun-level-out").textContent = pct >= 10 || pct === 0 ? `${pct.toFixed(0)}%` : `${pct.toFixed(1)}%`;
+    nightBtn.setAttribute("aria-pressed", String(pct === 0));
+    nightBtn.textContent = pct === 0 ? "Daylight" : "Night sky";
   };
   slider.addEventListener("input", updateSunLevel);
+  nightBtn.addEventListener("click", () => {
+    const pct = parseFloat(slider.value);
+    if (pct > 0) {
+      levelBeforeNight = pct;
+      slider.value = "0";
+    } else {
+      slider.value = String(levelBeforeNight || 100);
+    }
+    updateSunLevel();
+  });
   updateSunLevel();
+
+  // ---- Compass ----
+  const compass = createCompass($("compass"), {
+    onTurn: (d) => {
+      view.lookTo({ az: view.state.az + d });
+      view.update(1); // apply immediately, no easing while dragging
+    },
+    onFace: (az) => view.lookTo({ az, alt: Math.max(view.state.alt, 5) }),
+    onFaceBody: (id) => {
+      const b = id === "sun" ? sky.sun : sky.moon;
+      if (layers.ground && b.alt < 0) view.lookTo({ az: b.az, alt: 12 });
+      else view.lookAt(b.dir);
+    },
+  });
+
+  // ---- Look up: the whole dome of the sky at once ----
+  const lookUpBtn = $("look-up");
+  let beforeLookUp = null;
+  const lookingUp = () => view.state.alt > 80 && view.state.fov > 140;
+  lookUpBtn.addEventListener("click", () => {
+    if (lookingUp()) {
+      view.lookTo(beforeLookUp ?? defaultView(sky));
+      beforeLookUp = null;
+    } else {
+      beforeLookUp = { alt: view.state.alt, az: view.state.az, fov: view.state.fov };
+      // Facing direction ends up at the bottom of the screen, like lying on your back.
+      view.lookTo({ alt: 89.9, fov: 180 });
+    }
+  });
+
+  // Keep floating controls clear of the time bar, whatever height it wraps to.
+  const timebarEl = document.querySelector(".timebar");
+  new ResizeObserver(() => {
+    document.documentElement.style.setProperty("--timebar-h", `${timebarEl.offsetHeight}px`);
+  }).observe(timebarEl);
 
   // ---- Selection ----
   function selectionDir() {
@@ -349,11 +443,10 @@ async function main() {
   ]);
 
   // ---- Picking ----
-  const proj = new THREE.Vector3();
   function screenOf(dir) {
-    proj.copy(dir).multiplyScalar(500).project(camera);
-    if (proj.z > 1) return null;
-    return [(proj.x * 0.5 + 0.5) * canvas.clientWidth, (-proj.y * 0.5 + 0.5) * canvas.clientHeight];
+    const p = projection.project(dir);
+    if (!p) return null;
+    return [(p.x * 0.5 + 0.5) * canvas.clientWidth, (-p.y * 0.5 + 0.5) * canvas.clientHeight];
   }
 
   function pick(x, y) {
@@ -553,7 +646,7 @@ async function main() {
   resize();
 
   // Handy from the browser console, e.g. planetarium.clock.set(Date.parse("2027-08-02T10:00Z"))
-  window.planetarium = { clock, view, setLocation: (l) => setLocation(l, true), getSky: () => sky };
+  window.planetarium = { clock, view, scene, setLocation: (l) => setLocation(l, true), getSky: () => sky };
 
   // ---- Frame loop ----
   let last = performance.now();
@@ -571,6 +664,7 @@ async function main() {
     clock.update(dt);
     updateLocationTween(dt);
     view.update(dt);
+    projection.update(view.state.fov, camera.aspect);
 
     sky = computeSky(clock.ms, loc);
     const atm = layers.atmosphere ? ATMOSPHERES.earth : NONE;
@@ -581,7 +675,8 @@ async function main() {
     // During an eclipse only the uncovered part of the Sun lights the sky. Even in
     // totality some light reaches us from beyond the Moon's shadow, so keep a little.
     const eclipse = sky.sun.visibleFraction < 1 ? Math.max(sky.sun.visibleFraction, 1e-5) : 1;
-    const sunE = sky.sun.illuminance * sunLevel * eclipse;
+    const fullSunE = sky.sun.illuminance * eclipse;
+    const sunE = fullSunE * sunLevel;
     // Skylight illuminance for the multiple-scattering term (from last frame's sky).
     const ambient = layers.atmosphere ? Math.PI * lastAverage : 0;
     const moonE = sky.moon.illuminance;
@@ -594,15 +689,20 @@ async function main() {
     ];
     const { average, zenith, peak } = averageSkyLuminance(atm, lights, ambient);
     lastAverage = average;
-    // Adapt quickly when time is racing, or day and night would strobe.
-    const adaptTime = 0.35 / (1 + (clock.playing ? Math.abs(clock.rate) : 0) / 1800);
-    // The eye adapts mostly to the average, but also to the brightest part of the sky.
-    const adapt = Math.max(average, 0.25 * peak);
-    const target = 0.45 / (adapt + 0.03);
-    exposure =
-      exposure === null
-        ? target
-        : Math.exp(Math.log(exposure) + (Math.log(target) - Math.log(exposure)) * (1 - Math.exp(-dt / adaptTime)));
+    // Eye adaptation, worked out fresh every frame (no lag, so changing the time
+    // never makes the sky dip and then brighten back). Adapting to the average
+    // plus a share of the brightest part keeps brightness falling steadily
+    // through sunset, rather than switching between the two.
+    const adaptTo = (avg, pk) => avg + 0.25 * pk;
+    let adapt = adaptTo(average, peak);
+    if (sunLevel < 1 && fullSunE > 0) {
+      // The dimmer only partly adapts, so sliding it down always makes the scene darker.
+      const full = averageSkyLuminance(atm, [{ dir: sky.sun.trueDir, e: fullSunE }, lights[1]], ambient);
+      adapt = adaptTo(full.average, full.peak) ** 0.4 * adapt ** 0.6;
+    }
+    // The constant stops the eye "turning up the gain" too far on dark nights; without
+    // it, faint moonlight scattered near the horizon shows as a grey glowing band.
+    exposure = 0.7 / (adapt + 0.5);
     shared.uExposure.value = exposure;
     shared.uScotopic.value = 0.6 * (1 - smooth(0.005, 1, average));
     // Labels and figures recede in daylight, like a printed overlay on a bright sky.
@@ -630,17 +730,34 @@ async function main() {
     updatePaths(now);
 
     renderer.render(scene, camera);
-    labels.render(buildLabels(), camera);
+    labels.render(buildLabels(), projection.project);
 
     timebar.update();
     info.update();
     const { alt, az } = view.state;
-    $("heading").textContent =
-      `Facing ${compassPoint(az)} (${az.toFixed(0)}°) · ${alt.toFixed(0)}° ${alt >= 0 ? "up" : "down"}`;
+    const up = lookingUp();
+    const changed = up || Math.abs(view.state.fov - DEFAULT_FOV) > 2;
+    if (resetBtn.disabled === changed) resetBtn.disabled = !changed;
+    if (up !== (lookUpBtn.getAttribute("aria-pressed") === "true")) {
+      lookUpBtn.setAttribute("aria-pressed", String(up));
+      lookUpBtn.querySelector("span").textContent = up ? "Back to horizon" : "Look up";
+    }
+    const hfov = 2 * projection.halfFovX();
+    compass.update({
+      az,
+      alt,
+      hfov,
+      sunAz: sky.sun.az,
+      sunAlt: sky.sun.alt,
+      moonAz: sky.moon.az,
+      moonAlt: sky.moon.alt,
+    });
     $("fov-label").textContent = `${view.state.fov < 10 ? view.state.fov.toFixed(1) : view.state.fov.toFixed(0)}°`;
 
     if (firstFrame) {
       firstFrame = false;
+      view.lookTo(defaultView(sky));
+      view.update(10);
       $("loading").classList.add("done");
     }
     requestAnimationFrame(frame);

@@ -2,6 +2,7 @@
 // whatever is selected. Expensive searches are cached per local day.
 
 import { A, AU_KM, Body, compassPoint, R2D } from "../astro.js";
+import { seasonAt } from "../season.js";
 import { formatDateTime, formatDuration, formatShortDate, formatTime, startOfLocalDay } from "../timezone.js";
 
 const ENTITIES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\u0022": "&quot;" };
@@ -40,7 +41,7 @@ export function phaseIcon(angle, southern) {
   </svg>`;
 }
 
-export function createInfo({ container, getState, onLook, onClear, catalog }) {
+export function createInfo({ container, getState, onLook, onClear, onSelect, catalog }) {
   const cache = new Map();
   let lastHtml = "";
   let lastBuild = 0;
@@ -170,8 +171,12 @@ export function createInfo({ container, getState, onLook, onClear, catalog }) {
     const rs = cached(`moon|${start}|${loc.lat.toFixed(3)}|${loc.lon.toFixed(3)}`, () =>
       riseSet(Body.Moon, obs, start)
     );
-    const head = `<div class="info-head">${phaseIcon(moon.phaseAngle, loc.lat < 0)}<div>
-      <strong>${phaseName(moon.phaseAngle)}</strong><br><span class="kind">${(moon.phaseFraction * 100).toFixed(0)}% lit</span></div></div>`;
+    const headInner = `${phaseIcon(moon.phaseAngle, loc.lat < 0)}<div>
+      <strong>${phaseName(moon.phaseAngle)}</strong><br><span class="kind">${(moon.phaseFraction * 100).toFixed(0)}% lit</span></div>`;
+    // In the overview the phase is a button that takes you to the Moon.
+    const head = full
+      ? `<div class="info-head">${headInner}</div>`
+      : `<button class="info-head jump" data-select="moon" title="Look at the Moon">${headInner}</button>`;
     let html = `${head}<dl>${position(moon)}${riseSetRows(rs, loc, bodyRef(Body.Moon, obs))}</dl>`;
     if (!full) return html;
     const phases = cached(`quarters|${Math.floor(ms / 3600000)}`, () => {
@@ -256,12 +261,23 @@ export function createInfo({ container, getState, onLook, onClear, catalog }) {
     const visible = sky.planets
       .filter((p) => p.alt > 0 && p.mag < 6)
       .sort((a, b) => a.mag - b.mag)
-      .map((p) => `<dt>${p.name}</dt><dd>${compassPoint(p.az)}, ${p.alt.toFixed(0)}° up</dd>`)
+      .map(
+        (p) =>
+          `<dt><button class="jump" data-select="planet" data-id="${p.id}" title="Look at ${p.name}">${p.name}</button></dt><dd>${compassPoint(p.az)}, ${p.alt.toFixed(0)}° up</dd>`
+      )
       .join("");
     const sunUp = sky.sun.alt > -6;
-    return `<h3>${esc(loc.name)}</h3><p class="kind">Today at a glance</p>
-      <div class="section"><h4>Sun</h4>${sunDetails(s, false)}</div>
-      <div class="section"><h4>Moon</h4>${moonDetails(s, false)}</div>
+    const season = seasonAt(s.ms, loc.lat, startOfLocalDay(s.ms, loc));
+    let seasonText = "Today at a glance";
+    if (season?.event) seasonText = `${season.event} today · ${season.eventMeaning}`;
+    else if (season?.tropical) seasonText = "Tropical: no real summer or winter here";
+    else if (season) {
+      const days = Math.ceil(season.daysToNext);
+      seasonText = `${season.label} · ${days === 1 ? "1 day" : `${days} days`} to the ${season.nextEvent}`;
+    }
+    return `<h3>${esc(loc.name)}</h3><p class="kind">${seasonText}</p>
+      <div class="section"><h4><button class="jump" data-select="sun" title="Look at the Sun">Sun</button></h4>${sunDetails(s, false)}</div>
+      <div class="section"><h4><button class="jump" data-select="moon" title="Look at the Moon">Moon</button></h4>${moonDetails(s, false)}</div>
       <div class="section"><h4>Planets up now</h4>${visible ? `<dl>${visible}</dl>` : NO_PLANETS}</div>
       ${sunUp ? DIM_TIP : ""}
       <p class="note">Tap anything in the sky for details.</p>`;
@@ -302,6 +318,8 @@ export function createInfo({ container, getState, onLook, onClear, catalog }) {
     const action = e.target.closest("[data-action]")?.dataset.action;
     if (action === "look") onLook();
     if (action === "clear") onClear();
+    const jump = e.target.closest("[data-select]");
+    if (jump) onSelect(jump.dataset.select, jump.dataset.id);
   });
 
   function update(force = false) {

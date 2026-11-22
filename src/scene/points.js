@@ -8,6 +8,7 @@ import * as THREE from "three";
 const VERT = (glsl) => /* glsl */ `
 ${glsl.SKY_LOOKUP}
 ${glsl.REFRACTION}
+${glsl.PROJECTION}
 uniform float uExtK;
 uniform float uBoost;
 uniform float uPixelRatio;
@@ -42,7 +43,7 @@ void main() {
     gl_PointSize = 0.0;
     return;
   }
-  gl_Position = projectionMatrix * viewMatrix * vec4(d * uRadius, 1.0);
+  gl_Position = projectView(viewMatrix * vec4(d * uRadius, 1.0));
 }
 `;
 

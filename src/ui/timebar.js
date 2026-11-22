@@ -1,8 +1,9 @@
-// Time controls: a 24-hour dial (midnight at the bottom, noon at the top, the
-// Sun's day shaded on the ring), a year dial (January at the top), play/speed
-// buttons and a typed date/time entry.
+// Time controls: a time-of-day track (shaded by where the Sun is at this
+// location), a date track (shaded by day length through the year), a year
+// stepper, play/speed buttons and a typed date/time entry.
 
-import { A, Body, observer } from "../astro.js";
+import { A, Body, D2R } from "../astro.js";
+import { seasonAt } from "../season.js";
 import {
   dayOfYear,
   formatDate,
@@ -15,110 +16,144 @@ import {
   zoneLabel,
 } from "../timezone.js";
 
-const NS = "http://www.w3.org/2000/svg";
-const TAU = Math.PI * 2;
-const YEAR_DAYS = 365.2422;
+const DAY_MS = 86400000;
 
-function el(name, attrs = {}, parent) {
-  const e = document.createElementNS(NS, name);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (parent) parent.appendChild(e);
-  return e;
+/** Colour for the Sun's altitude: night → twilight → golden hour → day. */
+function skyColour(alt) {
+  if (alt > 6) return "#7fb4ff";
+  if (alt > 0) return "#f2b46b";
+  if (alt > -6) return "#5a5f9a";
+  if (alt > -12) return "#2b3266";
+  if (alt > -18) return "#161c3c";
+  return "#0a0f1c";
 }
 
-function arcPath(r, a0, a1, pointAt) {
-  let sweep = a1 - a0;
-  while (sweep < 0) sweep += TAU;
-  if (sweep >= TAU - 1e-6) {
-    const [x0, y0] = pointAt(a0, r);
-    const [x1, y1] = pointAt(a0 + Math.PI, r);
-    return `M${x0},${y0}A${r},${r} 0 1 1 ${x1},${y1}A${r},${r} 0 1 1 ${x0},${y0}`;
-  }
-  const [x0, y0] = pointAt(a0, r);
-  const [x1, y1] = pointAt(a0 + sweep, r);
-  return `M${x0},${y0}A${r},${r} 0 ${sweep > Math.PI ? 1 : 0} 1 ${x1},${y1}`;
+/** Colour for day length (hours): long winter nights dark, long summer days golden. */
+function dayLengthColour(hours) {
+  const t = Math.min(1, Math.max(0, hours / 24));
+  const a = [18, 24, 48];
+  const b = [126, 170, 235];
+  const c = [250, 210, 120];
+  const mix = (x, y, k) => x.map((v, i) => Math.round(v + (y[i] - v) * k));
+  const rgb = t < 0.5 ? mix(a, b, t * 2) : mix(b, c, (t - 0.5) * 2);
+  return `rgb(${rgb.join(",")})`;
 }
 
-/** Attach "drag around the ring" behaviour. onDelta receives radians (clockwise positive). */
-function makeRotatable(node, onDelta) {
-  let last = null;
-  const angleOf = (e) => {
-    const r = node.getBoundingClientRect();
-    return Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2));
+/** Hours of daylight (Sun's centre above −0.83°) for a latitude and day of year. */
+function dayLength(latDeg, doy) {
+  const decl = -23.44 * Math.cos((2 * Math.PI * (doy + 10)) / 365.24) * D2R;
+  const lat = latDeg * D2R;
+  const cosH = (Math.sin(-0.833 * D2R) - Math.sin(lat) * Math.sin(decl)) / (Math.cos(lat) * Math.cos(decl));
+  if (cosH <= -1) return 24;
+  if (cosH >= 1) return 0;
+  return (2 * Math.acos(cosH)) / D2R / 15;
+}
+
+/** Make a horizontal track draggable. onSet(fraction 0..1, isStart). */
+function makeTrack(track, { onSet, onKey }) {
+  const frac = (e) => {
+    const r = track.getBoundingClientRect();
+    return Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
   };
-  node.addEventListener("pointerdown", (e) => {
-    node.setPointerCapture(e.pointerId);
-    last = angleOf(e);
+  let dragging = false;
+  track.addEventListener("pointerdown", (e) => {
+    dragging = true;
+    try {
+      track.setPointerCapture(e.pointerId);
+    } catch {
+      /* pointer already gone */
+    }
+    track.classList.add("active");
+    onSet(frac(e), true);
     e.preventDefault();
   });
-  node.addEventListener("pointermove", (e) => {
-    if (last === null) return;
-    const a = angleOf(e);
-    let d = a - last;
-    if (d > Math.PI) d -= TAU;
-    if (d < -Math.PI) d += TAU;
-    last = a;
-    onDelta(d);
+  track.addEventListener("pointermove", (e) => {
+    if (dragging) onSet(frac(e), false);
   });
-  const stop = () => (last = null);
-  node.addEventListener("pointerup", stop);
-  node.addEventListener("pointercancel", stop);
+  const stop = () => {
+    dragging = false;
+    track.classList.remove("active");
+  };
+  track.addEventListener("pointerup", stop);
+  track.addEventListener("pointercancel", stop);
+  track.addEventListener("keydown", (e) => {
+    const dir = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1 }[e.key];
+    if (!dir) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onKey(dir, e.shiftKey);
+  });
 }
 
 export function createTimebar({ clock, getLocation }) {
   const $ = (id) => document.getElementById(id);
+  const dayTrack = $("day-track");
+  const yearTrack = $("year-track");
+  const dayThumb = dayTrack.querySelector(".thumb");
+  const yearThumb = yearTrack.querySelector(".thumb");
 
-  // ---- Day dial: angle 0 = midnight at the bottom, clockwise. ----
-  const dayPoint = (a, r) => [(-Math.sin(a) * r).toFixed(2), (Math.cos(a) * r).toFixed(2)];
-  const daySvg = el(
-    "svg",
-    { viewBox: "-50 -50 100 100", role: "img", "aria-label": "Time of day dial" },
-    $("day-dial")
+  // ---- Tick labels ----
+  $("day-ticks").replaceChildren(
+    ...[0, 3, 6, 9, 12, 15, 18, 21, 24].map((h) => {
+      const s = document.createElement("span");
+      s.style.left = `${(h / 24) * 100}%`;
+      s.textContent = String(h).padStart(2, "0");
+      return s;
+    })
   );
-  el("circle", { r: 40, fill: "none", stroke: "#141b2e", "stroke-width": 9 }, daySvg);
-  const twilightArc = el("path", { fill: "none", stroke: "#4a5a8a", "stroke-width": 9 }, daySvg);
-  const dayArc = el("path", { fill: "none", stroke: "#f2c46b", "stroke-width": 9 }, daySvg);
-  for (let h = 0; h < 24; h++) {
-    const a = (h / 24) * TAU;
-    const [x0, y0] = dayPoint(a, 33);
-    const [x1, y1] = dayPoint(a, h % 6 === 0 ? 29 : 31);
-    el("line", { x1: x0, y1: y0, x2: x1, y2: y1, stroke: "#5d6a8a", "stroke-width": h % 6 === 0 ? 1.4 : 0.7 }, daySvg);
-  }
-  for (const h of [0, 6, 12, 18]) {
-    const [x, y] = dayPoint((h / 24) * TAU, 22);
-    el("text", { x, y }, daySvg).textContent = String(h);
-  }
-  const dayHandle = el("g", { class: "handle" }, daySvg);
-  el("circle", { r: 6.5, fill: "#ffd27a", stroke: "#1a1206", "stroke-width": 1.5 }, dayHandle);
-  const dayCenter = el("text", { class: "dial-center", y: 1 }, daySvg);
-  dayCenter.textContent = "day";
+  const monthStarts = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+  const monthName = (style) => (m) =>
+    new Intl.DateTimeFormat(navigator.language, { month: style, timeZone: "UTC" }).format(Date.UTC(2001, m, 15));
+  const shortMonths = monthStarts.map((_, m) => monthName("short")(m));
+  const narrowMonths = monthStarts.map((_, m) => monthName("narrow")(m));
+  const monthLabels = monthStarts.map((d) => {
+    const s = document.createElement("span");
+    s.className = "month";
+    s.style.left = `${((d + 15) / 365) * 100}%`;
+    return s;
+  });
+  $("year-ticks").replaceChildren(...monthLabels);
+  // Single letters when the track is too narrow for "Jan", "Feb"…
+  new ResizeObserver(() => {
+    const names = yearTrack.clientWidth < 480 ? narrowMonths : shortMonths;
+    monthLabels.forEach((el, m) => (el.textContent = names[m]));
+  }).observe(yearTrack);
 
-  makeRotatable($("day-dial"), (d) => clock.nudge((d / TAU) * 86400000));
+  // ---- Time of day ----
+  let dragDayStart = null;
+  makeTrack(dayTrack, {
+    onSet: (f, start) => {
+      if (start || dragDayStart === null) dragDayStart = startOfLocalDay(clock.ms, getLocation());
+      clock.set(dragDayStart + Math.min(f, 0.99999) * DAY_MS, { animate: false });
+    },
+    onKey: (dir, big) => clock.nudge(dir * (big ? 60 : 10) * 60000),
+  });
+  dayTrack.addEventListener("pointerup", () => (dragDayStart = null));
 
-  // ---- Year dial: angle 0 = 1 January at the top, clockwise. ----
-  const yearPoint = (a, r) => [(Math.sin(a) * r).toFixed(2), (-Math.cos(a) * r).toFixed(2)];
-  const yearSvg = el("svg", { viewBox: "-50 -50 100 100", role: "img", "aria-label": "Date dial" }, $("year-dial"));
-  el("circle", { r: 40, fill: "none", stroke: "#141b2e", "stroke-width": 9 }, yearSvg);
-  const monthStarts = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365];
-  const monthNames = Array.from({ length: 12 }, (_, m) =>
-    new Intl.DateTimeFormat(navigator.language, { month: "narrow", timeZone: "UTC" }).format(Date.UTC(2001, m, 15))
-  );
-  // Seasons tint on the ring: warm around June, cool around December (northern-hemisphere wording is avoided).
-  for (let m = 0; m < 12; m++) {
-    const a0 = (monthStarts[m] / 365) * TAU;
-    const a1 = (monthStarts[m + 1] / 365) * TAU;
-    const [x0, y0] = yearPoint(a0, 33);
-    const [x1, y1] = yearPoint(a0, 30);
-    el("line", { x1: x0, y1: y0, x2: x1, y2: y1, stroke: "#5d6a8a", "stroke-width": 0.8 }, yearSvg);
-    const [tx, ty] = yearPoint((a0 + a1) / 2, 23);
-    el("text", { x: tx, y: ty }, yearSvg).textContent = monthNames[m];
+  // ---- Date ----
+  function daysInLocalYear(loc) {
+    const y = shifted(clock.ms, loc).getUTCFullYear();
+    return (Date.UTC(y + 1, 0, 1) - Date.UTC(y, 0, 1)) / DAY_MS;
   }
-  const seasonMarks = el("g", {}, yearSvg);
-  const yearHandle = el("g", { class: "handle" }, yearSvg);
-  el("circle", { r: 6.5, fill: "#8fb8ff", stroke: "#06101a", "stroke-width": 1.5 }, yearHandle);
-  const yearCenter = el("text", { class: "dial-center", y: 1 }, yearSvg);
+  makeTrack(yearTrack, {
+    onSet: (f) => {
+      const loc = getLocation();
+      const n = daysInLocalYear(loc);
+      const target = Math.min(n - 1, Math.floor(f * n));
+      const current = Math.floor(dayOfYear(clock.ms, loc));
+      if (target !== current) clock.set(clock.ms + (target - current) * DAY_MS, { animate: false });
+    },
+    onKey: (dir, big) => clock.nudge(dir * (big ? 7 : 1) * DAY_MS),
+  });
 
-  makeRotatable($("year-dial"), (d) => clock.nudge((d / TAU) * YEAR_DAYS * 86400000));
+  function stepYear(dir) {
+    const d = shifted(clock.ms, getLocation());
+    const y = d.getUTCFullYear();
+    const args = [d.getUTCMonth(), d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds()];
+    clock.set(clock.ms + (Date.UTC(y + dir, ...args) - Date.UTC(y, ...args)), { animate: false });
+  }
+  $("year-prev").addEventListener("click", () => stepYear(-1));
+  $("year-next").addEventListener("click", () => stepYear(1));
 
   // ---- Buttons ----
   $("play").addEventListener("click", () => clock.togglePlay());
@@ -141,7 +176,7 @@ export function createTimebar({ clock, getLocation }) {
   });
 
   window.addEventListener("keydown", (e) => {
-    if (e.target.closest("input, textarea, select, dialog")) return;
+    if (e.target.closest("input, textarea, select, dialog, [role=slider]")) return;
     if (e.key === " ") {
       e.preventDefault();
       clock.togglePlay();
@@ -150,87 +185,98 @@ export function createTimebar({ clock, getLocation }) {
     else if (e.key.toLowerCase() === "n") clock.now();
   });
 
-  // ---- Day/night shading on the day dial (recomputed per local day) ----
-  let shadedKey = "";
-  function updateDayShading(loc) {
+  // ---- Track shading (recomputed when the day / place changes) ----
+  let dayKey = "";
+  function shadeDay(loc) {
     const start = startOfLocalDay(clock.ms, loc);
     const key = `${start}|${loc.lat.toFixed(2)}|${loc.lon.toFixed(2)}`;
-    if (key === shadedKey) return;
-    shadedKey = key;
-    const obs = observer(loc);
-    const t0 = new Date(start);
-    const mins = (d) => (d ? (d.date.getTime() - start) / 60000 : null);
-    const rise = mins(A.SearchRiseSet(Body.Sun, obs, +1, t0, 1));
-    const set = mins(A.SearchRiseSet(Body.Sun, obs, -1, t0, 1));
-    const dawn = mins(A.SearchAltitude(Body.Sun, obs, +1, t0, 1, -6));
-    const dusk = mins(A.SearchAltitude(Body.Sun, obs, -1, t0, 1, -6));
-    const ang = (m) => (m / 1440) * TAU;
-    const noonAlt = A.Horizon(
-      new Date(start + 12 * 3600000),
-      obs,
-      ...radec(start + 12 * 3600000, obs),
-      "normal"
-    ).altitude;
-    const arc = (a, b, fallbackUp) => {
-      if (a !== null && b !== null) return arcPath(40, ang(a), ang(b), dayPoint);
-      if (a === null && b === null) return fallbackUp ? arcPath(40, 0, TAU, dayPoint) : "";
-      // Only one event today: shade from/to midnight.
-      return a !== null ? arcPath(40, ang(a), TAU - 1e-4, dayPoint) : arcPath(40, 0, ang(b), dayPoint);
-    };
-    dayArc.setAttribute("d", arc(rise, set, noonAlt > 0));
-    twilightArc.setAttribute("d", arc(dawn, dusk, noonAlt > -6));
+    if (key === dayKey) return;
+    dayKey = key;
+    const obs = new A.Observer(loc.lat, loc.lon, 0);
+    const stops = [];
+    for (let i = 0; i <= 96; i++) {
+      const d = new Date(start + (i / 96) * DAY_MS);
+      const eq = A.Equator(Body.Sun, d, obs, true, true);
+      const alt = A.Horizon(d, obs, eq.ra, eq.dec, "normal").altitude;
+      stops.push(`${skyColour(alt)} ${((i / 96) * 100).toFixed(2)}%`);
+    }
+    dayTrack.style.background = `linear-gradient(90deg, ${stops.join(",")})`;
+  }
 
-    // Season markers on the year dial for this year.
+  let yearKey = "";
+  function shadeYear(loc) {
     const year = shifted(clock.ms, loc).getUTCFullYear();
-    seasonMarks.replaceChildren();
+    const key = `${year}|${loc.lat.toFixed(1)}`;
+    if (key === yearKey) return;
+    yearKey = key;
+    const stops = [];
+    for (let d = 0; d <= 365; d += 5)
+      stops.push(`${dayLengthColour(dayLength(loc.lat, d))} ${((d / 365) * 100).toFixed(2)}%`);
+    yearTrack.style.background = `linear-gradient(90deg, ${stops.join(",")})`;
+    const marks = $("season-marks");
+    marks.replaceChildren();
     try {
       const s = A.Seasons(year);
-      const marks = [
-        [s.mar_equinox, "#8be08b", "March equinox"],
-        [s.jun_solstice, "#ff7a59", "June solstice"],
-        [s.sep_equinox, "#8be08b", "September equinox"],
-        [s.dec_solstice, "#7ec8ff", "December solstice"],
-      ];
-      for (const [t, color, title] of marks) {
-        const a = (dayOfYear(t.date.getTime(), loc) / YEAR_DAYS) * TAU;
-        const [x, y] = yearPoint(a, 40);
-        const c = el("circle", { cx: x, cy: y, r: 2.6, fill: color }, seasonMarks);
-        el("title", {}, c).textContent = title;
+      const n = daysInLocalYear(loc);
+      for (const [t, cls, title] of [
+        [s.mar_equinox, "equinox", "March equinox"],
+        [s.jun_solstice, "june", "June solstice"],
+        [s.sep_equinox, "equinox", "September equinox"],
+        [s.dec_solstice, "december", "December solstice"],
+      ]) {
+        const m = document.createElement("i");
+        m.className = `season ${cls}`;
+        m.title = `${title}: ${formatDate(t.date.getTime(), loc)}`;
+        m.style.left = `${(dayOfYear(t.date.getTime(), loc) / n) * 100}%`;
+        marks.appendChild(m);
       }
     } catch {
       /* Seasons() can throw for extreme years */
     }
   }
 
-  function radec(ms, obs) {
-    const eq = A.Equator(Body.Sun, new Date(ms), obs, true, true);
-    return [eq.ra, eq.dec];
+  // ---- Season badge ----
+  const seasonEl = $("time-season");
+  function showSeason(loc) {
+    const s = seasonAt(clock.ms, loc.lat, startOfLocalDay(clock.ms, loc));
+    seasonEl.hidden = !s;
+    if (!s) return;
+    seasonEl.textContent = s.label;
+    seasonEl.className = `season-badge ${s.name}${s.event ? " event" : ""}`;
+    if (s.event) seasonEl.title = `${s.event} at ${formatTime(s.eventTime, loc)}: ${s.eventMeaning}.`;
+    else if (s.tropical)
+      seasonEl.title =
+        "Close to the equator the Sun is high all year, so there's no real summer or winter. Many places have wet and dry seasons instead.";
+    else
+      seasonEl.title = `Astronomical ${s.name} in the ${loc.lat < 0 ? "southern" : "northern"} hemisphere: ${formatDate(s.start, loc)} – ${formatDate(s.end, loc)}`;
   }
 
   let lastText = "";
   function update() {
     const loc = getLocation();
+    shadeDay(loc);
+    shadeYear(loc);
     const m = localMinutesOfDay(clock.ms, loc);
-    const [hx, hy] = dayPoint((m / 1440) * TAU, 40);
-    dayHandle.setAttribute("transform", `translate(${hx} ${hy})`);
-    const doy = dayOfYear(clock.ms, loc);
-    const [yx, yy] = yearPoint((doy / YEAR_DAYS) * TAU, 40);
-    yearHandle.setAttribute("transform", `translate(${yx} ${yy})`);
+    dayThumb.style.left = `${(m / 1440) * 100}%`;
+    dayTrack.setAttribute("aria-valuetext", formatTime(clock.ms, loc));
+    const n = daysInLocalYear(loc);
+    yearThumb.style.left = `${(dayOfYear(clock.ms, loc) / n) * 100}%`;
 
     const seconds = clock.playing && Math.abs(clock.rate) === 1;
-    const text = `${formatTime(clock.ms, loc, seconds)}|${formatDate(clock.ms, loc)}|${zoneLabel(clock.ms, loc)}|${clock.rateLabel}|${clock.playing}`;
+    const text = `${formatTime(clock.ms, loc, seconds)}|${formatDate(clock.ms, loc)}|${zoneLabel(clock.ms, loc)}|${clock.rateLabel}|${clock.playing}|${Math.round(loc.lat)}`;
     if (text !== lastText) {
       lastText = text;
       $("time-clock").textContent = formatTime(clock.ms, loc, seconds);
       $("time-date").textContent = formatDate(clock.ms, loc);
       $("time-zone").textContent = zoneLabel(clock.ms, loc);
+      showSeason(loc);
       $("rate-label").textContent = clock.rateLabel;
-      yearCenter.textContent = String(shifted(clock.ms, loc).getUTCFullYear());
+      $("year-label").textContent = String(shifted(clock.ms, loc).getUTCFullYear());
+      yearTrack.setAttribute("aria-valuetext", formatDate(clock.ms, loc));
       $("play-icon").setAttribute("d", clock.playing ? "M6 5h4v14H6zm8 0h4v14h-4z" : "M7 4.5v15L19.5 12z");
       $("play").setAttribute("aria-label", clock.playing ? "Pause" : "Play");
       $("now").hidden = clock.following;
     }
-    updateDayShading(loc);
   }
 
   return { update };

@@ -20,10 +20,10 @@ export const ATMOSPHERES = {
     // zenith (ozone absorbs orange–red light) and a less over-saturated noon sky.
     rayleigh: [8.97e-3, 13.558e-3, 26.5e-3],
     rayleighScale: 8.0,
-    mie: [3.996e-3, 3.996e-3, 3.996e-3],
+    mie: [2.5e-3, 2.5e-3, 2.5e-3], // fairly clear air
     mieExtinction: 1.11,
     mieScale: 1.2,
-    mieG: 0.8,
+    mieG: 0.76,
     ozone: [2.4e-3, 1.881e-3, 0.2e-3],
     ozoneCenter: 25,
     ozoneWidth: 15,
@@ -146,12 +146,14 @@ void main() {
 }
 `;
 
-const DOME_VERT = /* glsl */ `
+const DOME_VERT = (glsl) => /* glsl */ `
+${glsl.PROJECTION}
 varying vec3 vDir;
 void main() {
   vDir = normalize(position);
-  vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  gl_Position = p.xyww; // always at the far plane
+  vec4 p = projectView(modelViewMatrix * vec4(position, 1.0));
+  // Always at the back: the far plane in perspective, just inside it otherwise.
+  gl_Position = uStereo > 0.0 ? vec4(p.xy, p.z > 1.5 ? 2.0 : 0.999, 1.0) : p.xyww;
 }
 `;
 
@@ -235,7 +237,7 @@ export function createAtmosphere(renderer, { coarse = false } = {}) {
 export function createSkyDome(sharedUniforms, glsl) {
   const material = new THREE.ShaderMaterial({
     uniforms: sharedUniforms,
-    vertexShader: DOME_VERT,
+    vertexShader: DOME_VERT(glsl),
     fragmentShader: /* glsl */ `
       ${glsl.DISPLAY}
       ${glsl.SKY_LOOKUP}

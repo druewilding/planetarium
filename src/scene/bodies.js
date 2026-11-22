@@ -20,13 +20,14 @@ export function createSun(shared, glsl) {
   const material = new THREE.ShaderMaterial({
     uniforms,
     vertexShader: /* glsl */ `
+      ${glsl.PROJECTION}
       varying vec2 vUv;
       varying vec3 vDir;
       void main() {
         vUv = uv * 2.0 - 1.0;
         vec4 wp = modelMatrix * vec4(position, 1.0);
         vDir = normalize(wp.xyz);
-        gl_Position = projectionMatrix * viewMatrix * wp;
+        gl_Position = projectView(viewMatrix * wp);
       }
     `,
     fragmentShader: /* glsl */ `
@@ -52,7 +53,7 @@ export function createSun(shared, glsl) {
         }
         float d = r - 1.0;
         float outer = 1.0 / uDiscFraction;
-        float glare = uGlare * (0.5 / (1.0 + d * d * 0.6) + 0.5 * exp(-d * 0.25)) * (1.0 - smoothstep(0.6 * outer, outer, r));
+        float glare = uGlare * (0.45 / (1.0 + d * d * 1.5) + 0.1 * exp(-d * 0.6)) * (1.0 - smoothstep(0.5 * outer, outer, r));
         vec3 tint = normalize(uSunL + 1e-6) * 1.6;
         gl_FragColor = vec4(linearToSrgb(clamp(tint * glare, 0.0, 1.0)), 0.0); // additive
       }
@@ -71,7 +72,7 @@ export function createSun(shared, glsl) {
   function update(sun, transmit, dim, exposure, camera, uncovered = 1) {
     const angR = sun.angularRadius;
     const discRadius = Math.tan(angR) * SUN_DISTANCE;
-    const glareScale = 28; // halo extends this many solar radii
+    const glareScale = 12; // halo extends this many solar radii
     mesh.position.copy(sun.dir).multiplyScalar(SUN_DISTANCE);
     mesh.quaternion.copy(camera.quaternion);
     mesh.scale.setScalar(discRadius * 2 * glareScale);
@@ -82,7 +83,7 @@ export function createSun(shared, glsl) {
     uniforms.uSunL.value.set(transmit[0] * L, transmit[1] * L, transmit[2] * L);
     uniforms.uDiscExposure.value = Math.min(exposure, 4 / L);
     const E = (sun.illuminance * dim * uncovered * (transmit[0] + transmit[1] + transmit[2])) / 3;
-    uniforms.uGlare.value = 1 - Math.exp(-E * exposure * 0.08);
+    uniforms.uGlare.value = 0.8 * (1 - Math.exp(-E * exposure * 0.02));
     mesh.visible = sun.alt > -2;
   }
   return { mesh, update };
@@ -103,6 +104,7 @@ export function createMoon(shared, glsl, texture, textureMean) {
   const material = new THREE.ShaderMaterial({
     uniforms,
     vertexShader: /* glsl */ `
+      ${glsl.PROJECTION}
       varying vec2 vUv;
       varying vec3 vNormal;
       varying vec3 vPos;
@@ -111,7 +113,7 @@ export function createMoon(shared, glsl, texture, textureMean) {
         vNormal = normalize(mat3(modelMatrix) * normal);
         vec4 wp = modelMatrix * vec4(position, 1.0);
         vPos = wp.xyz;
-        gl_Position = projectionMatrix * viewMatrix * wp;
+        gl_Position = projectView(viewMatrix * wp);
       }
     `,
     fragmentShader: /* glsl */ `
@@ -146,6 +148,7 @@ export function createMoon(shared, glsl, texture, textureMean) {
   });
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 64, 32), material);
   mesh.renderOrder = 5;
+  mesh.frustumCulled = false;
   mesh.matrixAutoUpdate = false;
   const basis = new THREE.Matrix4();
 
@@ -180,10 +183,11 @@ export function createGround(shared, glsl) {
   const material = new THREE.ShaderMaterial({
     uniforms,
     vertexShader: /* glsl */ `
+      ${glsl.PROJECTION}
       varying vec3 vDir;
       void main() {
         vDir = normalize(position);
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        gl_Position = projectView(modelViewMatrix * vec4(position, 1.0));
       }
     `,
     fragmentShader: /* glsl */ `

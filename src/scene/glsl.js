@@ -84,3 +84,30 @@ vec3 refractDir(vec3 d) {
   return vec3(d.x / h * cos(alt2), sin(alt2), d.z / h * cos(alt2));
 }
 `;
+
+/** Projection (see src/projection.js): perspective when zoomed in, blending into
+ *  stereographic for wide views. Depth comes from distance, so the usual
+ *  layering (ground in front of stars, Moon in front of Sun) still works. */
+export const PROJECTION = /* glsl */ `
+uniform float uStereo;
+uniform float uProjScale;
+uniform float uAspect;
+
+vec4 projectView(vec4 viewPos) {
+  if (uStereo <= 0.0) return projectionMatrix * viewPos;
+  vec3 p = viewPos.xyz;
+  float dist = length(p);
+  vec3 d = p / dist;
+  float sinT = length(d.xy);
+  float theta = atan(sinT, -d.z);
+  float rp = tan(min(theta, 1.55));
+  float rs = 2.0 * tan(theta * 0.5);
+  float r = mix(rp, rs, uStereo);
+  vec2 xy = sinT > 1e-6 ? d.xy / sinT * r * uProjScale : vec2(0.0);
+  xy.x /= uAspect;
+  // Anything too far behind is pushed past the far plane and clipped.
+  float limit = mix(1.5, 2.6, uStereo);
+  float z = theta > limit ? 2.0 : (dist - 1000.0) / 1100.0;
+  return vec4(xy, z, 1.0);
+}
+`;
