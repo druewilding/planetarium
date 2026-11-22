@@ -217,7 +217,7 @@ async function loadLevel(lat, lon, metresPerPixel, reachKm) {
  * the apparent altitude of the skyline (degrees) and how far away it is (km).
  * Returns null if no elevation data could be loaded.
  */
-export async function computeProfile(lat, lon, groundHint = null) {
+export async function computeProfile(lat, lon, { groundHint = null, eye = null, fast = false } = {}) {
   if (Math.abs(lat) > MAX_LAT) return null;
   const levels = await Promise.all(LEVELS.map(([m, km]) => loadLevel(lat, lon, m, km)));
   if (levels.every((l) => l.loaded === 0)) return null;
@@ -225,7 +225,8 @@ export async function computeProfile(lat, lon, groundHint = null) {
   // Standing on a summit: the elevation model rounds peaks off, so trust its mapped height.
   const dem = levels[0].height(lat, lon);
   const ground = groundHint != null && Math.abs(groundHint - dem) < 300 ? Math.max(dem, groundHint) : dem;
-  const h0 = ground + EYE_HEIGHT;
+  // `eye`: an absolute height to look from (in flight), kept clear of the ground.
+  const h0 = eye != null ? Math.max(eye, ground + 20) : ground + EYE_HEIGHT;
   const altitude = new Float32Array(SAMPLES);
   const distance = new Float32Array(SAMPLES);
   const latR = (lat * Math.PI) / 180;
@@ -234,7 +235,8 @@ export async function computeProfile(lat, lon, groundHint = null) {
   // Distances to sample, shared by every direction: steady steps nearby, then
   // growing with distance (a 1% step at 50 km is still under 0.01° of skyline).
   const steps = [];
-  for (let d = 100; d <= maxD; d += Math.max(20, d * 0.008)) steps.push(d);
+  // (`fast`, for the frames of a flight, samples more sparsely.)
+  for (let d = 100; d <= maxD; d += fast ? Math.max(50, d * 0.02) : Math.max(20, d * 0.008)) steps.push(d);
   const levelFor = steps.map((d) => levels.find((l) => d <= l.reach) ?? levels[levels.length - 1]);
 
   for (let i = 0; i < SAMPLES; i++) {
@@ -357,50 +359,65 @@ export function skylineAt(profile, azDeg) {
  */
 export function createTerrain({ onReady } = {}) {
   const done = new Map(); // key → profile | null (failed)
-  let busy = null;
-  let queued = null;
+  const jobs = new Map(); // key → Promise of a profile being worked out
+  let chain = Promise.resolve(); // one at a time
+  let wanted = null; // the latest place asked for while busy
 
   const keyOf = (loc) => `${loc.lat.toFixed(4)},${loc.lon.toFixed(4)}`;
 
   async function run(loc) {
     const key = keyOf(loc);
-    busy = key;
     let profile = null;
     try {
-      profile = await computeProfile(loc.lat, loc.lon, loc.ele);
+      profile = await computeProfile(loc.lat, loc.lon, { groundHint: loc.ele });
     } catch (err) {
       console.warn("Terrain failed to load", err);
     }
     if (done.size > 20) done.clear();
     done.set(key, profile);
-    busy = null;
-    if (profile) profile.key = key;
-    onReady?.(profile);
+    jobs.delete(key);
     if (profile) {
+      profile.key = key;
+      // Names come from a slower server; the skyline doesn't wait for them.
       profile.peaks = [];
-      try {
-        profile.peaks = await visiblePeaks(profile);
-      } catch (err) {
-        console.warn("Mountain names failed", err);
-      }
+      visiblePeaks(profile)
+        .then((peaks) => (profile.peaks = peaks))
+        .catch((err) => console.warn("Mountain names failed", err));
     }
-    if (queued) {
-      const next = queued;
-      queued = null;
-      if (!done.has(keyOf(next))) run(next);
+    onReady?.(profile);
+    if (!jobs.size && wanted && !done.has(keyOf(wanted))) {
+      const next = wanted;
+      wanted = null;
+      ensure(next);
     }
+    return profile;
   }
 
+  /** The profile for a place, worked out if need be. */
+  function ensure(loc) {
+    const key = keyOf(loc);
+    if (done.has(key)) return Promise.resolve(done.get(key));
+    if (!jobs.has(key)) {
+      const place = { lat: loc.lat, lon: loc.lon, ele: loc.ele };
+      const job = chain.then(() => run(place));
+      chain = job.catch(() => {});
+      jobs.set(key, job);
+    }
+    return jobs.get(key);
+  }
+
+  /** The profile if it's ready (else null, and it gets started). Only the latest place queues. */
   function profileFor(loc) {
     const key = keyOf(loc);
     if (done.has(key)) return done.get(key);
-    if (busy === key) return null;
-    if (busy) queued = { lat: loc.lat, lon: loc.lon, ele: loc.ele };
-    else run(loc);
+    if (!jobs.has(key)) {
+      if (jobs.size) wanted = { lat: loc.lat, lon: loc.lon, ele: loc.ele };
+      else ensure(loc);
+    }
     return null;
   }
 
-  return { profileFor };
+  return { profileFor, ensure };
 }
 
 /**

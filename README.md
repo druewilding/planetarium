@@ -53,7 +53,8 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
   from Tromsø in late November it never clears the mountains, and the info panel shows when the Sun, Moon and
   planets are actually **over the mountains** (in Tromsø the Sun first shows again on 21 January, Soldagen). The
   skyline accounts for the Earth's curve and for light bending near the ground. Named peaks you can actually see
-  (with no nearer land in the way) are labelled in green.
+  (with no nearer land in the way) are labelled in green. Tap one for its height and distance, or fly to its summit and
+  watch the land drop away as you climb.
   Buildings and trees aren't included, and a 1 km share-link position can move the nearest hills a little.
 - Works with mouse, keyboard and touch.
 

@@ -927,6 +927,17 @@ input[type="range"] {
   color: #8fe39a;
 }
 
+.label.peak.selected {
+  margin-left: -6px;
+  padding: 1px 6px;
+  border-radius: 9px;
+  font-weight: 700;
+  color: #c9ffd1;
+  background: rgba(16, 48, 26, 0.7);
+  box-shadow: 0 0 0 1px rgba(143, 227, 154, 0.7);
+  text-shadow: none;
+}
+
 .label.hour {
   font-size: 10px;
   color: rgba(255, 200, 120, 0.85);
@@ -1106,6 +1117,12 @@ input[type="range"] {
 .label.lit.peak {
   color: #17632a;
   font-weight: 600;
+}
+
+.label.lit.peak.selected {
+  color: #0f4d1f;
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 0 0 1px rgba(23, 99, 42, 0.6);
 }
 
 .label.lit.compass {

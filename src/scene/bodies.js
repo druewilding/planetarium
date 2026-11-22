@@ -295,15 +295,18 @@ export function createGround(shared, glsl) {
         // The skyline appears at full height and fades in, rather than growing.
         float hAlt = radians(skyline) * step(0.001, uTerrain);
         float alt = asin(clamp(d.y, -1.0, 1.0));
-        // Antialiased skyline. Where it dips below 0° (out over the sea, or from up a
-        // hill) the gap is filled with ground rather than sky from below the horizon.
+        // Antialiased skyline. Where it dips below 0° (from up a hill, or flying) the
+        // land below eye level shows against the hazy far distance, drawn with the
+        // sky's colour at the horizon (the sky texture below 0° isn't meant to be seen).
         float edge = max(fwidth(alt) * 0.75, 1e-5);
         float top = max(hAlt, 0.0);
         float cover = 1.0 - smoothstep(top - edge, top + edge, alt);
         if (cover <= 0.0) discard;
+        float distance = smoothstep(hAlt - edge, hAlt + edge, alt);
 
         // A flat horizon fades into haze; hills and mountains stay solid.
         float hazeAmount = (1.0 - uTerrain) * (1.0 - smoothstep(0.0, 0.025, -d.y));
+        hazeAmount = max(hazeAmount, distance);
         vec3 albedo = vec3(0.11, 0.12, 0.09);
         vec3 ground = albedo * uGroundL;
         vec3 haze = skyAt(normalize(vec3(d.x, 0.003, d.z)));
@@ -334,13 +337,23 @@ export function createGround(shared, glsl) {
     uniforms.uTerrain.value = terrain;
   }
 
+  let geometryTop = 1;
+  /** Skyline altitudes (degrees, one per sample); `topDeg` is the highest the land will reach. */
+  function setSkylineAltitudes(altitudes, topDeg) {
+    const data = horizon.image.data;
+    for (let i = 0; i < SKYLINE_SAMPLES; i++) data[i] = THREE.DataUtils.toHalfFloat(altitudes ? altitudes[i] : 0);
+    horizon.needsUpdate = true;
+    const top = Math.min(85, Math.max(1, Math.ceil(topDeg + 2)));
+    if (top !== geometryTop) {
+      geometryTop = top;
+      mesh.geometry.dispose();
+      mesh.geometry = groundGeometry(top);
+    }
+  }
+
   /** Show a skyline (from terrain.js), or null for a flat horizon. */
   function setSkyline(profile) {
-    const data = horizon.image.data;
-    for (let i = 0; i < SKYLINE_SAMPLES; i++) data[i] = THREE.DataUtils.toHalfFloat(profile ? profile.altitude[i] : 0);
-    horizon.needsUpdate = true;
-    mesh.geometry.dispose();
-    mesh.geometry = groundGeometry(Math.min(85, Math.max(1, (profile?.max ?? 0) + 2)));
+    setSkylineAltitudes(profile?.altitude, profile?.max ?? 0);
   }
-  return { mesh, update, setSkyline };
+  return { mesh, update, setSkyline, setSkylineAltitudes };
 }

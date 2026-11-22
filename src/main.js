@@ -19,7 +19,7 @@ import * as glsl from "./scene/glsl.js";
 import { createMilkyWay } from "./scene/milkyway.js";
 import { createOverlays } from "./scene/overlays.js";
 import { createPlanetPoints, createPointsMaterial, createStars } from "./scene/points.js";
-import { createTerrain, skylineAt } from "./terrain.js";
+import { computeProfile, createTerrain, skylineAt } from "./terrain.js";
 import { formatDateTime, formatTime, startOfLocalDay } from "./timezone.js";
 import { createCompass } from "./ui/compass.js";
 import { createInfo } from "./ui/info.js";
@@ -200,6 +200,7 @@ async function main() {
   const terrain = createTerrain({ onReady: () => info?.update(true) });
   let skyline = null; // the profile the ground is showing
   let skylineFade = 0;
+  let flight = null; // a flight to a summit: skylines along the way (see goToSummit)
   /** Altitude (degrees) of the land's skyline towards an azimuth; 0 for a flat horizon. */
   const skylineAlt = (az) => (skyline && skylineFade > 0.5 ? skylineAt(skyline, az) : 0);
   /** Is this direction behind solid ground (or the hills)? */
@@ -209,6 +210,25 @@ async function main() {
     return alt < skylineAlt(az) - margin;
   }
   function updateSkyline(dt) {
+    if (flight) {
+      // Flying: blend between the skylines worked out along the way.
+      const n = flight.frames.length - 1;
+      const x = (locTween ? locTween.k : 1) * n;
+      const i = Math.min(n - 1, Math.floor(x));
+      const f = x - i;
+      const [a, b] = [flight.frames[i], flight.frames[i + 1]];
+      const out = flight.view.altitude;
+      for (let j = 0; j < out.length; j++) out[j] = a[j] + (b[j] - a[j]) * f;
+      ground.setSkylineAltitudes(out, flight.top);
+      skyline = flight.view;
+      skylineFade = 1;
+      if (!locTween) {
+        skyline = flight.final; // landed
+        ground.setSkyline(skyline);
+        flight = null;
+      }
+      return;
+    }
     const want = layers.ground && layers.terrain && !locTween ? terrain.profileFor(loc) : null;
     if (want !== skyline) {
       // Fade the old skyline out, swap, then fade the new one in.
@@ -241,7 +261,7 @@ async function main() {
     onChange: (next, { animate } = {}) => setLocation(next, animate),
   });
 
-  function setLocation(next, animate) {
+  function setLocation(next, animate, { duration = 1.6 } = {}) {
     // Mountains belong to where you were standing.
     if (selection?.type === "peak") select(null);
     location.set(next);
@@ -255,13 +275,14 @@ async function main() {
     // Crossing the equator: turn around, so you keep facing the Sun's side of the sky
     // (south in the north, north in the south) and its daily path still makes sense.
     if (Math.sign(next.lat || 1) !== Math.sign(loc.lat || 1)) view.lookTo({ az: view.state.az + 180 });
-    locTween = { from: { ...loc }, to: next, dLon, t: 0 };
+    locTween = { from: { ...loc }, to: next, dLon, t: 0, k: 0, duration };
   }
 
   function updateLocationTween(dt) {
     if (!locTween) return;
-    locTween.t = Math.min(1, locTween.t + dt / 1.6);
+    locTween.t = Math.min(1, locTween.t + dt / locTween.duration);
     const k = locTween.t < 0.5 ? 2 * locTween.t ** 2 : 1 - (-2 * locTween.t + 2) ** 2 / 2;
+    locTween.k = k;
     const lon = locTween.from.lon + locTween.dLon * k;
     loc = {
       ...locTween.to,
@@ -346,7 +367,7 @@ async function main() {
   info = createInfo({
     container: $("info-content"),
     catalog,
-    getState: () => ({ sky, loc, ms: clock.ms, selection, skyline: skylineFade > 0.5 ? skyline : null }),
+    getState: () => ({ sky, loc, ms: clock.ms, selection, skyline: !flight && skylineFade > 0.5 ? skyline : null }),
     onLook: () => lookAtSelection(),
     onClear: () => select(null),
     onSummit: () => selection?.type === "peak" && goToSummit(selection.peak),
@@ -633,11 +654,51 @@ async function main() {
   const selectConstellation = (c) => ({ type: "constellation", name: c.name, constellation: c });
   const selectPeak = (p) => ({ type: "peak", name: p.name, peak: p });
 
-  /** Stand on top of a mountain, looking back the way you came. */
-  function goToSummit(p) {
-    if (sensor.active) stopSensor();
-    setLocation({ ...location.fromPoint(p.lat, p.lon), name: p.name, ele: p.ele ?? p.height }, true);
-    view.lookTo({ az: (p.az + 180) % 360 });
+  /**
+   * Fly to the top of a mountain, still facing the same way. Skylines are worked out
+   * at points along the route first, climbing up and over and down onto the summit,
+   * then the view blends through them as you go: peaks ahead grow, the land drops away.
+   */
+  let takingOff = false;
+  async function goToSummit(p) {
+    if (takingOff || flight) return;
+    const dest = { ...location.fromPoint(p.lat, p.lon), name: p.name, ele: p.ele ?? p.height };
+    const from = locTween ? locTween.to : loc;
+    const start = skyline;
+    if (!start || !layers.ground || !layers.terrain) return setLocation(dest, true);
+    takingOff = true;
+    showToast(`Taking off for ${p.name}…`, 30000);
+    try {
+      const steps = Math.max(6, Math.min(14, Math.round(p.distance * 1.2)));
+      const startEye = start.ground + 2;
+      const endEye = dest.ele + 2;
+      const climb = Math.min(1200, 150 + 60 * p.distance); // metres above the straight line
+      const frames = [start.altitude];
+      for (let i = 1; i < steps; i++) {
+        const t = i / steps;
+        const eye = startEye + (endEye - startEye) * t + climb * Math.sin(Math.PI * t);
+        const lat = from.lat + (dest.lat - from.lat) * t;
+        const lon = from.lon + (dest.lon - from.lon) * t;
+        const frame = await computeProfile(lat, lon, { eye, fast: true });
+        if (!frame) throw new Error("No terrain along the way");
+        frames.push(frame.altitude);
+      }
+      const final = await terrain.ensure(dest);
+      if (!final) throw new Error("No terrain at the summit");
+      frames.push(final.altitude);
+      let top = 0;
+      for (const f of frames) for (const v of f) top = Math.max(top, v);
+      const view = { altitude: new Float32Array(final.altitude.length), max: top, ground: final.ground };
+      flight = { frames, final, top, view };
+      toast.hidden = true;
+      setLocation(dest, true, { duration: Math.min(7, Math.max(3, 2.5 + p.distance * 0.3)) });
+    } catch (err) {
+      console.warn("Couldn't plan the flight", err);
+      toast.hidden = true;
+      setLocation(dest, true);
+    } finally {
+      takingOff = false;
+    }
   }
 
   createSearch([
@@ -831,12 +892,14 @@ async function main() {
     if (layers.peakNames && skyline?.peaks && skylineFade > 0.5) {
       for (const p of skyline.peaks) {
         p.dir ??= dirFromAltAz(p.alt, p.az);
+        const chosen = selection?.type === "peak" && selection.peak === p;
         items.push({
           key: `pk${p.id}`,
           text: p.name,
           dir: p.dir,
-          cls: "peak",
-          priority: 30 + Math.min(8, p.height / 200),
+          cls: chosen ? "peak selected" : "peak",
+          priority: chosen ? 1000 : 30 + Math.min(8, p.height / 200),
+          always: chosen,
           offset: [-p.name.length * 3, -16],
         });
       }
@@ -864,7 +927,8 @@ async function main() {
       }
     }
     const sd = selectionDir();
-    if (sd && selection.type !== "constellation") {
+    // (A chosen mountain's name is highlighted instead of ringed.)
+    if (sd && selection.type !== "constellation" && selection.type !== "peak") {
       const angR =
         selection.type === "moon" ? shownRadius(sky.moon) : selection.type === "sun" ? shownRadius(sky.sun) : 0;
       const px = angR * (canvas.clientHeight / (view.state.fov * (Math.PI / 180)));
