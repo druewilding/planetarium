@@ -9,6 +9,16 @@ const SUN_LUMINANCE = 1.6e9; // cd/m² at the solar surface, seen from outside t
 const FULL_MOON_LUMINANCE = 2500; // average cd/m² of the full Moon's disc
 const GLOW_RADII = 10; // the Moon's glow reaches this many lunar radii
 
+/**
+ * Turn a flat card (Sun disc, glow) to face the viewer at the centre, keeping the
+ * camera's "up". Facing the camera's own direction instead squashes the card into
+ * a smear near the edge of wide fisheye views, where it's seen nearly edge-on.
+ */
+function faceViewer(mesh, camera) {
+  mesh.up.set(0, 1, 0).applyQuaternion(camera.quaternion);
+  mesh.lookAt(0, 0, 0);
+}
+
 /** The Sun: a limb-darkened disc plus a glare halo that scales with how dazzling it is. */
 export function createSun(shared, glsl) {
   const uniforms = {
@@ -65,7 +75,7 @@ export function createSun(shared, glsl) {
     blendSrc: THREE.OneFactor,
     blendDst: THREE.OneMinusSrcAlphaFactor,
   });
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), material);
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1, 8, 8), material);
   mesh.renderOrder = 6;
   mesh.frustumCulled = false;
 
@@ -75,7 +85,7 @@ export function createSun(shared, glsl) {
     const discRadius = Math.tan(angR) * SUN_DISTANCE;
     const glareScale = 12; // halo extends this many solar radii
     mesh.position.copy(sun.dir).multiplyScalar(SUN_DISTANCE);
-    mesh.quaternion.copy(camera.quaternion);
+    faceViewer(mesh, camera);
     mesh.scale.setScalar(discRadius * 2 * glareScale);
     uniforms.uDiscFraction.value = 1 / glareScale;
     // Keep a faint disc visible even when the Sun is fully dimmed, so you can still find it.
@@ -101,6 +111,8 @@ export function createMoon(shared, glsl, texture, textureMean) {
     uTransmit: { value: new THREE.Vector3(1, 1, 1) },
     uMoonExposure: { value: 1 },
     uTexScale: { value: 1 / textureMean },
+    uGlowLimb: { value: 0 },
+    uGlowTint: { value: new THREE.Vector3(1, 1, 1) },
   };
   const material = new THREE.ShaderMaterial({
     uniforms,
@@ -127,6 +139,8 @@ export function createMoon(shared, glsl, texture, textureMean) {
       uniform vec3 uTransmit;
       uniform float uMoonExposure;
       uniform float uTexScale;
+      uniform float uGlowLimb;
+      uniform vec3 uGlowTint;
       varying vec2 vUv;
       varying vec3 vNormal;
       varying vec3 vPos;
@@ -142,8 +156,11 @@ export function createMoon(shared, glsl, texture, textureMean) {
         // The eye adapts locally to the bright Moon, so the lit part uses its own exposure.
         vec3 x = albedo * uTransmit * (uLit * ls * uMoonExposure + uEarthshine * es * uExposure * 0.12);
         vec3 sky = skyAt(v * -1.0) * uExposure;
-        vec3 c = acesFilm(x + sky);
-        gl_FragColor = vec4(linearToSrgb(c), 1.0);
+        vec3 c = linearToSrgb(acesFilm(x + sky));
+        // The glow is in the air in front of the Moon, so it veils the dark side too
+        // ("screen" blend: fills the dark part without bleaching the lit one).
+        vec3 g = linearToSrgb(clamp(uGlowTint * uGlowLimb, 0.0, 1.0));
+        gl_FragColor = vec4(c + g * (1.0 - c), 1.0);
       }
     `,
   });
@@ -161,7 +178,7 @@ export function createMoon(shared, glsl, texture, textureMean) {
     uDiscFraction: { value: 1 / GLOW_RADII },
   };
   const glow = new THREE.Mesh(
-    new THREE.PlaneGeometry(1, 1),
+    new THREE.PlaneGeometry(1, 1, 8, 8),
     new THREE.ShaderMaterial({
       uniforms: { ...shared, ...glowUniforms },
       vertexShader: /* glsl */ `
@@ -222,9 +239,12 @@ export function createMoon(shared, glsl, texture, textureMean) {
     const m = Math.max(transmit[0], transmit[1], transmit[2], 1e-6);
     glowUniforms.uTint.value.set((transmit[0] / m) * 0.95, (transmit[1] / m) * 0.93, (transmit[2] / m) * 0.88);
     glow.position.copy(moon.dir).multiplyScalar(MOON_DISTANCE);
-    glow.quaternion.copy(camera.quaternion);
+    faceViewer(glow, camera);
     glow.scale.setScalar(r * 2 * GLOW_RADII);
     glow.visible = mesh.visible && glowUniforms.uGlow.value > 0.002;
+    // Same as the glow shader's value at d = 0 (the limb), so the two meet without a seam.
+    uniforms.uGlowLimb.value = glow.visible ? glowUniforms.uGlow.value * 0.62 : 0;
+    uniforms.uGlowTint.value.copy(glowUniforms.uTint.value);
   }
   return { mesh, glow, update };
 }
