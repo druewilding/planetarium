@@ -24,7 +24,10 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
   shows only where it stands out from the sky, so it's at its best on dark, moonless nights and washes out under a
   bright Moon or twilight.
 - **The Moon:** a lit 3D sphere with a NASA LRO texture, so its phase, tilt, libration and earthshine all come straight
-  from the geometry.
+  from the geometry. On a dark night it glows, the way haze and your own eyes make it dazzle. Zoomed out, the Sun and
+  Moon are drawn up to 3½ times larger, because at true size a wide view shrinks them to a few pixels; zoom in and
+  they're true to size (or turn off **Enlarge Sun & Moon**). The phase icon in the info panel is turned the way the
+  Moon looks in your sky right now, so near the equator a crescent lies on its back.
 - **Time tracks:** drag along a 24-hour track shaded by where the Sun is (night, twilight, day), or along a date track
   shaded by day length through the year, with the solstices and equinoxes marked. A year stepper sits beside it, and
   time can play from −1 month/s to +1 month/s.
