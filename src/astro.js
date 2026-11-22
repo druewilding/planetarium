@@ -113,6 +113,7 @@ export function computeSky(ms, loc) {
   moon.illuminance = sun.illuminance * 10 ** (-0.4 * (moon.mag - sun.mag));
   moon.sunDir = sun.vecAU.clone().sub(moon.vecAU).normalize();
   moon.axis = A.RotationAxis(Body.Moon, time);
+  sun.visibleFraction = sunVisibleFraction(sun.angularRadius, moon.angularRadius, sun.trueDir.angleTo(moon.trueDir));
 
   const planets = PLANETS.map((p) => {
     const s = bodyState(Body[p.id], time, obs, eqjToWorld);
@@ -127,6 +128,17 @@ export function computeSky(ms, loc) {
   });
 
   return { ms, time, obs, eqjToWorld, eqdToWorld, sun, moon, planets };
+}
+
+/** Fraction of the solar disc not covered by the Moon (discs of angular radius rs, rm, centres d apart). */
+export function sunVisibleFraction(rs, rm, d) {
+  if (d >= rs + rm) return 1;
+  if (d <= rm - rs) return 0; // total
+  if (d <= rs - rm) return 1 - (rm * rm) / (rs * rs); // annular
+  const a1 = rs * rs * Math.acos((d * d + rs * rs - rm * rm) / (2 * d * rs));
+  const a2 = rm * rm * Math.acos((d * d + rm * rm - rs * rs) / (2 * d * rm));
+  const a3 = 0.5 * Math.sqrt((-d + rs + rm) * (d + rs - rm) * (d - rs + rm) * (d + rs + rm));
+  return 1 - (a1 + a2 - a3) / (Math.PI * rs * rs);
 }
 
 /** Orientation (body-fixed axes) of the Moon as a world-space Matrix4 for a three.js SphereGeometry. */

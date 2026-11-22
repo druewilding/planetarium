@@ -68,7 +68,7 @@ export function createSun(shared, glsl) {
   mesh.frustumCulled = false;
 
   /** sky: computeSky().sun, transmit: RGB, dim: 0..1, exposure: current */
-  function update(sun, transmit, dim, exposure, camera) {
+  function update(sun, transmit, dim, exposure, camera, uncovered = 1) {
     const angR = sun.angularRadius;
     const discRadius = Math.tan(angR) * SUN_DISTANCE;
     const glareScale = 28; // halo extends this many solar radii
@@ -81,7 +81,7 @@ export function createSun(shared, glsl) {
     const L = SUN_LUMINANCE * level;
     uniforms.uSunL.value.set(transmit[0] * L, transmit[1] * L, transmit[2] * L);
     uniforms.uDiscExposure.value = Math.min(exposure, 4 / L);
-    const E = (sun.illuminance * dim * (transmit[0] + transmit[1] + transmit[2])) / 3;
+    const E = (sun.illuminance * dim * uncovered * (transmit[0] + transmit[1] + transmit[2])) / 3;
     uniforms.uGlare.value = 1 - Math.exp(-E * exposure * 0.08);
     mesh.visible = sun.alt > -2;
   }

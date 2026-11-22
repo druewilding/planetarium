@@ -578,7 +578,10 @@ async function main() {
     shared.uRefract.value = layers.atmosphere && layers.refraction ? 1 : 0;
     shared.uExtK.value = atm.extinctionK;
 
-    const sunE = sky.sun.illuminance * sunLevel;
+    // During an eclipse only the uncovered part of the Sun lights the sky. Even in
+    // totality some light reaches us from beyond the Moon's shadow, so keep a little.
+    const eclipse = sky.sun.visibleFraction < 1 ? Math.max(sky.sun.visibleFraction, 1e-5) : 1;
+    const sunE = sky.sun.illuminance * sunLevel * eclipse;
     // Skylight illuminance for the multiple-scattering term (from last frame's sky).
     const ambient = layers.atmosphere ? Math.PI * lastAverage : 0;
     const moonE = sky.moon.illuminance;
@@ -620,7 +623,7 @@ async function main() {
       moonE * Math.max(0, sky.moon.trueDir.y) * mean(tMoon);
     ground.update(groundE, layers.ground);
 
-    sun.update(sky.sun, tSun, sunLevel, exposure, camera);
+    sun.update(sky.sun, tSun, sunLevel, exposure, camera, eclipse);
     moon.update(sky.moon, sky, tMoon, exposure);
     planetPoints.update(sky.planets);
     overlays.updateFrames(sky);

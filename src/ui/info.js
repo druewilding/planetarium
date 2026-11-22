@@ -4,7 +4,12 @@
 import { A, AU_KM, Body, compassPoint, R2D } from "../astro.js";
 import { formatDateTime, formatDuration, formatShortDate, formatTime, startOfLocalDay } from "../timezone.js";
 
-const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const ENTITIES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\u0022": "&quot;" };
+const esc = (s) => String(s).replace(/[&<>\u0022]/g, (c) => ENTITIES[c]);
+
+const NO_PLANETS = "<p class=note>None above the horizon right now.</p>";
+const DIM_TIP =
+  "<p class=note>Slide <strong>Sunlight</strong> down to see the stars and planets that are up there right now.</p>";
 
 export function phaseName(angle) {
   const names = [
@@ -121,7 +126,12 @@ export function createInfo({ container, getState, onLook, onClear, catalog }) {
     if (ev.rs.rise && ev.rs.set && ev.rs.set.date > ev.rs.rise.date) {
       dayLen = `<dt>Day length</dt><dd>${formatDuration((ev.rs.set.date - ev.rs.rise.date) / 60000)}</dd>`;
     }
-    let html = `<dl>${position(sun)}${riseSetRows(ev.rs, loc, bodyRef(Body.Sun, obs))}${dayLen}</dl>`;
+    const covered = 1 - sun.visibleFraction;
+    const eclipseRow =
+      covered > 0 && sun.alt > -1
+        ? `<dt>Eclipse</dt><dd>${covered >= 0.9999 ? "Total!" : `${(covered * 100).toFixed(covered > 0.99 ? 1 : 0)}% covered`}</dd>`
+        : "";
+    let html = `<dl>${position(sun)}${eclipseRow}${riseSetRows(ev.rs, loc, bodyRef(Body.Sun, obs))}${dayLen}</dl>`;
     html += daylightBar(start, obs, ms);
     if (!full) return html;
     const twRow = (name, pair) => `<dt>${name}</dt><dd>${t(pair[0], loc)} – ${t(pair[1], loc)}</dd>`;
@@ -252,8 +262,8 @@ export function createInfo({ container, getState, onLook, onClear, catalog }) {
     return `<h3>${esc(loc.name)}</h3><p class="kind">Today at a glance</p>
       <div class="section"><h4>Sun</h4>${sunDetails(s, false)}</div>
       <div class="section"><h4>Moon</h4>${moonDetails(s, false)}</div>
-      <div class="section"><h4>Planets up now</h4>${visible ? `<dl>${visible}</dl>` : '<p class="note">None above the horizon right now.</p>'}</div>
-      ${sunUp ? '<p class="note">Slide <strong>Sunlight</strong> down to see the stars and planets that are up there right now.</p>' : ""}
+      <div class="section"><h4>Planets up now</h4>${visible ? `<dl>${visible}</dl>` : NO_PLANETS}</div>
+      ${sunUp ? DIM_TIP : ""}
       <p class="note">Tap anything in the sky for details.</p>`;
   }
 
