@@ -1084,47 +1084,47 @@ input[type="range"] {
 }
 
 /* Labels over a daylight sky */
-.bright-sky .label {
+.label.lit {
   /* Dark text on a bright sky reads best with a soft light halo, not a shadow. */
   text-shadow:
     0 0 3px rgba(255, 255, 255, 0.6),
     0 0 1px rgba(255, 255, 255, 0.5);
 }
 
-.bright-sky .label.constellation {
+.label.lit.constellation {
   color: rgba(25, 45, 105, 0.65);
 }
 
-.bright-sky .label.star {
+.label.lit.star {
   color: rgba(20, 35, 85, 0.8);
 }
 
-.bright-sky .label.hour {
+.label.lit.hour {
   color: rgba(140, 70, 0, 0.9);
 }
 
-.bright-sky .label.peak {
+.label.lit.peak {
   color: #17632a;
   font-weight: 600;
 }
 
-.bright-sky .label.compass {
+.label.lit.compass {
   color: #b0401c;
 }
 
-.bright-sky .label.compass.minor {
+.label.lit.compass.minor {
   color: rgba(150, 60, 30, 0.85);
 }
 
-.bright-sky .label.body {
+.label.lit.body {
   color: #7a4a00;
 }
 
-.bright-sky .label.moon {
+.label.lit.moon {
   color: #2f3a5c;
 }
 
-.bright-sky .label.path {
+.label.lit.path {
   color: rgba(30, 35, 60, 0.7);
 }
 

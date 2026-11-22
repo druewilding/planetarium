@@ -9,7 +9,9 @@ import {
   averageSkyLuminance,
   createAtmosphere,
   createSkyDome,
+  luminance,
   NONE,
+  skyRadiance,
   transmittance,
 } from "./scene/atmosphere.js";
 import { createGround, createMoon, createSun } from "./scene/bodies.js";
@@ -852,7 +854,42 @@ async function main() {
           width: 0,
         });
     }
+    // Dark text where the sky behind a label is bright, light text where it's dark.
+    for (const it of items) if (it.cls !== "selected-ring" && litBehind(it.dir)) it.cls += " lit";
     return items;
+  }
+
+  // ---- How bright the sky is behind labels ----
+  // At dusk the glow over the sunset is far brighter than the sky overall, so each
+  // label looks at the sky right behind it, sampled a few times a second on a
+  // coarse grid (overhead, the top row stands in).
+  const GLOW_ALTS = [1, 5, 12, 25, 45, 70];
+  const GLOW_AZ = 24;
+  const glow = new Float32Array(GLOW_AZ * GLOW_ALTS.length);
+  let glowAt = -Infinity;
+  function updateGlow(now, atm, lights, ambient) {
+    if (now - glowAt < 300) return;
+    glowAt = now;
+    for (let j = 0; j < GLOW_ALTS.length; j++) {
+      for (let i = 0; i < GLOW_AZ; i++) {
+        dirFromAltAz(GLOW_ALTS[j], (i * 360) / GLOW_AZ, tmp);
+        glow[j * GLOW_AZ + i] = luminance(skyRadiance(atm, tmp, lights, 8, 4, ambient));
+      }
+    }
+  }
+  function litBehind(dir) {
+    const { alt, az } = altAz(dir);
+    const a = Math.min(GLOW_ALTS[GLOW_ALTS.length - 1] - 1e-6, Math.max(GLOW_ALTS[0], alt));
+    let j = 0;
+    while (a > GLOW_ALTS[j + 1]) j++;
+    const fy = (a - GLOW_ALTS[j]) / (GLOW_ALTS[j + 1] - GLOW_ALTS[j]);
+    const x = (az / 360) * GLOW_AZ;
+    const i = Math.floor(x) % GLOW_AZ;
+    const i2 = (i + 1) % GLOW_AZ;
+    const fx = x - Math.floor(x);
+    const row = (r) => glow[r * GLOW_AZ + i] * (1 - fx) + glow[r * GLOW_AZ + i2] * fx;
+    // Brightness on screen, before tone mapping: a mid-tone sky and up wants dark text.
+    return (row(j) * (1 - fy) + row(j + 1) * fy) * exposure > 0.22;
   }
 
   // ---- Resize ----
@@ -939,10 +976,10 @@ async function main() {
     const night = 1 - smooth(0.3, 300, average);
     if (Math.abs(night - lastNight) > 0.01) {
       lastNight = night;
-      document.body.classList.toggle("bright-sky", night < 0.5);
       overlays.layers.constellations.material.uniforms.uOpacity.value = 0.14 + 0.24 * night;
     }
     globalLimit = 7.93 - 5 * Math.log10(1 + 63 * Math.sqrt(zenith));
+    updateGlow(now, atm, lights, ambient);
 
     const tSun = transmittance(atm, sky.sun.trueDir);
     const tMoon = transmittance(atm, sky.moon.trueDir);
