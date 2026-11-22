@@ -132,9 +132,15 @@ svg {
   color: var(--accent);
 }
 
-.chip:hover,
-.icon-btn:hover {
+.chip:hover:not(:disabled),
+.icon-btn:hover:not(:disabled) {
   border-color: rgba(160, 185, 255, 0.35);
+}
+
+.chip:disabled,
+.icon-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .chip.small {

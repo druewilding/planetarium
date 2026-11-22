@@ -737,7 +737,7 @@ async function main() {
     const { alt, az } = view.state;
     const up = lookingUp();
     const changed = up || Math.abs(view.state.fov - DEFAULT_FOV) > 2;
-    if (resetBtn.hidden === changed) resetBtn.hidden = !changed;
+    if (resetBtn.disabled === changed) resetBtn.disabled = !changed;
     if (up !== (lookUpBtn.getAttribute("aria-pressed") === "true")) {
       lookUpBtn.setAttribute("aria-pressed", String(up));
       lookUpBtn.querySelector("span").textContent = up ? "Back to horizon" : "Look up";
