@@ -9,6 +9,7 @@ import { formatDateTime, formatDuration, formatShortDate, formatTime, startOfLoc
 const ENTITIES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\u0022": "&quot;" };
 const esc = (s) => String(s).replace(/[&<>\u0022]/g, (c) => ENTITIES[c]);
 
+const SUMMIT_BUTTON = "<button class='chip small' data-action=summit>Go to the summit</button>";
 const NO_PLANETS = "<p class=note>None above the horizon right now.</p>";
 const DIM_TIP =
   "<p class=note>Slide <strong>Sunlight</strong> down to see the stars and planets that are up there right now.</p>";
@@ -47,7 +48,7 @@ export function phaseIcon(angle, southern, litAngle) {
   </svg>`;
 }
 
-export function createInfo({ container, getState, onLook, onClear, onSelect, catalog }) {
+export function createInfo({ container, getState, onLook, onClear, onSelect, onSummit, catalog }) {
   const cache = new Map();
   let lastHtml = "";
   let lastBuild = 0;
@@ -273,6 +274,16 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, cat
       </dl></div>`;
   }
 
+  function peakDetails(s, p) {
+    const height = Math.round(p.ele ?? p.height).toLocaleString();
+    return `<dl>${position(p, null)}
+        <dt>Height</dt><dd>${height} m</dd>
+        <dt>Distance</dt><dd>${p.distance < 10 ? p.distance.toFixed(1) : Math.round(p.distance)} km</dd>
+        ${p.otherNames ? `<dt>Also called</dt><dd>${esc(p.otherNames)}</dd>` : ""}
+      </dl>
+      <p class="note">Name from OpenStreetMap.</p>`;
+  }
+
   function constellationDetails(s, c) {
     const pos = c.position(s.sky);
     const stars = catalog.starsIn(c.id).slice(0, 5);
@@ -304,7 +315,7 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, cat
       <div class="section"><h4><button class="jump" data-select="moon" title="Look at the Moon">Moon</button></h4>${moonDetails(s, false)}</div>
       <div class="section"><h4>Planets up now</h4>${visible ? `<dl>${visible}</dl>` : NO_PLANETS}</div>
       ${sunUp ? DIM_TIP : ""}
-      <p class="note">Tap anything in the sky for details.</p>`;
+      <p class="note">Tap anything to look at it.</p>`;
   }
 
   function build() {
@@ -330,10 +341,14 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, cat
     } else if (sel.type === "constellation") {
       kind = "Constellation";
       body = constellationDetails(s, sel.constellation);
+    } else if (sel.type === "peak") {
+      kind = "Mountain";
+      body = peakDetails(s, sel.peak);
     }
     return `<h3>${esc(title)}</h3><p class="kind">${esc(kind)}</p>${body}
       <div class="info-actions">
         <button class="chip small" data-action="look">Look at it</button>
+        ${sel.type === "peak" ? SUMMIT_BUTTON : ""}
         <button class="chip small" data-action="clear">Back to overview</button>
       </div>`;
   }
@@ -342,6 +357,7 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, cat
     const action = e.target.closest("[data-action]")?.dataset.action;
     if (action === "look") onLook();
     if (action === "clear") onClear();
+    if (action === "summit") onSummit?.();
     const jump = e.target.closest("[data-select]");
     if (jump) onSelect(jump.dataset.select, jump.dataset.id);
   });

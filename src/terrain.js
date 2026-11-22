@@ -217,12 +217,14 @@ async function loadLevel(lat, lon, metresPerPixel, reachKm) {
  * the apparent altitude of the skyline (degrees) and how far away it is (km).
  * Returns null if no elevation data could be loaded.
  */
-export async function computeProfile(lat, lon) {
+export async function computeProfile(lat, lon, groundHint = null) {
   if (Math.abs(lat) > MAX_LAT) return null;
   const levels = await Promise.all(LEVELS.map(([m, km]) => loadLevel(lat, lon, m, km)));
   if (levels.every((l) => l.loaded === 0)) return null;
 
-  const ground = levels[0].height(lat, lon);
+  // Standing on a summit: the elevation model rounds peaks off, so trust its mapped height.
+  const dem = levels[0].height(lat, lon);
+  const ground = groundHint != null && Math.abs(groundHint - dem) < 300 ? Math.max(dem, groundHint) : dem;
   const h0 = ground + EYE_HEIGHT;
   const altitude = new Float32Array(SAMPLES);
   const distance = new Float32Array(SAMPLES);
@@ -293,7 +295,8 @@ export async function computeProfile(lat, lon) {
 }
 
 /** A peak's everyday name: "Tromsdalstinden - Sálašoaivi" → "Tromsdalstinden". */
-const shortName = (name) => name.split(/ [-–/] /)[0].trim();
+const NAME_SPLIT = / [-–/] /;
+const shortName = (name) => name.split(NAME_SPLIT)[0].trim();
 
 /**
  * Named peaks from OpenStreetMap that can be seen from where the profile was
@@ -325,7 +328,17 @@ export async function visiblePeaks(profile) {
     // Little knolls only clutter the view, unless they're what you see against the sky.
     if (seen.height < 150 && !onSkyline) continue;
     const alt = onSkyline ? Math.max(seen.alt, sky) : seen.alt;
-    peaks.push({ id: e.id, name: shortName(e.tags.name), fullName: e.tags.name, ...seen, alt });
+    const ele = parseFloat(e.tags.ele);
+    peaks.push({
+      id: e.id,
+      name: shortName(e.tags.name),
+      otherNames: e.tags.name.split(NAME_SPLIT).slice(1).join(", "),
+      lat: e.lat,
+      lon: e.lon,
+      ele: Number.isFinite(ele) ? ele : null,
+      ...seen,
+      alt,
+    });
   }
   return peaks;
 }
@@ -354,7 +367,7 @@ export function createTerrain({ onReady } = {}) {
     busy = key;
     let profile = null;
     try {
-      profile = await computeProfile(loc.lat, loc.lon);
+      profile = await computeProfile(loc.lat, loc.lon, loc.ele);
     } catch (err) {
       console.warn("Terrain failed to load", err);
     }
@@ -382,7 +395,7 @@ export function createTerrain({ onReady } = {}) {
     const key = keyOf(loc);
     if (done.has(key)) return done.get(key);
     if (busy === key) return null;
-    if (busy) queued = { lat: loc.lat, lon: loc.lon };
+    if (busy) queued = { lat: loc.lat, lon: loc.lon, ele: loc.ele };
     else run(loc);
     return null;
   }

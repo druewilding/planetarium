@@ -242,6 +242,8 @@ async function main() {
   });
 
   function setLocation(next, animate) {
+    // Mountains belong to where you were standing.
+    if (selection?.type === "peak") select(null);
     location.set(next);
     if (!loc || !animate) {
       loc = { ...next };
@@ -347,6 +349,7 @@ async function main() {
     getState: () => ({ sky, loc, ms: clock.ms, selection, skyline: skylineFade > 0.5 ? skyline : null }),
     onLook: () => lookAtSelection(),
     onClear: () => select(null),
+    onSummit: () => selection?.type === "peak" && goToSummit(selection.peak),
     onSelect: (type, id) => {
       if (type === "sun") select(selectSun(), { look: true });
       else if (type === "moon") select(selectMoon(), { look: true });
@@ -592,6 +595,8 @@ async function main() {
         return selection.star.position(sky).dir;
       case "constellation":
         return selection.constellation.position(sky).dir;
+      case "peak":
+        return (selection.peak.dir ??= dirFromAltAz(selection.peak.alt, selection.peak.az));
       default:
         return null;
     }
@@ -616,7 +621,8 @@ async function main() {
     if (selection.type === "constellation") fov = Math.max(fov, 50);
     const { az } = altAz(d);
     // Behind the ground or the hills: face its direction, just above the skyline.
-    if (behindLand(d, 0)) view.lookTo({ alt: Math.max(12, skylineAlt(az) + 8), az, fov: Math.max(fov, 60) });
+    if (selection.type !== "peak" && behindLand(d, 0))
+      view.lookTo({ alt: Math.max(12, skylineAlt(az) + 8), az, fov: Math.max(fov, 60) });
     else view.lookAt(d, fov);
   }
 
@@ -625,6 +631,14 @@ async function main() {
   const selectPlanet = (p) => ({ type: "planet", id: p.id, name: p.name });
   const selectStar = (s) => ({ type: "star", name: s.name, star: s });
   const selectConstellation = (c) => ({ type: "constellation", name: c.name, constellation: c });
+  const selectPeak = (p) => ({ type: "peak", name: p.name, peak: p });
+
+  /** Stand on top of a mountain, looking back the way you came. */
+  function goToSummit(p) {
+    if (sensor.active) stopSensor();
+    setLocation({ ...location.fromPoint(p.lat, p.lon), name: p.name, ele: p.ele ?? p.height }, true);
+    view.lookTo({ az: (p.az + 180) % 360 });
+  }
 
   createSearch([
     { name: "Sun", kind: "Star", select: () => select(selectSun(), { look: true }) },
@@ -667,6 +681,19 @@ async function main() {
     consider(sky.sun.dir, Math.max(20, shownRadius(sky.sun) * pxPerRad + 6), 10, selectSun);
     consider(sky.moon.dir, Math.max(20, shownRadius(sky.moon) * pxPerRad + 6), 10, selectMoon);
     for (const p of sky.planets) consider(p.dir, 18, 6, () => selectPlanet(p));
+    // Mountain names: the label sits centred just above its summit.
+    if (layers.peakNames && skyline?.peaks && skylineFade > 0.5) {
+      for (const p of skyline.peaks) {
+        const s = p.dir && screenOf(p.dir);
+        if (!s) continue;
+        const dx = x - s[0];
+        const dy = y - (s[1] - 16);
+        const onLabel = Math.abs(dx) < p.name.length * 3.5 + 6 && Math.abs(dy) < 10;
+        if (!onLabel && Math.hypot(x - s[0], y - s[1]) > 12) continue;
+        const score = Math.min(Math.hypot(dx, dy), Math.hypot(x - s[0], y - s[1])) - 8;
+        if (score < bestScore) [bestScore, best] = [score, () => selectPeak(p)];
+      }
+    }
     for (const s of catalog.stars) {
       if (s.mag > globalLimit + 0.5) break; // sorted by magnitude
       consider(s.position(sky).dir, 14, Math.max(0, 4 - s.mag) * 1.5, () => selectStar(s));
