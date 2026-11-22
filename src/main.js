@@ -195,7 +195,6 @@ async function main() {
   let layers = {};
   let sunLevel = 1;
   let exposure = 1;
-  let baseExposure = null;
   let globalLimit = 6;
 
   const location = createLocation({
@@ -214,6 +213,9 @@ async function main() {
     }
     let dLon = next.lon - loc.lon;
     dLon = ((dLon + 540) % 360) - 180;
+    // Crossing the equator: turn around, so you keep facing the Sun's side of the sky
+    // (south in the north, north in the south) and its daily path still makes sense.
+    if (Math.sign(next.lat || 1) !== Math.sign(loc.lat || 1)) view.lookTo({ az: view.state.az + 180 });
     locTween = { from: { ...loc }, to: next, dLon, t: 0 };
   }
 
@@ -237,13 +239,29 @@ async function main() {
   location.requestGeolocation();
 
   // ---- View ----
+  const DEFAULT_FOV = 80;
+  /** Altitude to look at so the horizon sits just above the time controls. */
+  function horizonAltitude(fov) {
+    const h = window.innerHeight;
+    const barTop = document.querySelector(".timebar").getBoundingClientRect().top;
+    const y = Math.min(h * 0.85, barTop - 24); // horizon's screen position
+    const t = Math.tan(((fov / 2) * Math.PI) / 180);
+    return (Math.atan(((y - h / 2) / (h / 2)) * t) * 180) / Math.PI;
+  }
+  /** Face the Sun or Moon if up (keeping the horizon in view), else the equator side of the sky. */
+  function defaultView(s, fov = DEFAULT_FOV) {
+    const base = horizonAltitude(fov);
+    const body = s.sun.alt > 3 ? s.sun : s.moon.alt > 3 ? s.moon : null;
+    if (!body) return { alt: base, az: loc.lat >= 0 ? 180 : 0, fov };
+    // Tilt up only as far as needed to keep the body comfortably on screen.
+    return { alt: Math.max(base, body.alt - fov / 2 + 12), az: body.az, fov };
+  }
+
   const view = createView(camera, canvas, { onClick: pick });
   {
-    const first = computeSky(clock.ms, loc);
-    if (first.sun.alt > 3) view.lookTo({ alt: Math.min(first.sun.alt, 50), az: first.sun.az, fov: 60 });
-    else if (first.moon.alt > 3) view.lookTo({ alt: Math.min(first.moon.alt, 50), az: first.moon.az, fov: 60 });
-    else view.lookTo({ alt: 30, az: loc.lat >= 0 ? 180 : 0, fov: 60 });
+    view.lookTo(defaultView(computeSky(clock.ms, loc)));
     view.update(10);
+    // (Aimed again after the first frame, once the time bar has its real height.)
   }
   $("zoom-in").addEventListener("click", () => view.zoom(0.6));
   $("zoom-out").addEventListener("click", () => view.zoom(1 / 0.6));
@@ -636,28 +654,18 @@ async function main() {
     ];
     const { average, zenith, peak } = averageSkyLuminance(atm, lights, ambient);
     lastAverage = average;
-    // Adapt quickly when time is racing, or day and night would strobe.
-    const adaptTime = 0.35 / (1 + (clock.playing ? Math.abs(clock.rate) : 0) / 1800);
-    // The eye adapts mostly to the average, but also to the brightest part of the sky.
-    const adaptTo = (avg, pk) => Math.max(avg, 0.25 * pk);
-    // Natural adaptation (day/night) eases in over time, judged as if the Sun were undimmed…
-    let adaptFull = adaptTo(average, peak);
-    let adaptDimmed = adaptFull;
+    // Eye adaptation, worked out fresh every frame (no lag, so changing the time
+    // never makes the sky dip and then brighten back). Adapting to the average
+    // plus a share of the brightest part keeps brightness falling steadily
+    // through sunset, rather than switching between the two.
+    const adaptTo = (avg, pk) => avg + 0.25 * pk;
+    let adapt = adaptTo(average, peak);
     if (sunLevel < 1 && fullSunE > 0) {
+      // The dimmer only partly adapts, so sliding it down always makes the scene darker.
       const full = averageSkyLuminance(atm, [{ dir: sky.sun.trueDir, e: fullSunE }, lights[1]], ambient);
-      adaptFull = adaptTo(full.average, full.peak);
-      // …while the dimmer applies instantly and only partly adapts, so sliding it
-      // down always makes the scene darker, never darker-then-brighter.
-      adaptDimmed = adaptFull ** 0.4 * adaptTo(average, peak) ** 0.6;
+      adapt = adaptTo(full.average, full.peak) ** 0.4 * adapt ** 0.6;
     }
-    const target = 0.45 / (adaptFull + 0.03);
-    baseExposure =
-      baseExposure === null
-        ? target
-        : Math.exp(
-            Math.log(baseExposure) + (Math.log(target) - Math.log(baseExposure)) * (1 - Math.exp(-dt / adaptTime))
-          );
-    exposure = baseExposure * ((adaptFull + 0.03) / (adaptDimmed + 0.03));
+    exposure = 0.7 / (adapt + 0.03);
     shared.uExposure.value = exposure;
     shared.uScotopic.value = 0.6 * (1 - smooth(0.005, 1, average));
     // Labels and figures recede in daylight, like a printed overlay on a bright sky.
@@ -704,6 +712,8 @@ async function main() {
 
     if (firstFrame) {
       firstFrame = false;
+      view.lookTo(defaultView(sky));
+      view.update(10);
       $("loading").classList.add("done");
     }
     requestAnimationFrame(frame);
