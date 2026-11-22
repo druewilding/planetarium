@@ -52,7 +52,8 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
 - **Hills and mountains:** the real skyline around you, from free elevation maps. The Sun can be up and still hidden:
   from Tromsø in late November it never clears the mountains, and the info panel shows when the Sun, Moon and
   planets are actually **over the mountains** (in Tromsø the Sun first shows again on 21 January, Soldagen). The
-  skyline accounts for the Earth's curve and for light bending near the ground.
+  skyline accounts for the Earth's curve and for light bending near the ground. Named peaks you can actually see
+  (with no nearer land in the way) are labelled in green.
   Buildings and trees aren't included, and a 1 km share-link position can move the nearest hills a little.
 - Works with mouse, keyboard and touch.
 
@@ -131,6 +132,8 @@ planetarium/
   public domain)
 - Moon texture: [NASA SVS CGI Moon Kit](https://svs.gsfc.nasa.gov/4720) (LRO, public domain)
 - Coastlines and cities: [Natural Earth](https://www.naturalearthdata.com) (public domain)
+- Mountain names: © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors (ODbL), via the
+  [Overpass API](https://overpass-api.de)
 - Terrain: [Terrain Tiles on AWS](https://registry.opendata.aws/terrain-tiles/), built by Mapzen from SRTM, EU-DEM,
   Kartverket, GMTED, ETOPO1 and others ([attribution](https://github.com/tilezen/joerd/blob/master/docs/attribution.md))
 

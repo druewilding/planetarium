@@ -799,6 +799,19 @@ async function main() {
         });
       }
     }
+    if (layers.peakNames && skyline?.peaks && skylineFade > 0.5) {
+      for (const p of skyline.peaks) {
+        p.dir ??= dirFromAltAz(p.alt, p.az);
+        items.push({
+          key: `pk${p.id}`,
+          text: p.name,
+          dir: p.dir,
+          cls: "peak",
+          priority: 30 + Math.min(8, p.height / 200),
+          offset: [-p.name.length * 3, -16],
+        });
+      }
+    }
     if (layers.compass) {
       for (const c of COMPASS) items.push({ ...c, priority: 200, always: true, offset: [-5, -14] });
     }

@@ -15,7 +15,19 @@
 import { A } from "./astro.js";
 
 const TILE_URL = (z, x, y) => `https://elevation-tiles-prod.s3.amazonaws.com/terrarium/${z}/${x}/${y}.png`;
-const TILE_CACHE = "terrain-tiles-v1";
+// Public Overpass servers for OpenStreetMap queries, tried in turn: they're often busy.
+const OVERPASS = [
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.private.coffee/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
+];
+const peaksQuery = (lat, lon, radiusM) =>
+  "?data=" +
+  encodeURIComponent(
+    `[out:json][timeout:25];node["natural"~"^(peak|volcano)$"]["name"](around:${radiusM},${lat},${lon});out body;`
+  );
+const PEAK_RADIUS_KM = 50;
+const CACHE_NAME = "terrain-v1";
 const EARTH_R = 6371000;
 const REFRACTION_K = 0.13;
 const R_EFF = EARTH_R / (1 - REFRACTION_K);
@@ -44,23 +56,32 @@ function loadTile(z, x, y) {
 }
 
 /**
- * Fetch a tile, keeping a copy in the browser's Cache Storage. The tiles never
- * change, and the server sends no caching headers, so the ordinary HTTP cache
- * would only be guessing.
+ * Fetch, keeping a copy in the browser's Cache Storage. Tiles never change and
+ * peaks hardly do, and neither server sends caching headers, so the ordinary
+ * HTTP cache would only be guessing.
  */
-async function cachedFetch(url) {
+async function cachedFetch(url, sources = [url]) {
   let cache = null;
   try {
-    cache = await caches.open(TILE_CACHE);
+    cache = await caches.open(CACHE_NAME);
     const hit = await cache.match(url);
     if (hit) return hit;
   } catch {
     // No Cache Storage (private window, or not a secure page): just fetch.
   }
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  cache?.put(url, res.clone()).catch(() => {});
-  return res;
+  let error = null;
+  // Each source gets a second try: a dropped connection would leave a hole in the hills.
+  for (const src of sources.flatMap((s) => [s, s])) {
+    try {
+      const res = await fetch(src);
+      if (!res.ok) throw new Error(`HTTP ${res.status} from ${new URL(src).host}`);
+      cache?.put(url, res.clone()).catch(() => {});
+      return res;
+    } catch (err) {
+      error = err;
+    }
+  }
+  throw error;
 }
 
 async function fetchTile(z, x, y) {
@@ -236,7 +257,77 @@ export async function computeProfile(lat, lon) {
     altitude[i] = (Math.atan(best) * 180) / Math.PI;
     distance[i] = bestD / 1000;
   }
-  return { lat, lon, ground, altitude, distance, max: Math.max(...altitude) };
+  /**
+   * Where a summit appears from here (degrees), or null if it's hidden behind
+   * nearer land or out of range. `ele` is the mapped height, if known.
+   */
+  function summit(plat, plon, ele) {
+    const midLat = ((plat + lat) / 2) * (Math.PI / 180);
+    const dN = (plat - lat) * (Math.PI / 180) * EARTH_R;
+    const dE = (plon - lon) * (Math.PI / 180) * EARTH_R * Math.cos(midLat);
+    const d = Math.hypot(dN, dE);
+    if (d < 300 || d > maxD) return null;
+    // The elevation model smooths summits off, so trust a mapped height near it.
+    const dem = (levels.find((l) => d <= l.reach) ?? levels[levels.length - 1]).height(plat, plon);
+    const h = Number.isFinite(ele) && Math.abs(ele - dem) < 300 ? Math.max(ele, dem) : dem;
+    const t = (h - h0 - (d * d) / (2 * R_EFF)) / d;
+    // Line of sight: is any land in between steeper? The mountain's own front slopes
+    // (the last 30% of the way) may rise a little above a summit set back on a
+    // plateau: from town you see Fløya's edge, not its top, but it's still Fløya.
+    const north = dN / d;
+    const east = dE / d;
+    const stop = d - Math.max(200, d * 0.03);
+    for (let s = 0; s < steps.length && steps[s] < stop; s++) {
+      const ds = steps[s];
+      const la = latR + (ds * north) / EARTH_R;
+      const lo = lon + ((ds * east) / (EARTH_R * Math.cos(la))) * (180 / Math.PI);
+      const hs = levelFor[s].height((la * 180) / Math.PI, lo);
+      const allowed = ds < d * 0.7 ? 0.001 : 0.035; // tan of about 0.06° or 2°
+      if ((hs - h0 - (ds * ds) / (2 * R_EFF)) / ds > t + allowed) return null;
+    }
+    const az = ((Math.atan2(dE, dN) * 180) / Math.PI + 360) % 360;
+    return { az, alt: (Math.atan(t) * 180) / Math.PI, distance: d / 1000, height: h };
+  }
+
+  return { lat, lon, ground, altitude, distance, max: Math.max(...altitude), summit };
+}
+
+/** A peak's everyday name: "Tromsdalstinden - Sálašoaivi" → "Tromsdalstinden". */
+const shortName = (name) => name.split(/ [-–/] /)[0].trim();
+
+/**
+ * Named peaks from OpenStreetMap that can be seen from where the profile was
+ * made, each with where it appears in the sky. Empty if none or offline.
+ */
+export async function visiblePeaks(profile) {
+  let elements = [];
+  try {
+    // Rounded to about a kilometre: plenty for a 50 km search, and kinder to caches.
+    const query = peaksQuery(profile.lat.toFixed(2), profile.lon.toFixed(2), PEAK_RADIUS_KM * 1000);
+    const res = await cachedFetch(
+      OVERPASS[0] + query,
+      OVERPASS.map((server) => server + query)
+    );
+    elements = (await res.json()).elements ?? [];
+  } catch (err) {
+    console.warn("Couldn't load mountain names", err);
+    return [];
+  }
+  const peaks = [];
+  for (let i = 0; i < elements.length; i++) {
+    if (i % 100 === 99) await new Promise((r) => setTimeout(r, 0));
+    const e = elements[i];
+    const seen = profile.summit(e.lat, e.lon, parseFloat(e.tags?.ele));
+    if (!seen) continue;
+    // Sit the label on the drawn ridge when the summit is (nearly) the skyline there.
+    const sky = skylineAt(profile, seen.az);
+    const onSkyline = seen.alt > sky - 2;
+    // Little knolls only clutter the view, unless they're what you see against the sky.
+    if (seen.height < 150 && !onSkyline) continue;
+    const alt = onSkyline ? Math.max(seen.alt, sky) : seen.alt;
+    peaks.push({ id: e.id, name: shortName(e.tags.name), fullName: e.tags.name, ...seen, alt });
+  }
+  return peaks;
 }
 
 /** Skyline altitude (degrees) towards an azimuth (degrees), interpolated. */
@@ -272,6 +363,14 @@ export function createTerrain({ onReady } = {}) {
     busy = null;
     if (profile) profile.key = key;
     onReady?.(profile);
+    if (profile) {
+      profile.peaks = [];
+      try {
+        profile.peaks = await visiblePeaks(profile);
+      } catch (err) {
+        console.warn("Mountain names failed", err);
+      }
+    }
     if (queued) {
       const next = queued;
       queued = null;

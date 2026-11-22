@@ -921,6 +921,12 @@ input[type="range"] {
   color: rgba(255, 170, 140, 0.75);
 }
 
+.label.peak {
+  font-size: 11px;
+  font-weight: 500;
+  color: #8fe39a;
+}
+
 .label.hour {
   font-size: 10px;
   color: rgba(255, 200, 120, 0.85);
@@ -1079,22 +1085,47 @@ input[type="range"] {
 
 /* Labels over a daylight sky */
 .bright-sky .label {
-  text-shadow: 0 0 2px rgba(0, 0, 0, 0.35);
+  /* Dark text on a bright sky reads best with a soft light halo, not a shadow. */
+  text-shadow:
+    0 0 3px rgba(255, 255, 255, 0.6),
+    0 0 1px rgba(255, 255, 255, 0.5);
 }
 
 .bright-sky .label.constellation {
-  color: rgba(25, 45, 105, 0.6);
-  text-shadow: none;
+  color: rgba(25, 45, 105, 0.65);
 }
 
 .bright-sky .label.star {
-  color: rgba(20, 35, 85, 0.75);
-  text-shadow: none;
+  color: rgba(20, 35, 85, 0.8);
 }
 
 .bright-sky .label.hour {
   color: rgba(140, 70, 0, 0.9);
-  text-shadow: none;
+}
+
+.bright-sky .label.peak {
+  color: #17632a;
+  font-weight: 600;
+}
+
+.bright-sky .label.compass {
+  color: #b0401c;
+}
+
+.bright-sky .label.compass.minor {
+  color: rgba(150, 60, 30, 0.85);
+}
+
+.bright-sky .label.body {
+  color: #7a4a00;
+}
+
+.bright-sky .label.moon {
+  color: #2f3a5c;
+}
+
+.bright-sky .label.path {
+  color: rgba(30, 35, 60, 0.7);
 }
 
 /* Clickable names in the info panel */
