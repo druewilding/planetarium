@@ -8,7 +8,11 @@ export const LAYER_GROUPS = [
     items: [
       { key: "milkyWay", label: "Milky Way", hint: "Shows up on dark, moonless nights, or with the Sun dimmed" },
       { key: "atmosphere", label: "Atmosphere", hint: "Turn off to see a Moon-like black sky" },
-      { key: "ground", label: "Solid ground", hint: "Turn off to see below the horizon" },
+      {
+        key: "ground",
+        label: "Solid ground",
+        hint: "Turn off to see through the earth: the sky below is always dark, with the hills outlined",
+      },
       {
         key: "terrain",
         label: "Hills & mountains",

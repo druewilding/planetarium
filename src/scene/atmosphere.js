@@ -241,8 +241,13 @@ export function createSkyDome(sharedUniforms, glsl) {
     fragmentShader: /* glsl */ `
       ${glsl.DISPLAY}
       ${glsl.SKY_LOOKUP}
+      ${glsl.LAND}
       varying vec3 vDir;
-      void main() { gl_FragColor = display(skyAt(normalize(vDir))); }
+      void main() {
+        vec3 d = normalize(vDir);
+        // Below see-through land: always the dark of night, as if through the earth.
+        gl_FragColor = display(mix(skyAt(d), THROUGH_EARTH_SKY, throughEarth(d)));
+      }
     `,
     side: THREE.BackSide,
     depthWrite: false,

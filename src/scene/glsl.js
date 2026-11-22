@@ -1,5 +1,7 @@
 // Shared GLSL snippets.
 
+import { SAMPLES as SKYLINE_SAMPLES } from "../terrain.js";
+
 /** Display pipeline: luminance (cd/m²) → exposure → filmic tone map → sRGB. */
 export const DISPLAY = /* glsl */ `
 uniform float uExposure;
@@ -110,4 +112,32 @@ vec4 projectView(vec4 viewPos) {
   float z = theta > limit ? 2.0 : (dist - 1000.0) / 1100.0;
   return vec4(xy, z, 1.0);
 }
+`;
+
+/**
+ * The land: the skyline (see terrain.js, one altitude per half degree of azimuth)
+ * and whether the ground is see-through. With solid ground off you peer through the
+ * earth: below the land the sky is dark, and stars shine as if above the air.
+ */
+export const LAND = /* glsl */ `
+uniform sampler2D uHorizon;
+uniform float uTerrain;
+uniform float uSeeThrough;
+
+// Skyline altitude (radians) towards a direction; 0 for a flat horizon.
+float landAlt(vec3 d) {
+  float az = atan(d.x, -d.z);
+  float s = texture2D(uHorizon, vec2(fract(az / 6.28318530718 + 0.5 / ${SKYLINE_SAMPLES}.0), 0.5)).r;
+  return radians(s) * step(0.001, uTerrain);
+}
+
+// 1 when looking through see-through ground (below the land), else 0.
+float throughEarth(vec3 d) {
+  if (uSeeThrough < 0.5) return 0.0;
+  float top = max(landAlt(d), 0.0);
+  return 1.0 - smoothstep(top - 0.002, top + 0.002, asin(clamp(d.y, -1.0, 1.0)));
+}
+
+// The natural night-sky glow (cd/m²): the sky "through the earth" is always this dark.
+const vec3 THROUGH_EARTH_SKY = vec3(2.1e-4, 2.5e-4, 3.2e-4);
 `;

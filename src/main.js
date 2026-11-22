@@ -14,7 +14,7 @@ import {
   skyRadiance,
   transmittance,
 } from "./scene/atmosphere.js";
-import { createGround, createMoon, createSun } from "./scene/bodies.js";
+import { createGround, createMoon, createSkylineTexture, createSun } from "./scene/bodies.js";
 import * as glsl from "./scene/glsl.js";
 import { createMilkyWay } from "./scene/milkyway.js";
 import { createOverlays } from "./scene/overlays.js";
@@ -175,6 +175,10 @@ async function main() {
     uBoost: { value: 0 },
     uPixelRatio: { value: renderer.getPixelRatio() },
     uSizeScale: { value: 1 },
+    // The land's skyline, for every sky shader (see glsl.LAND).
+    uHorizon: { value: createSkylineTexture() },
+    uTerrain: { value: 0 },
+    uSeeThrough: { value: 0 },
   };
 
   scene.add(createSkyDome(shared, glsl));
@@ -229,7 +233,7 @@ async function main() {
       }
       return;
     }
-    const want = layers.ground && layers.terrain && !locTween ? terrain.profileFor(loc) : null;
+    const want = layers.terrain && !locTween ? terrain.profileFor(loc) : null;
     if (want !== skyline) {
       // Fade the old skyline out, swap, then fade the new one in.
       skylineFade = Math.max(0, skylineFade - dt * 4);
@@ -677,7 +681,7 @@ async function main() {
     if (p.group === "peak") dest.ele = p.ele ?? p.height;
     const from = locTween ? locTween.to : loc;
     const start = skyline;
-    if (!start || !layers.ground || !layers.terrain) return setLocation(dest, true);
+    if (!start || !layers.terrain) return setLocation(dest, true);
     takingOff = true;
     showToast(`Taking off for ${p.name}…`, 30000);
     try {
@@ -982,8 +986,8 @@ async function main() {
   }
   function litBehind(dir) {
     const { alt, az } = altAz(dir);
-    // Below the skyline, it's the land behind the label, and that's dark.
-    if (layers.ground && alt < skylineAlt(az) - 0.3) return false;
+    // Below the skyline it's the land behind the label (or the dark seen through it).
+    if (alt < skylineAlt(az) - 0.3) return false;
     const a = Math.min(GLOW_ALTS[GLOW_ALTS.length - 1] - 1e-6, Math.max(GLOW_ALTS[0], alt));
     let j = 0;
     while (a > GLOW_ALTS[j + 1]) j++;
@@ -1021,6 +1025,7 @@ async function main() {
   };
 
   // ---- Frame loop ----
+  const ZENITH = new THREE.Vector3(0, 1, 0);
   let last = performance.now();
   let firstFrame = true;
   let lastNight = -1;
@@ -1086,8 +1091,12 @@ async function main() {
     globalLimit = 7.93 - 5 * Math.log10(1 + 63 * Math.sqrt(zenith));
     updateGlow(now, atm, lights, ambient);
 
-    const tSun = transmittance(atm, sky.sun.trueDir);
-    const tMoon = transmittance(atm, sky.moon.trueDir);
+    // Seen through the earth, the Sun and Moon are drawn as if from above the air.
+    const throughEarth = (b) => !layers.ground && b.alt < skylineAlt(b.az) - 0.3;
+    const sunThrough = throughEarth(sky.sun);
+    const moonThrough = throughEarth(sky.moon);
+    const tSun = transmittance(atm, sunThrough ? ZENITH : sky.sun.trueDir);
+    const tMoon = transmittance(atm, moonThrough ? ZENITH : sky.moon.trueDir);
     const mean = (t) => (t[0] + t[1] + t[2]) / 3;
     // Direct light only reaches the ground once the Sun or Moon is over the hills.
     const overHills = (b) => smooth(-0.3, 0.3, b.alt - skylineAlt(b.az));
@@ -1096,10 +1105,11 @@ async function main() {
       sunE * Math.max(0, sky.sun.trueDir.y) * mean(tSun) * overHills(sky.sun) +
       moonE * Math.max(0, sky.moon.trueDir.y) * mean(tMoon) * overHills(sky.moon);
     updateSkyline(dt);
-    ground.update(groundE, layers.ground, skylineFade);
+    ground.update(groundE, skylineFade);
+    shared.uSeeThrough.value = layers.ground ? 0 : 1;
 
-    sun.update(sky.sun, tSun, sunLevel, exposure, camera, eclipse, bodyScale());
-    moon.update(sky.moon, sky, tMoon, exposure, camera, bodyScale());
+    sun.update(sky.sun, tSun, sunLevel, exposure, camera, eclipse, bodyScale(), sunThrough);
+    moon.update(sky.moon, sky, tMoon, exposure, camera, bodyScale(), moonThrough);
     planetPoints.update(sky.planets);
     overlays.updateFrames(sky);
     updatePaths(now);

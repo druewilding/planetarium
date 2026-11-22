@@ -81,7 +81,8 @@ export function createSun(shared, glsl) {
   mesh.frustumCulled = false;
 
   /** sky: computeSky().sun, transmit: RGB, dim: 0..1, exposure: current */
-  function update(sun, transmit, dim, exposure, camera, uncovered = 1, scale = 1) {
+  /** `throughEarth`: seen through see-through ground, as a plain disc with no glare. */
+  function update(sun, transmit, dim, exposure, camera, uncovered = 1, scale = 1, throughEarth = false) {
     const angR = sun.angularRadius * scale;
     const discRadius = Math.tan(angR) * SUN_DISTANCE;
     const glareScale = 12; // halo extends this many solar radii
@@ -95,8 +96,8 @@ export function createSun(shared, glsl) {
     uniforms.uSunL.value.set(transmit[0] * L, transmit[1] * L, transmit[2] * L);
     uniforms.uDiscExposure.value = Math.min(exposure, 4 / L);
     const E = (sun.illuminance * dim * uncovered * (transmit[0] + transmit[1] + transmit[2])) / 3;
-    uniforms.uGlare.value = 0.8 * (1 - Math.exp(-E * exposure * 0.02));
-    mesh.visible = sun.alt > -2;
+    uniforms.uGlare.value = throughEarth ? 0 : 0.8 * (1 - Math.exp(-E * exposure * 0.02));
+    mesh.visible = throughEarth || sun.alt > -2;
   }
   return { mesh, update };
 }
@@ -215,7 +216,8 @@ export function createMoon(shared, glsl, texture, textureMean) {
   glow.renderOrder = 6;
   glow.frustumCulled = false;
 
-  function update(moon, sky, transmit, exposure, camera, scale = 1) {
+  /** `throughEarth`: seen through see-through ground, with no glow around it. */
+  function update(moon, sky, transmit, exposure, camera, scale = 1, throughEarth = false) {
     const r = Math.tan(moon.angularRadius * scale) * MOON_DISTANCE;
     moonOrientation(moon.axis, sky.eqjToWorld, basis);
     mesh.matrix
@@ -231,7 +233,7 @@ export function createMoon(shared, glsl, texture, textureMean) {
     const earthPhase = 1 - moon.phaseFraction;
     uniforms.uEarthshine.value = FULL_MOON_LUMINANCE * 1.2e-4 * earthPhase * earthPhase;
     uniforms.uMoonExposure.value = Math.min(exposure, 0.9 / FULL_MOON_LUMINANCE);
-    mesh.visible = moon.alt > -3;
+    mesh.visible = throughEarth || moon.alt > -3;
 
     // Glow: grows with how bright the Moon is compared with what the eye is adapted to,
     // so it's strong on a dark night and gone in daylight.
@@ -242,7 +244,7 @@ export function createMoon(shared, glsl, texture, textureMean) {
     glow.position.copy(moon.dir).multiplyScalar(MOON_DISTANCE);
     faceViewer(glow, camera);
     glow.scale.setScalar(r * 2 * GLOW_RADII);
-    glow.visible = mesh.visible && glowUniforms.uGlow.value > 0.002;
+    glow.visible = mesh.visible && !throughEarth && glowUniforms.uGlow.value > 0.002;
     // Same as the glow shader's value at d = 0 (the limb), so the two meet without a seam.
     uniforms.uGlowLimb.value = glow.visible ? glowUniforms.uGlow.value * 0.62 : 0;
     uniforms.uGlowTint.value.copy(glowUniforms.uTint.value);
@@ -250,25 +252,27 @@ export function createMoon(shared, glsl, texture, textureMean) {
   return { mesh, glow, update };
 }
 
-/**
- * Ground: a dark hemisphere that fades into horizon haze, cut along the real
- * skyline when there's terrain (see terrain.js). Can be made see-through.
- */
-export function createGround(shared, glsl) {
-  // Skyline altitude (degrees) every half degree of azimuth.
+/** The skyline as a texture: altitude (degrees) every half degree of azimuth. Shared by every sky shader. */
+export function createSkylineTexture() {
   const horizon = new THREE.DataTexture(new Uint16Array(SKYLINE_SAMPLES), SKYLINE_SAMPLES, 1);
   horizon.format = THREE.RedFormat;
   horizon.type = THREE.HalfFloatType;
   horizon.magFilter = horizon.minFilter = THREE.LinearFilter;
   horizon.wrapS = THREE.RepeatWrapping;
   horizon.needsUpdate = true;
+  return horizon;
+}
 
+/**
+ * Ground: a dark hemisphere that fades into horizon haze, cut along the real
+ * skyline when there's terrain (see terrain.js). With solid ground off it's only
+ * a faint outline of the skyline, and you see through the earth.
+ */
+export function createGround(shared, glsl) {
+  const horizon = shared.uHorizon.value;
   const uniforms = {
     ...shared,
     uGroundL: { value: 0 },
-    uOpacity: { value: 1 },
-    uHorizon: { value: horizon },
-    uTerrain: { value: 0 },
   };
   const material = new THREE.ShaderMaterial({
     uniforms,
@@ -283,18 +287,24 @@ export function createGround(shared, glsl) {
     fragmentShader: /* glsl */ `
       ${glsl.DISPLAY}
       ${glsl.SKY_LOOKUP}
+      ${glsl.LAND}
       uniform float uGroundL;
-      uniform float uOpacity;
-      uniform sampler2D uHorizon;
-      uniform float uTerrain;
       varying vec3 vDir;
       void main() {
         vec3 d = normalize(vDir);
-        float az = atan(d.x, -d.z);
-        float skyline = texture2D(uHorizon, vec2(fract(az / 6.28318530718 + 0.5 / ${SKYLINE_SAMPLES}.0), 0.5)).r;
         // The skyline appears at full height and fades in, rather than growing.
-        float hAlt = radians(skyline) * step(0.001, uTerrain);
+        float hAlt = landAlt(d);
         float alt = asin(clamp(d.y, -1.0, 1.0));
+
+        if (uSeeThrough > 0.5) {
+          // Peering through the earth: only a faint grey line along the hills.
+          float f = alt - max(hAlt, 0.0);
+          float px = abs(f) / max(length(vec2(dFdx(f), dFdy(f))), 1e-6);
+          float line = (1.0 - smoothstep(0.6, 1.6, px)) * 0.45 * uTerrain;
+          if (line <= 0.001) discard;
+          gl_FragColor = vec4(vec3(0.62, 0.64, 0.68), line);
+          return;
+        }
         // Antialiased skyline. Where it dips below 0° (from up a hill, or flying) the
         // land below eye level shows against the hazy far distance, drawn with the
         // sky's colour at the horizon (the sky texture below 0° isn't meant to be seen).
@@ -311,9 +321,8 @@ export function createGround(shared, glsl) {
         vec3 ground = albedo * uGroundL;
         vec3 haze = skyAt(normalize(vec3(d.x, 0.003, d.z)));
         vec4 c = display(mix(ground, haze, hazeAmount));
-        float a = mix(1.0, uOpacity, smoothstep(0.0, 0.03, -d.y));
         float fadeIn = mix(1.0, uTerrain, smoothstep(-edge, edge, alt));
-        gl_FragColor = vec4(c.rgb, a * cover * fadeIn);
+        gl_FragColor = vec4(c.rgb, cover * fadeIn);
       }
     `,
     transparent: true,
@@ -331,9 +340,8 @@ export function createGround(shared, glsl) {
   }
 
   /** horizontal illuminance in lux → ground luminance */
-  function update(illuminance, opaque, terrain) {
+  function update(illuminance, terrain) {
     uniforms.uGroundL.value = illuminance / Math.PI;
-    uniforms.uOpacity.value = opaque ? 1 : 0.35;
     uniforms.uTerrain.value = terrain;
   }
 
