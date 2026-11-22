@@ -1115,3 +1115,8 @@ button.info-head:hover {
   background: rgba(143, 184, 255, 0.1);
   color: inherit;
 }
+
+.look-up[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}

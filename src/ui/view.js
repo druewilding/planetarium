@@ -1,14 +1,14 @@
 // Look-around camera for standing on the ground: drag to turn, scroll / pinch
 // to zoom (field of view), arrows and +/- on the keyboard, with gentle inertia.
 
-import { MathUtils, Vector3 } from "three";
+import { MathUtils } from "three";
 
 import { altAz } from "../astro.js";
 
 const MIN_FOV = 0.5;
-const MAX_FOV = 120;
+const MAX_FOV = 180; // wide views switch to a stereographic projection (see projection.js)
 
-export function createView(camera, canvas, { onClick } = {}) {
+export function createView(camera, canvas, { onClick, unproject } = {}) {
   const state = { az: 180, alt: 20, fov: 70 };
   const vel = { az: 0, alt: 0 };
   let tween = null;
@@ -25,7 +25,7 @@ export function createView(camera, canvas, { onClick } = {}) {
     state.alt = MathUtils.clamp(state.alt, -89.9, 89.9);
     state.fov = MathUtils.clamp(state.fov, MIN_FOV, MAX_FOV);
     state.az = ((state.az % 360) + 360) % 360;
-    camera.fov = state.fov;
+    camera.fov = Math.min(state.fov, 150); // three's own projection is only used when zoomed in
     camera.rotation.order = "YXZ";
     camera.rotation.set(state.alt * MathUtils.DEG2RAD, -state.az * MathUtils.DEG2RAD, 0);
     camera.updateProjectionMatrix();
@@ -161,8 +161,7 @@ export function createView(camera, canvas, { onClick } = {}) {
 
   /** World direction under a screen point. */
   function dirAt(x, y) {
-    const ndc = new Vector3((x / canvas.clientWidth) * 2 - 1, -(y / canvas.clientHeight) * 2 + 1, 0.5);
-    return ndc.unproject(camera).normalize();
+    return unproject((x / canvas.clientWidth) * 2 - 1, -(y / canvas.clientHeight) * 2 + 1);
   }
 
   apply();

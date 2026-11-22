@@ -2,6 +2,7 @@ import * as THREE from "three";
 
 import { A, altAz, Body, computeSky, dirFromAltAz, eqVector, PLANETS, R2D, refract } from "./astro.js";
 import { Clock } from "./clock.js";
+import { createProjection } from "./projection.js";
 import {
   ATMOSPHERES,
   averageSkyLuminance,
@@ -156,7 +157,9 @@ async function main() {
   const camera = new THREE.PerspectiveCamera(70, 1, 0.5, 5000);
 
   const atmosphere = createAtmosphere(renderer, { coarse });
+  const projection = createProjection(camera);
   const shared = {
+    ...projection.uniforms,
     uSky: { value: atmosphere.texture },
     uExposure: { value: 1 },
     uScotopic: { value: 0 },
@@ -245,8 +248,7 @@ async function main() {
     const h = window.innerHeight;
     const barTop = document.querySelector(".timebar").getBoundingClientRect().top;
     const y = Math.min(h * 0.85, barTop - 24); // horizon's screen position
-    const t = Math.tan(((fov / 2) * Math.PI) / 180);
-    return (Math.atan(((y - h / 2) / (h / 2)) * t) * 180) / Math.PI;
+    return projection.altitudeForHorizonAt(-(y - h / 2) / (h / 2), fov);
   }
   /** Face the Sun or Moon if up (keeping the horizon in view), else the equator side of the sky. */
   function defaultView(s, fov = DEFAULT_FOV) {
@@ -257,7 +259,7 @@ async function main() {
     return { alt: Math.max(base, body.alt - fov / 2 + 12), az: body.az, fov };
   }
 
-  const view = createView(camera, canvas, { onClick: pick });
+  const view = createView(camera, canvas, { onClick: pick, unproject: projection.unproject });
   {
     view.lookTo(defaultView(computeSky(clock.ms, loc)));
     view.update(10);
@@ -337,6 +339,21 @@ async function main() {
     },
   });
 
+  // ---- Look up: the whole dome of the sky at once ----
+  const lookUpBtn = $("look-up");
+  let beforeLookUp = null;
+  const lookingUp = () => view.state.alt > 80 && view.state.fov > 140;
+  lookUpBtn.addEventListener("click", () => {
+    if (lookingUp()) {
+      view.lookTo(beforeLookUp ?? defaultView(sky));
+      beforeLookUp = null;
+    } else {
+      beforeLookUp = { alt: view.state.alt, az: view.state.az, fov: view.state.fov };
+      // Facing direction ends up at the bottom of the screen, like lying on your back.
+      view.lookTo({ alt: 89.9, fov: 180 });
+    }
+  });
+
   // Keep floating controls clear of the time bar, whatever height it wraps to.
   const timebarEl = document.querySelector(".timebar");
   new ResizeObserver(() => {
@@ -408,11 +425,10 @@ async function main() {
   ]);
 
   // ---- Picking ----
-  const proj = new THREE.Vector3();
   function screenOf(dir) {
-    proj.copy(dir).multiplyScalar(500).project(camera);
-    if (proj.z > 1) return null;
-    return [(proj.x * 0.5 + 0.5) * canvas.clientWidth, (-proj.y * 0.5 + 0.5) * canvas.clientHeight];
+    const p = projection.project(dir);
+    if (!p) return null;
+    return [(p.x * 0.5 + 0.5) * canvas.clientWidth, (-p.y * 0.5 + 0.5) * canvas.clientHeight];
   }
 
   function pick(x, y) {
@@ -630,6 +646,7 @@ async function main() {
     clock.update(dt);
     updateLocationTween(dt);
     view.update(dt);
+    projection.update(view.state.fov, camera.aspect);
 
     sky = computeSky(clock.ms, loc);
     const atm = layers.atmosphere ? ATMOSPHERES.earth : NONE;
@@ -693,12 +710,17 @@ async function main() {
     updatePaths(now);
 
     renderer.render(scene, camera);
-    labels.render(buildLabels(), camera);
+    labels.render(buildLabels(), projection.project);
 
     timebar.update();
     info.update();
-    const { alt, az, fov } = view.state;
-    const hfov = (2 * Math.atan(Math.tan((fov * Math.PI) / 360) * camera.aspect) * 180) / Math.PI;
+    const { alt, az } = view.state;
+    const up = lookingUp();
+    if (up !== (lookUpBtn.getAttribute("aria-pressed") === "true")) {
+      lookUpBtn.setAttribute("aria-pressed", String(up));
+      lookUpBtn.querySelector("span").textContent = up ? "Back to horizon" : "Look up";
+    }
+    const hfov = 2 * projection.halfFovX();
     compass.update({
       az,
       alt,

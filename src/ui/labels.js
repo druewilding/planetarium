@@ -2,14 +2,11 @@
 // candidate labels; higher-priority labels claim screen space first and
 // overlapping lower-priority ones are hidden.
 
-import { Vector3 } from "three";
-
 const CELL_W = 40;
 const CELL_H = 16;
 
 export function createLabels(container) {
   const elements = new Map(); // key → { el, text, cls }
-  const v = new Vector3();
   let width = 0;
   let height = 0;
 
@@ -21,15 +18,16 @@ export function createLabels(container) {
   /**
    * items: [{ key, text, dir (world Vector3 unit), cls, priority, offset: [dx, dy], always }]
    */
-  function render(items, camera) {
+  /** project(dir) → normalised device coords {x, y}, or null when not drawn. */
+  function render(items, project) {
     items.sort((a, b) => b.priority - a.priority);
     const occupied = new Set();
     const used = new Set();
     for (const it of items) {
-      v.copy(it.dir).multiplyScalar(500).project(camera);
-      if (v.z > 1 || v.z < -1) continue;
-      const x = (v.x * 0.5 + 0.5) * width + (it.offset?.[0] ?? 8);
-      const y = (-v.y * 0.5 + 0.5) * height + (it.offset?.[1] ?? -8);
+      const p = project(it.dir);
+      if (!p) continue;
+      const x = (p.x * 0.5 + 0.5) * width + (it.offset?.[0] ?? 8);
+      const y = (-p.y * 0.5 + 0.5) * height + (it.offset?.[1] ?? -8);
       if (x < -50 || x > width + 10 || y < -10 || y > height + 10) continue;
       const w = it.width ?? it.text.length * 7 + 4;
       const cells = [];

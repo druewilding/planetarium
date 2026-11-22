@@ -12,13 +12,17 @@ export function createLineMaterial(sharedUniforms, glsl, { color, opacity = 1, r
       uOpacity: { value: opacity },
       uRefract: refract ? sharedUniforms.uRefract : { value: 0 },
       uRadius: { value: radius },
+      uStereo: sharedUniforms.uStereo,
+      uProjScale: sharedUniforms.uProjScale,
+      uAspect: sharedUniforms.uAspect,
     },
     vertexShader: /* glsl */ `
       ${glsl.REFRACTION}
+      ${glsl.PROJECTION}
       uniform float uRadius;
       void main() {
         vec3 d = refractDir(normalize(mat3(modelMatrix) * position));
-        gl_Position = projectionMatrix * viewMatrix * vec4(d * uRadius, 1.0);
+        gl_Position = projectView(viewMatrix * vec4(d * uRadius, 1.0));
       }
     `,
     fragmentShader: /* glsl */ `

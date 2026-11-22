@@ -20,13 +20,14 @@ export function createSun(shared, glsl) {
   const material = new THREE.ShaderMaterial({
     uniforms,
     vertexShader: /* glsl */ `
+      ${glsl.PROJECTION}
       varying vec2 vUv;
       varying vec3 vDir;
       void main() {
         vUv = uv * 2.0 - 1.0;
         vec4 wp = modelMatrix * vec4(position, 1.0);
         vDir = normalize(wp.xyz);
-        gl_Position = projectionMatrix * viewMatrix * wp;
+        gl_Position = projectView(viewMatrix * wp);
       }
     `,
     fragmentShader: /* glsl */ `
@@ -103,6 +104,7 @@ export function createMoon(shared, glsl, texture, textureMean) {
   const material = new THREE.ShaderMaterial({
     uniforms,
     vertexShader: /* glsl */ `
+      ${glsl.PROJECTION}
       varying vec2 vUv;
       varying vec3 vNormal;
       varying vec3 vPos;
@@ -111,7 +113,7 @@ export function createMoon(shared, glsl, texture, textureMean) {
         vNormal = normalize(mat3(modelMatrix) * normal);
         vec4 wp = modelMatrix * vec4(position, 1.0);
         vPos = wp.xyz;
-        gl_Position = projectionMatrix * viewMatrix * wp;
+        gl_Position = projectView(viewMatrix * wp);
       }
     `,
     fragmentShader: /* glsl */ `
@@ -146,6 +148,7 @@ export function createMoon(shared, glsl, texture, textureMean) {
   });
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 64, 32), material);
   mesh.renderOrder = 5;
+  mesh.frustumCulled = false;
   mesh.matrixAutoUpdate = false;
   const basis = new THREE.Matrix4();
 
@@ -180,10 +183,11 @@ export function createGround(shared, glsl) {
   const material = new THREE.ShaderMaterial({
     uniforms,
     vertexShader: /* glsl */ `
+      ${glsl.PROJECTION}
       varying vec3 vDir;
       void main() {
         vDir = normalize(position);
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        gl_Position = projectView(modelViewMatrix * vec4(position, 1.0));
       }
     `,
     fragmentShader: /* glsl */ `

@@ -25,6 +25,9 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
 - **Time tracks:** drag along a 24-hour track shaded by where the Sun is (night, twilight, day), or along a date track
   shaded by day length through the year, with the solstices and equinoxes marked. A year stepper sits beside it, and
   time can play from −1 month/s to +1 month/s.
+- **Wide views without distortion:** zoomed in, the view uses ordinary perspective. Zoom out past about 70° and it
+  blends into a stereographic ("fisheye") projection, which keeps circles round, so the Sun's daily arc reads
+  correctly. **Look up** shows the whole sky as a dome; press it again to return to the horizon.
 - **Compass:** shows where you're facing, your field of view, and the Sun and Moon on its rim. Drag it to turn, or
   tap a direction, the Sun or the Moon to face it.
 - **Location:** a world map showing live day/night shading, a search over 1,250 cities (with correct local time zones
@@ -71,6 +74,7 @@ planetarium/
 │   ├── astro.js           # astronomy-engine wrapper → horizon (world) frame
 │   ├── clock.js           # simulated time, rates, smooth jumps
 │   ├── timezone.js        # wall-clock time for any location
+│   ├── projection.js      # perspective ↔ stereographic projection (JS side)
 │   ├── scene/
 │   │   ├── atmosphere.js  # scattering model (GLSL + JS twin)
 │   │   ├── bodies.js      # Sun, Moon, ground
