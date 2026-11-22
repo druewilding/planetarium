@@ -414,7 +414,7 @@ async function main() {
           }
         }, 1500);
       } catch (err) {
-        showHint(err.message || "Couldn't start the motion sensor.");
+        showHint(err.message || "Couldn't start the motion sensor.", 12000);
       }
     });
   }
