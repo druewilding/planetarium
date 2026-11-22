@@ -49,6 +49,11 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
   and whatever you've picked out, so a link opens exactly the sky you saw. The **Share** button sends it (or copies
   it). Layer toggles stay out of the link, since those are each person's own preferences. Positions are rounded to
   about a kilometre.
+- **Hills and mountains:** the real skyline around you, from free elevation maps. The Sun can be up and still hidden:
+  from Tromsø in late November it never clears the mountains, and the info panel shows when the Sun, Moon and
+  planets are actually **over the mountains** (in Tromsø the Sun first shows again on 21 January, Soldagen). The
+  skyline accounts for the Earth's curve and for light bending near the ground.
+  Buildings and trees aren't included, and a 1 km share-link position can move the nearest hills a little.
 - Works with mouse, keyboard and touch.
 
 ### Controls
@@ -102,6 +107,7 @@ planetarium/
 │   ├── clock.js           # simulated time, rates, smooth jumps
 │   ├── timezone.js        # wall-clock time for any location
 │   ├── projection.js      # perspective ↔ stereographic projection (JS side)
+│   ├── terrain.js         # elevation tiles → skyline profile, and when bodies clear it
 │   ├── scene/
 │   │   ├── atmosphere.js  # scattering model (GLSL + JS twin)
 │   │   ├── bodies.js      # Sun, Moon, ground
@@ -125,6 +131,8 @@ planetarium/
   public domain)
 - Moon texture: [NASA SVS CGI Moon Kit](https://svs.gsfc.nasa.gov/4720) (LRO, public domain)
 - Coastlines and cities: [Natural Earth](https://www.naturalearthdata.com) (public domain)
+- Terrain: [Terrain Tiles on AWS](https://registry.opendata.aws/terrain-tiles/), built by Mapzen from SRTM, EU-DEM,
+  Kartverket, GMTED, ETOPO1 and others ([attribution](https://github.com/tilezen/joerd/blob/master/docs/attribution.md))
 
 ## Roadmap
 

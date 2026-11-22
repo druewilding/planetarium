@@ -17,6 +17,7 @@ import * as glsl from "./scene/glsl.js";
 import { createMilkyWay } from "./scene/milkyway.js";
 import { createOverlays } from "./scene/overlays.js";
 import { createPlanetPoints, createPointsMaterial, createStars } from "./scene/points.js";
+import { createTerrain, skylineAt } from "./terrain.js";
 import { formatDateTime, formatTime, startOfLocalDay } from "./timezone.js";
 import { createCompass } from "./ui/compass.js";
 import { createInfo } from "./ui/info.js";
@@ -193,7 +194,32 @@ async function main() {
   const ground = createGround(shared, glsl);
   scene.add(moon.mesh, moon.glow, sun.mesh, ground.mesh);
 
+  // Hills and mountains on the horizon, loaded for wherever you're standing.
+  const terrain = createTerrain({ onReady: () => info?.update(true) });
+  let skyline = null; // the profile the ground is showing
+  let skylineFade = 0;
+  /** Altitude (degrees) of the land's skyline towards an azimuth; 0 for a flat horizon. */
+  const skylineAlt = (az) => (skyline && skylineFade > 0.5 ? skylineAt(skyline, az) : 0);
+  /** Is this direction behind solid ground (or the hills)? */
+  function behindLand(dir, margin = 0.25) {
+    if (!layers.ground) return false;
+    const { alt, az } = altAz(dir);
+    return alt < skylineAlt(az) - margin;
+  }
+  function updateSkyline(dt) {
+    const want = layers.ground && layers.terrain && !locTween ? terrain.profileFor(loc) : null;
+    if (want !== skyline) {
+      // Fade the old skyline out, swap, then fade the new one in.
+      skylineFade = Math.max(0, skylineFade - dt * 4);
+      if (skylineFade === 0) {
+        skyline = want;
+        ground.setSkyline(skyline);
+      }
+    } else if (skyline) skylineFade = Math.min(1, skylineFade + dt * 2.5);
+  }
+
   const labels = createLabels($("labels"));
+  let info = null;
 
   // ---- State ----
   const clock = new Clock();
@@ -313,10 +339,10 @@ async function main() {
   const timebar = createTimebar({ clock, getLocation: () => loc });
 
   const infoPanel = $("info");
-  const info = createInfo({
+  info = createInfo({
     container: $("info-content"),
     catalog,
-    getState: () => ({ sky, loc, ms: clock.ms, selection }),
+    getState: () => ({ sky, loc, ms: clock.ms, selection, skyline: skylineFade > 0.5 ? skyline : null }),
     onLook: () => lookAtSelection(),
     onClear: () => select(null),
     onSelect: (type, id) => {
@@ -369,7 +395,7 @@ async function main() {
     onFace: (az) => view.lookTo({ az, alt: Math.max(view.state.alt, 5) }),
     onFaceBody: (id) => {
       const b = id === "sun" ? sky.sun : sky.moon;
-      if (layers.ground && b.alt < 0) view.lookTo({ az: b.az, alt: 12 });
+      if (behindLand(b.dir, 0)) view.lookTo({ az: b.az, alt: Math.max(12, skylineAlt(b.az) + 8) });
       else view.lookAt(b.dir);
     },
   });
@@ -586,9 +612,9 @@ async function main() {
     let fov = view.state.fov;
     if (selection.type === "moon" || selection.type === "sun") fov = Math.min(fov, 20);
     if (selection.type === "constellation") fov = Math.max(fov, 50);
-    const { alt, az } = altAz(d);
-    // Below a solid horizon: face its direction, just above the ground.
-    if (layers.ground && alt < 0) view.lookTo({ alt: 12, az, fov: Math.max(fov, 60) });
+    const { az } = altAz(d);
+    // Behind the ground or the hills: face its direction, just above the skyline.
+    if (behindLand(d, 0)) view.lookTo({ alt: Math.max(12, skylineAlt(az) + 8), az, fov: Math.max(fov, 60) });
     else view.lookAt(d, fov);
   }
 
@@ -623,7 +649,7 @@ async function main() {
 
   function pick(x, y) {
     if (!sky) return;
-    const below = (d) => layers.ground && d.y < -0.005;
+    const below = (d) => behindLand(d);
     let best = null;
     let bestScore = Infinity;
     const consider = (dir, radiusPx, bonus, make) => {
@@ -715,7 +741,7 @@ async function main() {
 
   function buildLabels() {
     const items = [];
-    const hidden = (d) => layers.ground && d.y < -0.004;
+    const hidden = (d) => behindLand(d);
     if (layers.planetLabels) {
       if (!hidden(sky.sun.dir))
         items.push({
@@ -830,7 +856,14 @@ async function main() {
   resize();
 
   // Handy from the browser console, e.g. planetarium.clock.set(Date.parse("2027-08-02T10:00Z"))
-  window.planetarium = { clock, view, scene, setLocation: (l) => setLocation(l, true), getSky: () => sky };
+  window.planetarium = {
+    clock,
+    view,
+    scene,
+    setLocation: (l) => setLocation(l, true),
+    getSky: () => sky,
+    getSkyline: () => skyline,
+  };
 
   // ---- Frame loop ----
   let last = performance.now();
@@ -901,11 +934,14 @@ async function main() {
     const tSun = transmittance(atm, sky.sun.trueDir);
     const tMoon = transmittance(atm, sky.moon.trueDir);
     const mean = (t) => (t[0] + t[1] + t[2]) / 3;
+    // Direct light only reaches the ground once the Sun or Moon is over the hills.
+    const overHills = (b) => smooth(-0.3, 0.3, b.alt - skylineAlt(b.az));
     const groundE =
       Math.PI * average +
-      sunE * Math.max(0, sky.sun.trueDir.y) * mean(tSun) +
-      moonE * Math.max(0, sky.moon.trueDir.y) * mean(tMoon);
-    ground.update(groundE, layers.ground);
+      sunE * Math.max(0, sky.sun.trueDir.y) * mean(tSun) * overHills(sky.sun) +
+      moonE * Math.max(0, sky.moon.trueDir.y) * mean(tMoon) * overHills(sky.moon);
+    updateSkyline(dt);
+    ground.update(groundE, layers.ground, skylineFade);
 
     sun.update(sky.sun, tSun, sunLevel, exposure, camera, eclipse, bodyScale());
     moon.update(sky.moon, sky, tMoon, exposure, camera, bodyScale());
