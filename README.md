@@ -20,6 +20,9 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
 - **Real brightness:** everything is computed in cd/m² and lux, then an "eye" adapts its exposure the way yours does.
 - **Sunlight dimmer:** a linear slider that dims the Sun to show what's in the sky right now, even at noon. The
   daytime sky is so bright that stars only appear in the last percent or so; **Night sky** jumps straight to 0%.
+- **The Milky Way:** NASA's all-sky map of its glow, dust lanes and Magellanic Clouds included. Like the stars, it
+  shows only where it stands out from the sky, so it's at its best on dark, moonless nights and washes out under a
+  bright Moon or twilight.
 - **The Moon:** a lit 3D sphere with a NASA LRO texture, so its phase, tilt, libration and earthshine all come straight
   from the geometry.
 - **Time tracks:** drag along a 24-hour track shaded by where the Sun is (night, twilight, day), or along a date track
@@ -94,6 +97,8 @@ planetarium/
 - 3D: [three.js](https://threejs.org) (MIT)
 - Stars (Hipparcos, to mag 6), constellation lines and star names:
   [d3-celestial](https://github.com/ofrohn/d3-celestial) by Olaf Frohn (BSD-3-Clause)
+- Milky Way: [NASA SVS Deep Star Maps 2020](https://svs.gsfc.nasa.gov/4851) (the star-free Milky Way layer,
+  public domain)
 - Moon texture: [NASA SVS CGI Moon Kit](https://svs.gsfc.nasa.gov/4720) (LRO, public domain)
 - Coastlines and cities: [Natural Earth](https://www.naturalearthdata.com) (public domain)
 

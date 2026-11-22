@@ -6,6 +6,7 @@ export const LAYER_GROUPS = [
   {
     title: "Sky",
     items: [
+      { key: "milkyWay", label: "Milky Way", hint: "Shows up on dark, moonless nights, or with the Sun dimmed" },
       { key: "atmosphere", label: "Atmosphere", hint: "Turn off to see a Moon-like black sky" },
       { key: "ground", label: "Solid ground", hint: "Turn off to see below the horizon" },
       { key: "refraction", label: "Refraction near horizon" },
@@ -36,6 +37,7 @@ export const LAYER_GROUPS = [
 ];
 
 export const DEFAULT_LAYERS = {
+  milkyWay: true,
   atmosphere: true,
   ground: true,
   refraction: true,

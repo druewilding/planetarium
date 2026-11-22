@@ -13,6 +13,7 @@ import {
 } from "./scene/atmosphere.js";
 import { createGround, createMoon, createSun } from "./scene/bodies.js";
 import * as glsl from "./scene/glsl.js";
+import { createMilkyWay } from "./scene/milkyway.js";
 import { createOverlays } from "./scene/overlays.js";
 import { createPlanetPoints, createPointsMaterial, createStars } from "./scene/points.js";
 import { formatTime, startOfLocalDay } from "./timezone.js";
@@ -139,12 +140,13 @@ function buildCatalog(starData, constellations) {
 
 async function main() {
   const canvas = $("sky");
-  const [starData, constellationData, cities, land, moonTex] = await Promise.all([
+  const [starData, constellationData, cities, land, moonTex, milkyWayTex] = await Promise.all([
     loadJSON("data/stars.json"),
     loadJSON("data/constellations.json"),
     loadJSON("data/cities.json"),
     loadJSON("data/land.json"),
     loadTexture("textures/moon.jpg"),
+    new THREE.TextureLoader().loadAsync("textures/milkyway.jpg"),
   ]);
   const catalog = buildCatalog(starData, constellationData);
 
@@ -175,6 +177,8 @@ async function main() {
   scene.add(...overlays.groups);
 
   const starMaterial = createPointsMaterial(shared, glsl, 1000);
+  const milkyWay = createMilkyWay(shared, glsl, milkyWayTex);
+  overlays.eqj.add(milkyWay);
   overlays.eqj.add(createStars(starData, starMaterial));
   const planetPoints = createPlanetPoints(PLANETS, createPointsMaterial(shared, glsl, 1000));
   scene.add(planetPoints.points);
@@ -273,6 +277,7 @@ async function main() {
     onChange: (l) => {
       layers = { ...l };
       for (const [key, obj] of Object.entries(overlays.layers)) obj.visible = !!layers[key];
+      milkyWay.visible = !!layers.milkyWay;
     },
   });
 
