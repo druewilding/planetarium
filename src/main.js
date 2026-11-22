@@ -274,13 +274,20 @@ async function main() {
   $("zoom-in").addEventListener("click", () => view.zoom(0.6));
   $("zoom-out").addEventListener("click", () => view.zoom(1 / 0.6));
 
-  // ---- Reset: back to the normal field of view, keeping what you were looking at on screen ----
+  // ---- Reset: back to the starting view (facing the Sun or Moon, else the equator side) ----
   const resetBtn = $("reset-view");
   function resetView() {
-    const base = horizonAltitude(DEFAULT_FOV);
-    const looking = view.state.alt > 80 ? base : view.state.alt;
     beforeLookUp = null;
-    view.lookTo({ alt: Math.max(base, looking - DEFAULT_FOV / 2 + 12), fov: DEFAULT_FOV });
+    // With the phone doing the aiming, only the zoom can go back.
+    view.lookTo(sensor.active ? { fov: DEFAULT_FOV } : defaultView(sky));
+  }
+  /** Has the view been turned, tilted or zoomed away from where Reset would take it? */
+  function awayFromDefault() {
+    const fovOff = Math.abs(view.state.fov - DEFAULT_FOV) > 2;
+    if (sensor.active) return fovOff;
+    const d = defaultView(sky);
+    const azOff = Math.abs(((view.state.az - d.az + 540) % 360) - 180) > 4;
+    return fovOff || azOff || Math.abs(view.state.alt - d.alt) > 4;
   }
   resetBtn.addEventListener("click", resetView);
   window.addEventListener("keydown", (e) => {
@@ -795,7 +802,7 @@ async function main() {
     info.update();
     const { alt, az } = view.state;
     const up = lookingUp();
-    const changed = up || Math.abs(view.state.fov - DEFAULT_FOV) > 2;
+    const changed = up || awayFromDefault();
     if (resetBtn.disabled === changed) resetBtn.disabled = !changed;
     if (up !== (lookUpBtn.getAttribute("aria-pressed") === "true")) {
       lookUpBtn.setAttribute("aria-pressed", String(up));
