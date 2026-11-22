@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="./styles.css">
+  <title>Earth Sky · Planetarium</title>
+</head>
+<body>
+  <header class="masthead"><span class="emblem" aria-hidden="true"></span> PLANETARIUM <span class="edition">FIELD ATLAS / 01</span></header>
+  <main>
+    <section class="intro" aria-labelledby="title">
+      <div><p class="eyebrow">OBSERVER STATION</p><h1 id="title">Earth Sky</h1></div>
+      <p>Explore the sky from Earth, then lift off to see our world and its Moon.</p>
+    </section>
+
+    <section class="observatory" aria-labelledby="view-name">
+      <div class="view-head">
+        <h2 id="view-name">Surface sky</h2><span id="bearing" class="muted"></span>
+        <button id="flight" class="primary" type="button" disabled>Lift off <span aria-hidden="true">↗</span></button>
+      </div>
+      <div id="viewport" class="viewport" tabindex="0" role="region" aria-label="Planetarium view" aria-describedby="view-help">
+        <canvas id="space" aria-hidden="true"></canvas><canvas id="sky" aria-hidden="true"></canvas>
+        <p id="loading">Loading the sky model…</p>
+        <div class="view-badge" id="view-badge" hidden></div>
+        <div class="zoom" id="zoom" hidden><button id="zoom-out" aria-label="Zoom out">−</button><button id="zoom-in" aria-label="Zoom in">+</button></div>
+      </div>
+      <div class="view-foot">
+        <p class="muted" id="view-help">Drag or use arrow keys to look around.</p>
+        <div class="actions" id="orbit-tools" hidden>
+          <button id="overview" type="button" aria-pressed="false">Orbit overview</button>
+          <button id="earth-focus" type="button">Frame Earth</button>
+          <button id="moon-focus" type="button">Frame Moon</button>
+        </div>
+      </div>
+      <p class="notice" id="compatibility" role="status" hidden></p>
+    </section>
+
+    <div class="instruments">
+      <section class="panel" aria-labelledby="site-title">
+        <p class="eyebrow">01 / OBSERVER</p><h2 id="site-title">Location</h2>
+        <p class="readout" id="site">Reykjavik · example city</p>
+        <p class="muted" id="coordinates"></p>
+        <div class="actions"><button id="locate" type="button">Use my location</button><button id="pin" type="button" aria-pressed="false" disabled>Place globe pin</button></div>
+        <p id="location-status" class="notice" role="status" hidden></p>
+        <form id="city-form">
+          <label for="city-search">Search built-in cities</label>
+          <input id="city-search" type="search" placeholder="e.g. Tokyo" maxlength="80" autocomplete="off">
+          <label for="city-results" class="sr-only">Matching cities</label>
+          <div class="search-row"><select id="city-results"></select><button id="city-select" type="submit">Select</button></div>
+        </form>
+        <details><summary>Enter coordinates</summary>
+          <form id="coordinate-form">
+            <div class="coordinate-row">
+              <label>Latitude <input name="lat" type="number" min="-90" max="90" step="any" required></label>
+              <label>Longitude <input name="lon" type="number" min="-180" max="180" step="any" required></label>
+            </div>
+            <button type="submit">Set coordinates</button>
+          </form>
+        </details>
+      </section>
+
+      <section class="panel" aria-labelledby="clock-title">
+        <p class="eyebrow">02 / SIMULATION</p><h2 id="clock-title">Observer local time</h2>
+        <time class="readout" id="local-clock"></time>
+        <p class="muted" id="zone"></p>
+        <div class="actions">
+          <button id="play" type="button">Pause</button><button id="now" type="button">Now</button>
+          <select id="speed" aria-label="Playback speed"><option value="1">1×</option><option value="60">60×</option><option value="3600">3600×</option></select>
+        </div>
+        <label for="date-dial">Date dial</label>
+        <input id="date-dial" type="range" step="1">
+        <label for="date-edit" class="sr-only">Enter local date</label>
+        <input id="date-edit" type="date" min="1900-01-01" max="2100-12-31">
+        <label for="time-dial">Time-of-day dial</label>
+        <input id="time-dial" type="range" min="0" max="86399" step="1">
+        <label for="time-edit" class="sr-only">Enter local time</label>
+        <input id="time-edit" type="time" step="1">
+        <p id="clock-status" class="notice" role="status" hidden></p>
+      </section>
+
+      <section class="panel" aria-labelledby="sky-title">
+        <p class="eyebrow">03 / FIELD NOTES</p><h2 id="sky-title">Sky conditions</h2>
+        <label for="dimmer">Daylight glare</label><input id="dimmer" type="range" min="0" max="100" value="100">
+        <div class="checks">
+          <label><input id="labels" type="checkbox" checked> Object labels</label>
+          <label><input id="lines" type="checkbox" checked> Constellation lines</label>
+        </div>
+        <dl><div><dt>Sunrise</dt><dd id="sunrise">—</dd></div><div><dt>Sunset</dt><dd id="sunset">—</dd></div>
+          <div><dt>Daylight</dt><dd id="daylight">—</dd></div><div><dt>Moon</dt><dd id="phase">—</dd></div></dl>
+        <p class="muted" id="solar-note">Estimated for a level, sea-level horizon.</p>
+        <details><summary>Object directions</summary><p class="muted">Azimuth clockwise from north; altitude above the horizon.</p><ul id="directions"></ul></details>
+      </section>
+    </div>
+    <footer><p>Location and searches stay in this tab. Use a level horizon when comparing solar events outside.</p><p>Map: <a href="./licenses/world-atlas.txt">Natural Earth / World Atlas</a>. Ephemeris: <a href="./licenses/astronomy-engine.txt">Astronomy Engine</a>.</p></footer>
+  </main>
+  <noscript><p>This planetarium needs JavaScript to compute and display the sky.</p></noscript>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
