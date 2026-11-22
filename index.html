@@ -28,6 +28,7 @@
       aria-label="Sky view. Drag to look around, scroll or pinch to zoom, click an object for details."
     ></canvas>
     <div id="labels" aria-hidden="true"></div>
+    <p id="sensor-hint" class="sensor-hint" role="status" hidden></p>
 
     <div id="loading" class="loading">
       <div class="loading-dot"></div>
@@ -70,6 +71,20 @@
 
     <!-- Compass & zoom -->
     <div class="nav">
+      <button
+        id="sensor-btn"
+        class="chip small sensor-btn"
+        aria-pressed="false"
+        title="Hold your phone up and the sky follows it"
+        hidden
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M8 1h8a2 2 0 0 1 2 2v18a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2zm0 3v15h8V4zm4 16.2a.9.9 0 1 0 0 1.8.9.9 0 0 0 0-1.8z"
+          />
+        </svg>
+        <span>Point at sky</span>
+      </button>
       <button id="look-up" class="chip small look-up" aria-pressed="false" title="See the whole sky at once">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M2 18a10 10 0 0 1 20 0h-2a8 8 0 0 0-16 0zm10-9 4 4h-3v4h-2v-4H8z" />

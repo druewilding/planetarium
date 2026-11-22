@@ -1169,3 +1169,30 @@ button.info-head:hover {
 .season-badge.tropical {
   color: #6fe0c8;
 }
+
+/* Point your phone at the sky */
+.sensor-btn[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.sensor-hint {
+  position: fixed;
+  top: calc(64px + env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100vw - var(--gutter) * 2);
+  margin: 0;
+  padding: 8px 14px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  backdrop-filter: blur(10px);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: center;
+  z-index: 7;
+  pointer-events: none;
+}

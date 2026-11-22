@@ -1,14 +1,16 @@
 // Look-around camera for standing on the ground: drag to turn, scroll / pinch
 // to zoom (field of view), arrows and +/- on the keyboard, with gentle inertia.
+// With a sensor switched on (see sensor.js), the phone's own orientation aims
+// the camera instead, and sideways drags nudge the compass into line.
 
-import { MathUtils } from "three";
+import { MathUtils, Quaternion, Vector3 } from "three";
 
 import { altAz } from "../astro.js";
 
 const MIN_FOV = 0.5;
 const MAX_FOV = 180; // wide views switch to a stereographic projection (see projection.js)
 
-export function createView(camera, canvas, { onClick, unproject } = {}) {
+export function createView(camera, canvas, { onClick, unproject, sensor } = {}) {
   const state = { az: 180, alt: 20, fov: 70 };
   const vel = { az: 0, alt: 0 };
   let tween = null;
@@ -16,18 +18,30 @@ export function createView(camera, canvas, { onClick, unproject } = {}) {
   let dragDist = 0;
   let pinchStart = null;
   let lastMove = 0;
+  const target = new Quaternion();
+  const forward = new Vector3();
+  let following = false; // camera currently aimed by the sensor
+  const sensorOn = () => sensor?.active;
 
   function degPerPixel() {
     return state.fov / canvas.clientHeight;
   }
 
   function apply() {
-    state.alt = MathUtils.clamp(state.alt, -89.9, 89.9);
     state.fov = MathUtils.clamp(state.fov, MIN_FOV, MAX_FOV);
-    state.az = ((state.az % 360) + 360) % 360;
     camera.fov = Math.min(state.fov, 150); // three's own projection is only used when zoomed in
-    camera.rotation.order = "YXZ";
-    camera.rotation.set(state.alt * MathUtils.DEG2RAD, -state.az * MathUtils.DEG2RAD, 0);
+    if (following) {
+      // The sensor sets the camera, roll and all; read back where it's facing.
+      forward.set(0, 0, -1).applyQuaternion(camera.quaternion);
+      state.alt = Math.asin(MathUtils.clamp(forward.y, -1, 1)) * MathUtils.RAD2DEG;
+      state.az = Math.atan2(forward.x, -forward.z) * MathUtils.RAD2DEG;
+    }
+    state.alt = MathUtils.clamp(state.alt, -89.9, 89.9);
+    state.az = ((state.az % 360) + 360) % 360;
+    if (!following) {
+      camera.rotation.order = "YXZ";
+      camera.rotation.set(state.alt * MathUtils.DEG2RAD, -state.az * MathUtils.DEG2RAD, 0);
+    }
     camera.updateProjectionMatrix();
     camera.updateMatrixWorld();
   }
@@ -64,6 +78,11 @@ export function createView(camera, canvas, { onClick, unproject } = {}) {
     // Grab the sky: it follows your finger.
     const dAz = (-dx * k) / Math.max(0.2, Math.cos(state.alt * MathUtils.DEG2RAD));
     const dAlt = dy * k;
+    if (sensorOn()) {
+      // The phone does the aiming; a sideways drag turns the sky to fix the compass.
+      sensor.nudge(dAz);
+      return;
+    }
     state.az += dAz;
     state.alt += dAlt;
     const now = performance.now();
@@ -129,6 +148,11 @@ export function createView(camera, canvas, { onClick, unproject } = {}) {
   }
 
   function lookTo({ alt = state.alt, az = state.az, fov = state.fov }) {
+    if (sensorOn()) {
+      // Only you can turn the phone, but we can still zoom.
+      alt = state.alt;
+      az = state.az;
+    }
     let dAz = az - state.az;
     dAz = ((dAz + 540) % 360) - 180;
     vel.az = vel.alt = 0;
@@ -140,11 +164,19 @@ export function createView(camera, canvas, { onClick, unproject } = {}) {
   }
 
   function update(dt) {
+    const aimed = sensorOn() && sensor.orientation(target);
+    if (aimed) {
+      if (!following) camera.quaternion.copy(target);
+      // Smooth out sensor jitter without lagging behind a quick turn.
+      else camera.quaternion.slerp(target, 1 - Math.exp(-dt * 18));
+      following = true;
+      vel.az = vel.alt = 0;
+    } else following = false;
     if (tween) {
       tween.t = Math.min(1, tween.t + dt / 0.9);
       const k = tween.t < 0.5 ? 2 * tween.t * tween.t : 1 - (-2 * tween.t + 2) ** 2 / 2;
-      state.alt = MathUtils.lerp(tween.from.alt, tween.to.alt, k);
-      state.az = MathUtils.lerp(tween.from.az, tween.to.az, k);
+      if (!following) state.alt = MathUtils.lerp(tween.from.alt, tween.to.alt, k);
+      if (!following) state.az = MathUtils.lerp(tween.from.az, tween.to.az, k);
       // Zoom geometrically so it feels even.
       state.fov = tween.from.fov * (tween.to.fov / tween.from.fov) ** k;
       if (tween.t >= 1) tween = null;
