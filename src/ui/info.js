@@ -9,7 +9,17 @@ import { formatDateTime, formatDuration, formatShortDate, formatTime, startOfLoc
 const ENTITIES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\u0022": "&quot;" };
 const esc = (s) => String(s).replace(/[&<>\u0022]/g, (c) => ENTITIES[c]);
 
-const SUMMIT_BUTTON = "<button class='chip small' data-action=summit>Go to the summit</button>";
+const goButton = (text) => `<button class='chip small' data-action=go>${text}</button>`;
+const FEATURE_KIND = {
+  peak: "Mountain",
+  city: "City",
+  town: "Town",
+  village: "Village",
+  lighthouse: "Lighthouse",
+  observatory: "Observatory",
+  tower: "Tower",
+  mast: "Mast",
+};
 const NO_PLANETS = "<p class=note>None above the horizon right now.</p>";
 const DIM_TIP =
   "<p class=note>Slide <strong>Sunlight</strong> down to see the stars and planets that are up there right now.</p>";
@@ -48,7 +58,7 @@ export function phaseIcon(angle, southern, litAngle) {
   </svg>`;
 }
 
-export function createInfo({ container, getState, onLook, onClear, onSelect, onSummit, catalog }) {
+export function createInfo({ container, getState, onLook, onClear, onSelect, onGo, catalog }) {
   const cache = new Map();
   let lastHtml = "";
   let lastBuild = 0;
@@ -274,14 +284,16 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, onS
       </dl></div>`;
   }
 
-  function peakDetails(s, p) {
-    const height = Math.round(p.ele ?? p.height).toLocaleString();
-    return `<dl>${position(p, null)}
-        <dt>Height</dt><dd>${height} m</dd>
-        <dt>Distance</dt><dd>${p.distance < 10 ? p.distance.toFixed(1) : Math.round(p.distance)} km</dd>
-        ${p.otherNames ? `<dt>Also called</dt><dd>${esc(p.otherNames)}</dd>` : ""}
-      </dl>
-      <p class="note">Name from OpenStreetMap.</p>`;
+  /** A mountain, town or landmark on the land. */
+  function featureDetails(s, f) {
+    const m = (v) => `${Math.round(v).toLocaleString()} m`;
+    let rows = "";
+    if (f.group === "peak") rows += `<dt>Height</dt><dd>${m(f.ele ?? f.height)}</dd>`;
+    else if (f.tall) rows += `<dt>Height</dt><dd>${m(f.tall)} tall</dd>`;
+    if (f.population) rows += `<dt>Population</dt><dd>${f.population.toLocaleString()}</dd>`;
+    rows += `<dt>Distance</dt><dd>${f.distance < 10 ? f.distance.toFixed(1) : Math.round(f.distance)} km</dd>`;
+    if (f.otherNames) rows += `<dt>Also called</dt><dd>${esc(f.otherNames)}</dd>`;
+    return `<dl>${position(f, null)}${rows}</dl><p class="note">From OpenStreetMap.</p>`;
   }
 
   function constellationDetails(s, c) {
@@ -341,14 +353,14 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, onS
     } else if (sel.type === "constellation") {
       kind = "Constellation";
       body = constellationDetails(s, sel.constellation);
-    } else if (sel.type === "peak") {
-      kind = "Mountain";
-      body = peakDetails(s, sel.peak);
+    } else if (sel.type === "feature") {
+      kind = FEATURE_KIND[sel.feature.kind];
+      body = featureDetails(s, sel.feature);
     }
     return `<h3>${esc(title)}</h3><p class="kind">${esc(kind)}</p>${body}
       <div class="info-actions">
         <button class="chip small" data-action="look">Look at it</button>
-        ${sel.type === "peak" ? SUMMIT_BUTTON : ""}
+        ${sel.type === "feature" ? goButton(sel.feature.group === "peak" ? "Go to the summit" : "Go there") : ""}
         <button class="chip small" data-action="clear">Back to overview</button>
       </div>`;
   }
@@ -357,7 +369,7 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, onS
     const action = e.target.closest("[data-action]")?.dataset.action;
     if (action === "look") onLook();
     if (action === "clear") onClear();
-    if (action === "summit") onSummit?.();
+    if (action === "go") onGo?.();
     const jump = e.target.closest("[data-select]");
     if (jump) onSelect(jump.dataset.select, jump.dataset.id);
   });

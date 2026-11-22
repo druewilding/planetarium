@@ -54,7 +54,8 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
   planets are actually **over the mountains** (in Tromsø the Sun first shows again on 21 January, Soldagen). The
   skyline accounts for the Earth's curve and for light bending near the ground. Named peaks you can actually see
   (with no nearer land in the way) are labelled in green. Tap one for its height and distance, or fly to its summit and
-  watch the land drop away as you climb.
+  watch the land drop away as you climb. Towns and villages, lighthouses, observatories, and tall towers and
+  masts are labelled too, when you can see them.
   Buildings and trees aren't included, and a 1 km share-link position can move the nearest hills a little.
 - Works with mouse, keyboard and touch.
 

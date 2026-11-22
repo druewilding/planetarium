@@ -921,20 +921,41 @@ input[type="range"] {
   color: rgba(255, 170, 140, 0.75);
 }
 
-.label.peak {
+/* Things on the land: mountains in green, towns in lavender, landmarks in cyan. */
+.label.feature {
   font-size: 11px;
   font-weight: 500;
+}
+
+.label.peak {
   color: #8fe39a;
 }
 
-.label.peak.selected {
+.label.place {
+  color: #dcc2ff;
+}
+
+.label.place.city {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.label.place.village {
+  font-size: 10px;
+}
+
+.label.landmark {
+  font-size: 10px;
+  color: #86dcff;
+}
+
+.label.feature.selected {
   margin-left: -6px;
   padding: 1px 6px;
   border-radius: 9px;
   font-weight: 700;
-  color: #c9ffd1;
-  background: rgba(16, 48, 26, 0.7);
-  box-shadow: 0 0 0 1px rgba(143, 227, 154, 0.7);
+  background: rgba(10, 18, 30, 0.75);
+  box-shadow: 0 0 0 1px currentColor;
   text-shadow: none;
 }
 
@@ -1114,15 +1135,24 @@ input[type="range"] {
   color: rgba(140, 70, 0, 0.9);
 }
 
-.label.lit.peak {
-  color: #17632a;
+.label.lit.feature {
   font-weight: 600;
 }
 
-.label.lit.peak.selected {
-  color: #0f4d1f;
-  background: rgba(255, 255, 255, 0.7);
-  box-shadow: 0 0 0 1px rgba(23, 99, 42, 0.6);
+.label.lit.peak {
+  color: #17632a;
+}
+
+.label.lit.place {
+  color: #5b2a8c;
+}
+
+.label.lit.landmark {
+  color: #0b5873;
+}
+
+.label.lit.feature.selected {
+  background: rgba(255, 255, 255, 0.75);
 }
 
 .label.lit.compass {

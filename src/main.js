@@ -200,7 +200,7 @@ async function main() {
   const terrain = createTerrain({ onReady: () => info?.update(true) });
   let skyline = null; // the profile the ground is showing
   let skylineFade = 0;
-  let flight = null; // a flight to a summit: skylines along the way (see goToSummit)
+  let flight = null; // a flight across the land: skylines along the way (see flyTo)
   /** Altitude (degrees) of the land's skyline towards an azimuth; 0 for a flat horizon. */
   const skylineAlt = (az) => (skyline && skylineFade > 0.5 ? skylineAt(skyline, az) : 0);
   /** Is this direction behind solid ground (or the hills)? */
@@ -263,7 +263,7 @@ async function main() {
 
   function setLocation(next, animate, { duration = 1.6 } = {}) {
     // Mountains belong to where you were standing.
-    if (selection?.type === "peak") select(null);
+    if (selection?.type === "feature") select(null);
     location.set(next);
     if (!loc || !animate) {
       loc = { ...next };
@@ -370,7 +370,7 @@ async function main() {
     getState: () => ({ sky, loc, ms: clock.ms, selection, skyline: !flight && skylineFade > 0.5 ? skyline : null }),
     onLook: () => lookAtSelection(),
     onClear: () => select(null),
-    onSummit: () => selection?.type === "peak" && goToSummit(selection.peak),
+    onGo: () => selection?.type === "feature" && flyTo(selection.feature),
     onSelect: (type, id) => {
       if (type === "sun") select(selectSun(), { look: true });
       else if (type === "moon") select(selectMoon(), { look: true });
@@ -616,8 +616,8 @@ async function main() {
         return selection.star.position(sky).dir;
       case "constellation":
         return selection.constellation.position(sky).dir;
-      case "peak":
-        return (selection.peak.dir ??= dirFromAltAz(selection.peak.alt, selection.peak.az));
+      case "feature":
+        return (selection.feature.dir ??= dirFromAltAz(selection.feature.alt, selection.feature.az));
       default:
         return null;
     }
@@ -642,7 +642,7 @@ async function main() {
     if (selection.type === "constellation") fov = Math.max(fov, 50);
     const { az } = altAz(d);
     // Behind the ground or the hills: face its direction, just above the skyline.
-    if (selection.type !== "peak" && behindLand(d, 0))
+    if (selection.type !== "feature" && behindLand(d, 0))
       view.lookTo({ alt: Math.max(12, skylineAlt(az) + 8), az, fov: Math.max(fov, 60) });
     else view.lookAt(d, fov);
   }
@@ -652,26 +652,40 @@ async function main() {
   const selectPlanet = (p) => ({ type: "planet", id: p.id, name: p.name });
   const selectStar = (s) => ({ type: "star", name: s.name, star: s });
   const selectConstellation = (c) => ({ type: "constellation", name: c.name, constellation: c });
-  const selectPeak = (p) => ({ type: "peak", name: p.name, peak: p });
+  const selectFeature = (f) => ({ type: "feature", name: f.name, feature: f });
+
+  /** Mountains, towns and landmarks to label, as the layers allow. */
+  function shownFeatures() {
+    if (flight || skylineFade <= 0.5 || !skyline?.features) return [];
+    return skyline.features.filter((f) => (f.group === "peak" ? layers.peakNames : layers.placeNames));
+  }
+  const FEATURE_PRIORITY = { city: 37, town: 33, village: 27, lighthouse: 34, observatory: 36, tower: 25, mast: 24 };
+  const featurePriority = (f) =>
+    f.group === "peak" ? 30 + Math.min(8, f.height / 200) : FEATURE_PRIORITY[f.kind] + (f.named ? 2 : 0);
 
   /**
-   * Fly to the top of a mountain, still facing the same way. Skylines are worked out
-   * at points along the route first, climbing up and over and down onto the summit,
-   * then the view blends through them as you go: peaks ahead grow, the land drops away.
+   * Fly to a mountain's summit (or a town, or a lighthouse), still facing the same way.
+   * Skylines are worked out at points along the route first, climbing up and over and
+   * down again, then the view blends through them as you go: peaks ahead grow, the
+   * land drops away.
    */
   let takingOff = false;
-  async function goToSummit(p) {
+  async function flyTo(p) {
     if (takingOff || flight) return;
-    const dest = { ...location.fromPoint(p.lat, p.lon), name: p.name, ele: p.ele ?? p.height };
+    const here = location.fromPoint(p.lat, p.lon);
+    const dest = { ...here, name: p.named ? p.name : here.name };
+    if (p.group === "peak") dest.ele = p.ele ?? p.height;
     const from = locTween ? locTween.to : loc;
     const start = skyline;
     if (!start || !layers.ground || !layers.terrain) return setLocation(dest, true);
     takingOff = true;
     showToast(`Taking off for ${p.name}…`, 30000);
     try {
+      const final = await terrain.ensure(dest);
+      if (!final) throw new Error("No terrain there");
       const steps = Math.max(6, Math.min(14, Math.round(p.distance * 1.2)));
       const startEye = start.ground + 2;
-      const endEye = dest.ele + 2;
+      const endEye = final.ground + 2;
       const climb = Math.min(1200, 150 + 60 * p.distance); // metres above the straight line
       const frames = [start.altitude];
       for (let i = 1; i < steps; i++) {
@@ -683,8 +697,6 @@ async function main() {
         if (!frame) throw new Error("No terrain along the way");
         frames.push(frame.altitude);
       }
-      const final = await terrain.ensure(dest);
-      if (!final) throw new Error("No terrain at the summit");
       frames.push(final.altitude);
       let top = 0;
       for (const f of frames) for (const v of f) top = Math.max(top, v);
@@ -742,9 +754,9 @@ async function main() {
     consider(sky.sun.dir, Math.max(20, shownRadius(sky.sun) * pxPerRad + 6), 10, selectSun);
     consider(sky.moon.dir, Math.max(20, shownRadius(sky.moon) * pxPerRad + 6), 10, selectMoon);
     for (const p of sky.planets) consider(p.dir, 18, 6, () => selectPlanet(p));
-    // Mountain names: the label sits centred just above its summit.
-    if (layers.peakNames && skyline?.peaks && skylineFade > 0.5) {
-      for (const p of skyline.peaks) {
+    // Mountains, towns and landmarks: the label sits centred just above the spot.
+    {
+      for (const p of shownFeatures()) {
         const s = p.dir && screenOf(p.dir);
         if (!s) continue;
         const dx = x - s[0];
@@ -752,7 +764,7 @@ async function main() {
         const onLabel = Math.abs(dx) < p.name.length * 3.5 + 6 && Math.abs(dy) < 10;
         if (!onLabel && Math.hypot(x - s[0], y - s[1]) > 12) continue;
         const score = Math.min(Math.hypot(dx, dy), Math.hypot(x - s[0], y - s[1])) - 8;
-        if (score < bestScore) [bestScore, best] = [score, () => selectPeak(p)];
+        if (score < bestScore) [bestScore, best] = [score, () => selectFeature(p)];
       }
     }
     for (const s of catalog.stars) {
@@ -889,16 +901,16 @@ async function main() {
         });
       }
     }
-    if (layers.peakNames && skyline?.peaks && skylineFade > 0.5) {
-      for (const p of skyline.peaks) {
+    {
+      for (const p of shownFeatures()) {
         p.dir ??= dirFromAltAz(p.alt, p.az);
-        const chosen = selection?.type === "peak" && selection.peak === p;
+        const chosen = selection?.type === "feature" && selection.feature === p;
         items.push({
-          key: `pk${p.id}`,
+          key: `f${p.id}`,
           text: p.name,
           dir: p.dir,
-          cls: chosen ? "peak selected" : "peak",
-          priority: chosen ? 1000 : 30 + Math.min(8, p.height / 200),
+          cls: `feature ${p.group} ${p.kind}${chosen ? " selected" : ""}`,
+          priority: chosen ? 1000 : featurePriority(p),
           always: chosen,
           offset: [-p.name.length * 3, -16],
         });
@@ -928,7 +940,7 @@ async function main() {
     }
     const sd = selectionDir();
     // (A chosen mountain's name is highlighted instead of ringed.)
-    if (sd && selection.type !== "constellation" && selection.type !== "peak") {
+    if (sd && selection.type !== "constellation" && selection.type !== "feature") {
       const angR =
         selection.type === "moon" ? shownRadius(sky.moon) : selection.type === "sun" ? shownRadius(sky.sun) : 0;
       const px = angR * (canvas.clientHeight / (view.state.fov * (Math.PI / 180)));
@@ -970,6 +982,8 @@ async function main() {
   }
   function litBehind(dir) {
     const { alt, az } = altAz(dir);
+    // Below the skyline, it's the land behind the label, and that's dark.
+    if (layers.ground && alt < skylineAlt(az) - 0.3) return false;
     const a = Math.min(GLOW_ALTS[GLOW_ALTS.length - 1] - 1e-6, Math.max(GLOW_ALTS[0], alt));
     let j = 0;
     while (a > GLOW_ALTS[j + 1]) j++;

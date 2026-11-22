@@ -21,12 +21,23 @@ const OVERPASS = [
   "https://overpass.private.coffee/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
 ];
-const peaksQuery = (lat, lon, radiusM) =>
-  "?data=" +
-  encodeURIComponent(
-    `[out:json][timeout:25];node["natural"~"^(peak|volcano)$"]["name"](around:${radiusM},${lat},${lon});out body;`
+// Everything worth naming on the land, in one query (the servers are slow): peaks,
+// towns and villages, lighthouses, observatories, and towers and masts with a height.
+const featuresQuery = (lat, lon, radiusM) => {
+  const near = `(around:${radiusM},${lat},${lon})`;
+  return (
+    "?data=" +
+    encodeURIComponent(
+      "[out:json][timeout:60];(" +
+        `node["natural"~"^(peak|volcano)$"]["name"]${near};` +
+        `node["place"~"^(city|town|village)$"]["name"]${near};` +
+        `nwr["man_made"~"^(lighthouse|observatory)$"]${near};` +
+        `nwr["man_made"~"^(tower|mast)$"]["height"]${near};` +
+        ");out center;"
+    )
   );
-const PEAK_RADIUS_KM = 50;
+};
+const FEATURE_RADIUS_KM = 50;
 const CACHE_NAME = "terrain-v1";
 const EARTH_R = 6371000;
 const REFRACTION_K = 0.13;
@@ -60,7 +71,7 @@ function loadTile(z, x, y) {
  * peaks hardly do, and neither server sends caching headers, so the ordinary
  * HTTP cache would only be guessing.
  */
-async function cachedFetch(url, sources = [url]) {
+async function cachedFetch(url, sources = [url], { tries = 2, check = null } = {}) {
   let cache = null;
   try {
     cache = await caches.open(CACHE_NAME);
@@ -70,11 +81,14 @@ async function cachedFetch(url, sources = [url]) {
     // No Cache Storage (private window, or not a secure page): just fetch.
   }
   let error = null;
-  // Each source gets a second try: a dropped connection would leave a hole in the hills.
-  for (const src of sources.flatMap((s) => [s, s])) {
+  // By default each source gets a second try: a dropped connection would leave a hole
+  // in the hills. `check` can turn down an answer that came back "OK" but isn't, so
+  // it's never cached.
+  for (const src of sources.flatMap((s) => Array(tries).fill(s))) {
     try {
       const res = await fetch(src);
       if (!res.ok) throw new Error(`HTTP ${res.status} from ${new URL(src).host}`);
+      if (check) await check(res.clone(), src);
       cache?.put(url, res.clone()).catch(() => {});
       return res;
     } catch (err) {
@@ -265,7 +279,7 @@ export async function computeProfile(lat, lon, { groundHint = null, eye = null, 
    * Where a summit appears from here (degrees), or null if it's hidden behind
    * nearer land or out of range. `ele` is the mapped height, if known.
    */
-  function summit(plat, plon, ele) {
+  function summit(plat, plon, ele, { above = 0, strict = false } = {}) {
     const midLat = ((plat + lat) / 2) * (Math.PI / 180);
     const dN = (plat - lat) * (Math.PI / 180) * EARTH_R;
     const dE = (plon - lon) * (Math.PI / 180) * EARTH_R * Math.cos(midLat);
@@ -273,7 +287,7 @@ export async function computeProfile(lat, lon, { groundHint = null, eye = null, 
     if (d < 300 || d > maxD) return null;
     // The elevation model smooths summits off, so trust a mapped height near it.
     const dem = (levels.find((l) => d <= l.reach) ?? levels[levels.length - 1]).height(plat, plon);
-    const h = Number.isFinite(ele) && Math.abs(ele - dem) < 300 ? Math.max(ele, dem) : dem;
+    const h = (Number.isFinite(ele) && Math.abs(ele - dem) < 300 ? Math.max(ele, dem) : dem) + above;
     const t = (h - h0 - (d * d) / (2 * R_EFF)) / d;
     // Line of sight: is any land in between steeper? The mountain's own front slopes
     // (the last 30% of the way) may rise a little above a summit set back on a
@@ -286,7 +300,7 @@ export async function computeProfile(lat, lon, { groundHint = null, eye = null, 
       const la = latR + (ds * north) / EARTH_R;
       const lo = lon + ((ds * east) / (EARTH_R * Math.cos(la))) * (180 / Math.PI);
       const hs = levelFor[s].height((la * 180) / Math.PI, lo);
-      const allowed = ds < d * 0.7 ? 0.001 : 0.035; // tan of about 0.06° or 2°
+      const allowed = strict || ds < d * 0.7 ? 0.003 : 0.035; // tan of about 0.2° or 2°
       if ((hs - h0 - (ds * ds) / (2 * R_EFF)) / ds > t + allowed) return null;
     }
     const az = ((Math.atan2(dE, dN) * 180) / Math.PI + 360) % 360;
@@ -300,49 +314,93 @@ export async function computeProfile(lat, lon, { groundHint = null, eye = null, 
 const NAME_SPLIT = / [-–/] /;
 const shortName = (name) => name.split(NAME_SPLIT)[0].trim();
 
+/** What a thing on the map is: its kind, the group that colours its label, and how tall it stands. */
+function classify(tags) {
+  const height = parseFloat(tags.height);
+  if (tags.natural === "peak" || tags.natural === "volcano") return { kind: "peak", group: "peak" };
+  // A place is one point on the map but spreads up its hillsides: look for its higher houses.
+  const spread = { city: 60, town: 40, village: 25 }[tags.place];
+  if (spread) return { kind: tags.place, group: "place", above: spread };
+  const tall = Number.isFinite(height) ? height : null;
+  if (tags.man_made === "lighthouse") return { kind: "lighthouse", group: "landmark", above: tall ?? 15, tall };
+  if (tags.man_made === "observatory") return { kind: "observatory", group: "landmark", above: tall ?? 10, tall };
+  if (tags.man_made === "tower" || tags.man_made === "mast") {
+    // Plenty of small phone masts and church towers: keep the named and the tall.
+    if (tags["tower:type"] === "bell_tower") return null;
+    if (!tags.name && !(tall >= 40)) return null;
+    return { kind: tags.man_made, group: "landmark", above: tall ?? 30, tall };
+  }
+  return null;
+}
+
+const UNNAMED = { lighthouse: "Lighthouse", observatory: "Observatory", tower: "Tower", mast: "Mast" };
+
 /**
- * Named peaks from OpenStreetMap that can be seen from where the profile was
- * made, each with where it appears in the sky. Empty if none or offline.
+ * Things from OpenStreetMap that can be seen from where the profile was made
+ * (named peaks, towns, lighthouses, observatories, towers and masts), each with
+ * where it appears in the sky. Empty if none or offline.
  */
-export async function visiblePeaks(profile) {
+export async function visibleFeatures(profile) {
   let elements = [];
   try {
     // Rounded to about a kilometre: plenty for a 50 km search, and kinder to caches.
-    const query = peaksQuery(profile.lat.toFixed(2), profile.lon.toFixed(2), PEAK_RADIUS_KM * 1000);
-    const res = await cachedFetch(
-      OVERPASS[0] + query,
-      OVERPASS.map((server) => server + query)
-    );
-    elements = (await res.json()).elements ?? [];
+    const query = featuresQuery(profile.lat.toFixed(2), profile.lon.toFixed(2), FEATURE_RADIUS_KM * 1000);
+    // Overpass answers "200 OK" even when a query timed out or was cut short, with
+    // a remark saying so: treat that as a failure, or the gap would be cached for good.
+    const check = async (res, src) => {
+      const json = await res.json();
+      if (!Array.isArray(json.elements) || /error|timed out|rate/i.test(json.remark ?? "")) {
+        throw new Error(`${new URL(src).host}: ${json.remark || "no results"}`);
+      }
+    };
+    // One try per server, to go easy on them: they limit how often each visitor asks.
+    const servers = OVERPASS.map((server) => server + query);
+    const res = await cachedFetch(OVERPASS[0] + query, servers, { tries: 1, check });
+    elements = (await res.json()).elements;
   } catch (err) {
-    console.warn("Couldn't load mountain names", err);
-    return [];
+    console.warn("Couldn't load names for the land", err);
+    return null;
   }
-  const peaks = [];
+  const features = [];
   for (let i = 0; i < elements.length; i++) {
     if (i % 100 === 99) await new Promise((r) => setTimeout(r, 0));
     const e = elements[i];
-    const seen = profile.summit(e.lat, e.lon, parseFloat(e.tags?.ele));
+    const tags = e.tags ?? {};
+    const type = classify(tags);
+    if (!type) continue;
+    const lat = e.lat ?? e.center?.lat;
+    const lon = e.lon ?? e.center?.lon;
+    if (lat == null || lon == null) continue;
+    const ele = parseFloat(tags.ele);
+    const peak = type.group === "peak";
+    const seen = profile.summit(lat, lon, peak ? ele : NaN, { above: type.above ?? 0, strict: !peak });
     if (!seen) continue;
-    // Sit the label on the drawn ridge when the summit is (nearly) the skyline there.
-    const sky = skylineAt(profile, seen.az);
-    const onSkyline = seen.alt > sky - 2;
-    // Little knolls only clutter the view, unless they're what you see against the sky.
-    if (seen.height < 150 && !onSkyline) continue;
-    const alt = onSkyline ? Math.max(seen.alt, sky) : seen.alt;
-    const ele = parseFloat(e.tags.ele);
-    peaks.push({
-      id: e.id,
-      name: shortName(e.tags.name),
-      otherNames: e.tags.name.split(NAME_SPLIT).slice(1).join(", "),
-      lat: e.lat,
-      lon: e.lon,
-      ele: Number.isFinite(ele) ? ele : null,
+    let alt = seen.alt;
+    if (peak) {
+      // Sit the label on the drawn ridge when the summit is (nearly) the skyline there.
+      const sky = skylineAt(profile, seen.az);
+      const onSkyline = seen.alt > sky - 2;
+      // Little knolls only clutter the view, unless they're what you see against the sky.
+      if (seen.height < 150 && !onSkyline) continue;
+      if (onSkyline) alt = Math.max(seen.alt, sky);
+    }
+    const fullName = tags.name ?? "";
+    const population = parseInt(tags.population, 10);
+    features.push({
+      id: `${e.type}${e.id}`,
+      ...type,
+      named: !!fullName,
+      name: fullName ? shortName(fullName) : UNNAMED[type.kind],
+      otherNames: fullName.split(NAME_SPLIT).slice(1).join(", "),
+      lat,
+      lon,
+      ele: peak && Number.isFinite(ele) ? ele : null,
+      population: Number.isFinite(population) ? population : null,
       ...seen,
       alt,
     });
   }
-  return peaks;
+  return features;
 }
 
 /** Skyline altitude (degrees) towards an azimuth (degrees), interpolated. */
@@ -379,10 +437,8 @@ export function createTerrain({ onReady } = {}) {
     if (profile) {
       profile.key = key;
       // Names come from a slower server; the skyline doesn't wait for them.
-      profile.peaks = [];
-      visiblePeaks(profile)
-        .then((peaks) => (profile.peaks = peaks))
-        .catch((err) => console.warn("Mountain names failed", err));
+      profile.features = [];
+      loadFeatures(profile);
     }
     onReady?.(profile);
     if (!jobs.size && wanted && !done.has(keyOf(wanted))) {
@@ -391,6 +447,13 @@ export function createTerrain({ onReady } = {}) {
       ensure(next);
     }
     return profile;
+  }
+
+  /** Names for the land around a profile; if the servers are busy, try again a little later. */
+  async function loadFeatures(profile, attempt = 0) {
+    const features = await visibleFeatures(profile).catch(() => null);
+    if (features) profile.features = features;
+    else if (attempt < 2) setTimeout(() => loadFeatures(profile, attempt + 1), [30, 120][attempt] * 1000);
   }
 
   /** The profile for a place, worked out if need be. */
