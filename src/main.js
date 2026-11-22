@@ -1026,6 +1026,7 @@ async function main() {
 
   // ---- Frame loop ----
   const ZENITH = new THREE.Vector3(0, 1, 0);
+  const GROUND_ALBEDO = 0.11; // as drawn in bodies.js
   let last = performance.now();
   let firstFrame = true;
   let lastNight = -1;
@@ -1066,6 +1067,21 @@ async function main() {
     ];
     const { average, zenith, peak } = averageSkyLuminance(atm, lights, ambient);
     lastAverage = average;
+
+    // Seen through the earth, the Sun and Moon are drawn as if from above the air.
+    const throughEarth = (b) => !layers.ground && b.alt < skylineAlt(b.az) - 0.3;
+    const sunThrough = throughEarth(sky.sun);
+    const moonThrough = throughEarth(sky.moon);
+    const tSun = transmittance(atm, sunThrough ? ZENITH : sky.sun.trueDir);
+    const tMoon = transmittance(atm, moonThrough ? ZENITH : sky.moon.trueDir);
+    const mean = (t) => (t[0] + t[1] + t[2]) / 3;
+    // Direct light only reaches the ground once the Sun or Moon is over the hills.
+    const overHills = (b) => smooth(-0.3, 0.3, b.alt - skylineAlt(b.az));
+    const groundLight = (e) =>
+      Math.PI * average +
+      e * Math.max(0, sky.sun.trueDir.y) * mean(tSun) * overHills(sky.sun) +
+      moonE * Math.max(0, sky.moon.trueDir.y) * mean(tMoon) * overHills(sky.moon);
+    const groundE = groundLight(sunE);
     // Eye adaptation, worked out fresh every frame (no lag, so changing the time
     // never makes the sky dip and then brighten back). Adapting to the average
     // plus a share of the brightest part keeps brightness falling steadily
@@ -1076,6 +1092,13 @@ async function main() {
       // The dimmer only partly adapts, so sliding it down always makes the scene darker.
       const full = averageSkyLuminance(atm, [{ dir: sky.sun.trueDir, e: fullSunE }, lights[1]], ambient);
       adapt = adaptTo(full.average, full.peak) ** 0.4 * adapt ** 0.6;
+    }
+    // With no atmosphere the sky is black, so the eye adapts to the sunlit ground
+    // instead, which would otherwise glare white. It shows a mid grey, as on the Moon.
+    if (!layers.atmosphere && layers.ground) {
+      let groundL = (GROUND_ALBEDO * groundE) / Math.PI;
+      if (sunLevel < 1) groundL = ((GROUND_ALBEDO * groundLight(fullSunE)) / Math.PI) ** 0.4 * groundL ** 0.6;
+      adapt = Math.max(adapt, 3 * groundL);
     }
     // The constant stops the eye "turning up the gain" too far on dark nights; without
     // it, faint moonlight scattered near the horizon shows as a grey glowing band.
@@ -1091,19 +1114,6 @@ async function main() {
     globalLimit = 7.93 - 5 * Math.log10(1 + 63 * Math.sqrt(zenith));
     updateGlow(now, atm, lights, ambient);
 
-    // Seen through the earth, the Sun and Moon are drawn as if from above the air.
-    const throughEarth = (b) => !layers.ground && b.alt < skylineAlt(b.az) - 0.3;
-    const sunThrough = throughEarth(sky.sun);
-    const moonThrough = throughEarth(sky.moon);
-    const tSun = transmittance(atm, sunThrough ? ZENITH : sky.sun.trueDir);
-    const tMoon = transmittance(atm, moonThrough ? ZENITH : sky.moon.trueDir);
-    const mean = (t) => (t[0] + t[1] + t[2]) / 3;
-    // Direct light only reaches the ground once the Sun or Moon is over the hills.
-    const overHills = (b) => smooth(-0.3, 0.3, b.alt - skylineAlt(b.az));
-    const groundE =
-      Math.PI * average +
-      sunE * Math.max(0, sky.sun.trueDir.y) * mean(tSun) * overHills(sky.sun) +
-      moonE * Math.max(0, sky.moon.trueDir.y) * mean(tMoon) * overHills(sky.moon);
     updateSkyline(dt);
     ground.update(groundE, skylineFade);
     shared.uSeeThrough.value = layers.ground ? 0 : 1;
