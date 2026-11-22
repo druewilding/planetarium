@@ -104,8 +104,7 @@ svg {
 .icon-btn,
 .timebar,
 .dropdown,
-.heading,
-.zoom {
+.compass-widget {
   backdrop-filter: blur(12px) saturate(1.2);
   -webkit-backdrop-filter: blur(12px) saturate(1.2);
 }
@@ -282,40 +281,144 @@ input[type="number"]:focus {
   gap: 8px;
 }
 
-.heading {
-  position: fixed;
-  top: calc(max(var(--gutter), env(safe-area-inset-top, 0px)) + 46px);
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  color: var(--text-dim);
-  background: rgba(12, 17, 30, 0.45);
-  pointer-events: none;
-  z-index: 5;
-  font-variant-numeric: tabular-nums;
-}
-
-/* ---------- Zoom ---------- */
-.zoom {
+/* ---------- Compass & zoom ---------- */
+.nav {
   position: fixed;
   right: var(--gutter);
-  top: 50%;
-  transform: translateY(-50%);
+  bottom: calc(var(--timebar-h, 120px) + var(--gutter) * 2 + var(--safe-b));
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 6px 0;
-  border-radius: 999px;
+  gap: 10px;
   z-index: 6;
 }
 
+.zoom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 #fov-label {
+  min-width: 34px;
+  text-align: center;
   font-size: 11px;
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
+}
+
+.compass-widget {
+  width: 124px;
+  height: 124px;
+  border-radius: 50%;
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
+}
+
+.compass-widget svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.compass-bg {
+  fill: var(--panel);
+  stroke: var(--panel-border);
+}
+
+.compass-ring {
+  fill: none;
+  stroke: rgba(160, 185, 255, 0.25);
+}
+
+.compass-fov {
+  fill: rgba(143, 184, 255, 0.14);
+  stroke: rgba(143, 184, 255, 0.3);
+  stroke-width: 0.6;
+}
+
+.compass-widget .tick {
+  stroke: rgba(200, 210, 235, 0.35);
+  stroke-width: 0.8;
+}
+
+.compass-widget .tick.major {
+  stroke: rgba(220, 228, 245, 0.7);
+  stroke-width: 1.2;
+}
+
+.compass-widget .dir {
+  cursor: pointer;
+}
+
+.compass-widget .dir text {
+  fill: var(--text);
+  font-size: 10px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+.compass-widget .dir.minor text {
+  font-size: 6.5px;
+  font-weight: 500;
+  fill: var(--text-dim);
+}
+
+.compass-widget .dir.north text {
+  fill: #ff8a7a;
+}
+
+.compass-widget .hit {
+  fill: transparent;
+}
+
+.compass-widget .dir:hover .hit,
+.compass-widget .body:hover .hit {
+  fill: rgba(143, 184, 255, 0.2);
+}
+
+.compass-widget .body {
+  cursor: pointer;
+}
+
+.compass-widget .body.sun .disc {
+  fill: #ffd27a;
+  stroke: #7a4b00;
+  stroke-width: 0.8;
+}
+
+.compass-widget .body.moon .disc {
+  fill: #e8ecf6;
+  stroke: #3a4157;
+  stroke-width: 0.8;
+}
+
+.compass-widget .body.below .disc {
+  opacity: 0.4;
+}
+
+.compass-pointer {
+  fill: var(--accent);
+}
+
+.compass-heading {
+  fill: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.compass-sub {
+  fill: var(--text-dim);
+  font-size: 7px;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
 }
 
 /* ---------- Info panel ---------- */
@@ -324,7 +427,7 @@ input[type="number"]:focus {
   top: calc(max(var(--gutter), env(safe-area-inset-top, 0px)) + 52px);
   left: var(--gutter);
   width: 300px;
-  max-height: calc(100vh - 260px);
+  max-height: calc(100vh - var(--timebar-h, 120px) - 100px);
   overflow: auto;
   padding: 14px 16px;
   z-index: 8;
@@ -501,53 +604,17 @@ input[type="number"]:focus {
   left: var(--gutter);
   right: var(--gutter);
   bottom: calc(var(--gutter) + var(--safe-b));
-  display: flex;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr) 170px;
   align-items: center;
-  gap: 16px;
+  gap: 18px;
   padding: 10px 16px;
   border-radius: 20px;
   background: var(--panel);
   border: 1px solid var(--panel-border);
   z-index: 10;
-  max-width: 860px;
+  max-width: 1080px;
   margin: 0 auto;
-}
-
-.dials {
-  display: flex;
-  gap: 10px;
-}
-
-.dial {
-  width: 96px;
-  height: 96px;
-  flex: none;
-  touch-action: none;
-  cursor: grab;
-  user-select: none;
-}
-
-.dial svg {
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-}
-
-.dial text {
-  fill: var(--text-dim);
-  font-size: 9px;
-  text-anchor: middle;
-  dominant-baseline: central;
-}
-
-.dial .dial-center {
-  fill: var(--text);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.dial .handle {
-  cursor: grab;
 }
 
 .time-main {
@@ -555,7 +622,129 @@ input[type="number"]:focus {
   flex-direction: column;
   gap: 6px;
   min-width: 0;
-  flex: 1;
+}
+
+.tracks {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.track-row {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+}
+
+.track-label,
+.year-step {
+  height: 22px;
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.year-step {
+  gap: 2px;
+  color: var(--text);
+}
+
+.step-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.step-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.track-wrap {
+  position: relative;
+  padding-bottom: 14px;
+}
+
+.track {
+  position: relative;
+  height: 22px;
+  border-radius: 7px;
+  background: #1a2238;
+  cursor: pointer;
+  touch-action: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.track:focus-visible {
+  outline: 2px solid var(--accent-2);
+}
+
+.track .thumb {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 4px;
+  margin-left: -2px;
+  border-radius: 2px;
+  background: #fff;
+  box-shadow:
+    0 0 0 1.5px rgba(0, 0, 0, 0.6),
+    0 0 8px rgba(255, 255, 255, 0.5);
+  pointer-events: none;
+}
+
+.track.active .thumb {
+  width: 6px;
+  margin-left: -3px;
+}
+
+.ticks {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 13px;
+  pointer-events: none;
+}
+
+.ticks span {
+  position: absolute;
+  transform: translateX(-50%);
+  font-size: 10px;
+  line-height: 13px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.season {
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(0, 0, 0, 0.55);
+}
+
+.season.equinox {
+  background: #8be08b;
+}
+
+.season.june {
+  background: #ff7a59;
+}
+
+.season.december {
+  background: #7ec8ff;
 }
 
 .time-readout {
@@ -613,8 +802,16 @@ input[type="number"]:focus {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  width: 170px;
-  flex: none;
+  min-width: 0;
+}
+
+#night-sky {
+  align-self: flex-start;
+}
+
+#night-sky[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .dimmer label {
@@ -790,18 +987,21 @@ input[type="range"] {
   }
 
   .timebar {
-    flex-wrap: wrap;
-    gap: 8px 12px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
     padding: 8px 12px;
   }
 
-  .dial {
-    width: 78px;
-    height: 78px;
+  .time-main {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px 10px;
   }
 
-  .time-main {
-    min-width: 150px;
+  .track-row {
+    grid-template-columns: 64px minmax(0, 1fr);
   }
 
   #time-clock {
@@ -809,9 +1009,13 @@ input[type="range"] {
   }
 
   .dimmer {
-    width: 100%;
     flex-direction: row;
     align-items: center;
+    gap: 10px;
+  }
+
+  #night-sky {
+    align-self: center;
   }
 
   .dimmer label {
@@ -831,12 +1035,7 @@ input[type="range"] {
     left: var(--gutter);
     right: var(--gutter);
     width: auto;
-    max-height: 30vh;
     padding: 10px 14px;
-  }
-
-  .heading {
-    display: none;
   }
 
   .rate-label {
@@ -850,8 +1049,13 @@ input[type="range"] {
     max-height: calc(100vh - 290px);
   }
 
-  .zoom {
-    top: 58%;
+  .compass-widget {
+    width: 96px;
+    height: 96px;
+  }
+
+  .info-panel {
+    max-height: min(30vh, calc(100vh - var(--timebar-h, 200px) - 230px));
   }
 }
 
@@ -873,4 +1077,37 @@ input[type="range"] {
 .bright-sky .label.hour {
   color: rgba(140, 70, 0, 0.9);
   text-shadow: none;
+}
+
+/* Clickable names in the info panel */
+.jump {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline dotted rgba(255, 255, 255, 0.35);
+  text-underline-offset: 3px;
+}
+
+.jump:hover {
+  color: var(--accent);
+  text-decoration-color: currentColor;
+}
+
+button.info-head {
+  width: 100%;
+  margin: 0 -6px;
+  padding: 4px 6px;
+  border-radius: 10px;
+  text-decoration: none;
+}
+
+button.info-head:hover {
+  background: rgba(143, 184, 255, 0.1);
+  color: inherit;
 }

@@ -68,13 +68,19 @@
       </div>
     </header>
 
-    <div id="heading" class="heading" aria-live="off"></div>
-
-    <!-- Zoom -->
-    <div class="zoom">
-      <button id="zoom-in" class="icon-btn" aria-label="Zoom in">+</button>
-      <span id="fov-label">60°</span>
-      <button id="zoom-out" class="icon-btn" aria-label="Zoom out">−</button>
+    <!-- Compass & zoom -->
+    <div class="nav">
+      <div
+        id="compass"
+        class="compass-widget"
+        role="group"
+        aria-label="Compass: drag to turn, tap a direction to face it"
+      ></div>
+      <div class="zoom">
+        <button id="zoom-in" class="icon-btn" aria-label="Zoom in">+</button>
+        <span id="fov-label">60°</span>
+        <button id="zoom-out" class="icon-btn" aria-label="Zoom out">−</button>
+      </div>
     </div>
 
     <!-- Info panel -->
@@ -93,10 +99,6 @@
 
     <!-- Bottom time bar -->
     <footer class="timebar">
-      <div class="dials">
-        <div class="dial" id="day-dial" title="Drag around to change the time of day"></div>
-        <div class="dial" id="year-dial" title="Drag around to change the date"></div>
-      </div>
       <div class="time-main">
         <button id="time-readout" class="time-readout" title="Type in a date and time">
           <span id="time-clock">--:--</span>
@@ -118,6 +120,33 @@
           <button id="now" class="chip small">Now</button>
         </div>
       </div>
+
+      <div class="tracks">
+        <div class="track-row">
+          <span class="track-label">Time</span>
+          <div class="track-wrap">
+            <div id="day-track" class="track" role="slider" tabindex="0" aria-label="Time of day">
+              <div class="thumb"></div>
+            </div>
+            <div id="day-ticks" class="ticks" aria-hidden="true"></div>
+          </div>
+        </div>
+        <div class="track-row">
+          <span class="year-step">
+            <button id="year-prev" class="step-btn" aria-label="Previous year">‹</button>
+            <span id="year-label">2026</span>
+            <button id="year-next" class="step-btn" aria-label="Next year">›</button>
+          </span>
+          <div class="track-wrap">
+            <div id="year-track" class="track" role="slider" tabindex="0" aria-label="Date">
+              <div id="season-marks"></div>
+              <div class="thumb"></div>
+            </div>
+            <div id="year-ticks" class="ticks" aria-hidden="true"></div>
+          </div>
+        </div>
+      </div>
+
       <div class="dimmer" title="Dim the Sun to see what the sky holds right now">
         <label for="sun-level">
           <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -130,7 +159,8 @@
           </svg>
           <span>Sunlight <output id="sun-level-out">100%</output></span>
         </label>
-        <input id="sun-level" type="range" min="0" max="1" step="0.001" value="1" />
+        <input id="sun-level" type="range" min="0" max="100" step="0.1" value="100" />
+        <button id="night-sky" class="chip small" aria-pressed="false">Night sky</button>
       </div>
     </footer>
 

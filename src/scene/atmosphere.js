@@ -20,10 +20,10 @@ export const ATMOSPHERES = {
     // zenith (ozone absorbs orange–red light) and a less over-saturated noon sky.
     rayleigh: [8.97e-3, 13.558e-3, 26.5e-3],
     rayleighScale: 8.0,
-    mie: [3.996e-3, 3.996e-3, 3.996e-3],
+    mie: [2.5e-3, 2.5e-3, 2.5e-3], // fairly clear air
     mieExtinction: 1.11,
     mieScale: 1.2,
-    mieG: 0.8,
+    mieG: 0.76,
     ozone: [2.4e-3, 1.881e-3, 0.2e-3],
     ozoneCenter: 25,
     ozoneWidth: 15,

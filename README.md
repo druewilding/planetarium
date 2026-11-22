@@ -18,11 +18,15 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
   sky is behind them (Schaefer's limiting-magnitude relation), and they dim near the horizon through atmospheric
   extinction.
 - **Real brightness:** everything is computed in cd/m² and lux, then an "eye" adapts its exposure the way yours does.
-- **Sunlight dimmer:** slide the Sun down to see what's in the sky right now, even at noon.
+- **Sunlight dimmer:** a linear slider that dims the Sun to show what's in the sky right now, even at noon. The
+  daytime sky is so bright that stars only appear in the last percent or so; **Night sky** jumps straight to 0%.
 - **The Moon:** a lit 3D sphere with a NASA LRO texture, so its phase, tilt, libration and earthshine all come straight
   from the geometry.
-- **Time dials:** a 24-hour dial (midnight at the bottom, the day's sunlight shaded on the ring) and a year dial with
-  the solstices and equinoxes marked. Drag either one around, or play time from −1 month/s to +1 month/s.
+- **Time tracks:** drag along a 24-hour track shaded by where the Sun is (night, twilight, day), or along a date track
+  shaded by day length through the year, with the solstices and equinoxes marked. A year stepper sits beside it, and
+  time can play from −1 month/s to +1 month/s.
+- **Compass:** shows where you're facing, your field of view, and the Sun and Moon on its rim. Drag it to turn, or
+  tap a direction, the Sun or the Moon to face it.
 - **Location:** a world map showing live day/night shading, a search over 1,250 cities (with correct local time zones
   and daylight saving), or typed coordinates. Changing location glides smoothly.
 - **Overlays:** the Sun's path today with hour marks, the solstice and equinox paths, the Moon's path, the ecliptic,
@@ -35,7 +39,7 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
 
 | Action           | Mouse / touch                | Keyboard   |
 | ---------------- | ---------------------------- | ---------- |
-| Look around      | Drag                         | Arrow keys |
+| Look around      | Drag the sky, or the compass | Arrow keys |
 | Zoom             | Scroll / pinch / + − buttons | `+` / `-`  |
 | Select an object | Click / tap                  |            |
 | Play / pause     | ▶ button                     | Space      |
@@ -74,7 +78,7 @@ planetarium/
 │   │   ├── lines.js       # lines on the sky (refraction-aware)
 │   │   ├── overlays.js    # constellations, grids, paths
 │   │   └── glsl.js        # shared shader code: tone mapping, sky lookup, refraction
-│   └── ui/                # dials, location dialog, info panel, layers, search, labels, camera
+│   └── ui/                # time bar, compass, location dialog, info panel, layers, search, labels, camera
 ├── data/                  # stars, constellations, cities, land outlines (compact JSON)
 ├── textures/moon.jpg
 └── tools/                 # scripts that produced data/
