@@ -25,6 +25,19 @@ export const PLANETS = [
   { id: "Neptune", name: "Neptune", radiusKm: 24622, color: [0.55, 0.7, 1.0] },
 ];
 
+/**
+ * Which way the lit side of a body faces, as you see it standing on the ground:
+ * degrees anticlockwise from "lit on the right", with up being towards the zenith.
+ * Near the equator a crescent Moon lies on its back, lit from below.
+ */
+export function litAngle(dir, sunDir) {
+  const up = new Vector3(0, 1, 0).addScaledVector(dir, -dir.y);
+  if (up.lengthSq() < 1e-8) up.set(0, 0, -1).addScaledVector(dir, dir.z); // overhead: north is up
+  up.normalize();
+  const right = new Vector3().crossVectors(dir, up);
+  return Math.atan2(sunDir.dot(up), sunDir.dot(right)) * R2D;
+}
+
 /** astronomy-engine rotation (frame → HOR) as a Matrix4 (frame → world). */
 export function rotationToWorld(rotation, out = new Matrix4()) {
   const r = rotation.rot;
@@ -113,6 +126,7 @@ export function computeSky(ms, loc) {
   moon.illuminance = sun.illuminance * 10 ** (-0.4 * (moon.mag - sun.mag));
   moon.sunDir = sun.vecAU.clone().sub(moon.vecAU).normalize();
   moon.axis = A.RotationAxis(Body.Moon, time);
+  moon.litAngle = litAngle(moon.dir, moon.sunDir);
   sun.visibleFraction = sunVisibleFraction(sun.angularRadius, moon.angularRadius, sun.trueDir.angleTo(moon.trueDir));
 
   const planets = PLANETS.map((p) => {

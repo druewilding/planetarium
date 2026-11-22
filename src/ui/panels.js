@@ -10,6 +10,11 @@ export const LAYER_GROUPS = [
       { key: "atmosphere", label: "Atmosphere", hint: "Turn off to see a Moon-like black sky" },
       { key: "ground", label: "Solid ground", hint: "Turn off to see below the horizon" },
       { key: "refraction", label: "Refraction near horizon" },
+      {
+        key: "bigBodies",
+        label: "Enlarge Sun & Moon",
+        hint: "Zoomed out, a true-size Moon is a speck on a screen. Zoom in to see its real size",
+      },
     ],
   },
   {
@@ -41,6 +46,7 @@ export const DEFAULT_LAYERS = {
   atmosphere: true,
   ground: true,
   refraction: true,
+  bigBodies: true,
   planetLabels: true,
   starNames: true,
   constellationNames: true,

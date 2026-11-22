@@ -26,18 +26,23 @@ export function phaseName(angle) {
   return names[Math.round((((angle % 360) + 360) % 360) / 45) % 8];
 }
 
-/** Small SVG of the Moon's phase as seen from this hemisphere. */
-export function phaseIcon(angle, southern) {
+/**
+ * Small SVG of the Moon's phase. With `litAngle` (see astro.js) it's turned the way
+ * it looks in the sky right now; without, as usually drawn for this hemisphere.
+ */
+export function phaseIcon(angle, southern, litAngle) {
   const r = 20;
   const a = (angle * Math.PI) / 180;
   const rx = Math.abs(Math.cos(a)) * r;
   const waxing = angle < 180;
   const gibbous = Math.cos(a) < 0;
   const flip = waxing !== !southern; // lit side on the right when waxing (north)
+  // The path is drawn lit on the right; SVG turns clockwise, the sky angle anticlockwise.
+  const transform = litAngle == null ? `scale(${flip ? -1 : 1},1)` : `rotate(${-Math.round(litAngle)})`;
   const d = `M0,${-r}A${r},${r} 0 0 1 0,${r}A${rx.toFixed(2)},${r} 0 0 ${gibbous ? 1 : 0} 0,${-r}Z`;
   return `<svg class="phase-icon" viewBox="-22 -22 44 44" aria-hidden="true">
     <circle r="${r}" fill="#1b2133"/>
-    <path d="${d}" fill="#f1ecdf" transform="scale(${flip ? -1 : 1},1)"/>
+    <path d="${d}" fill="#f1ecdf" transform="${transform}"/>
   </svg>`;
 }
 
@@ -171,7 +176,7 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, cat
     const rs = cached(`moon|${start}|${loc.lat.toFixed(3)}|${loc.lon.toFixed(3)}`, () =>
       riseSet(Body.Moon, obs, start)
     );
-    const headInner = `${phaseIcon(moon.phaseAngle, loc.lat < 0)}<div>
+    const headInner = `${phaseIcon(moon.phaseAngle, loc.lat < 0, moon.litAngle)}<div>
       <strong>${phaseName(moon.phaseAngle)}</strong><br><span class="kind">${(moon.phaseFraction * 100).toFixed(0)}% lit</span></div>`;
     // In the overview the phase is a button that takes you to the Moon.
     const head = full

@@ -190,7 +190,7 @@ async function main() {
   const moon = createMoon(shared, glsl, moonTex.texture, moonTex.mean);
   const sun = createSun(shared, glsl);
   const ground = createGround(shared, glsl);
-  scene.add(moon.mesh, sun.mesh, ground.mesh);
+  scene.add(moon.mesh, moon.glow, sun.mesh, ground.mesh);
 
   const labels = createLabels($("labels"));
 
@@ -511,8 +511,8 @@ async function main() {
       if (score < bestScore) [bestScore, best] = [score, make];
     };
     const pxPerRad = canvas.clientHeight / (view.state.fov * (Math.PI / 180));
-    consider(sky.sun.dir, Math.max(20, sky.sun.angularRadius * pxPerRad + 6), 10, selectSun);
-    consider(sky.moon.dir, Math.max(20, sky.moon.angularRadius * pxPerRad + 6), 10, selectMoon);
+    consider(sky.sun.dir, Math.max(20, shownRadius(sky.sun) * pxPerRad + 6), 10, selectSun);
+    consider(sky.moon.dir, Math.max(20, shownRadius(sky.moon) * pxPerRad + 6), 10, selectMoon);
     for (const p of sky.planets) consider(p.dir, 18, 6, () => selectPlanet(p));
     for (const s of catalog.stars) {
       if (s.mag > globalLimit + 0.5) break; // sorted by magnitude
@@ -570,8 +570,20 @@ async function main() {
   const tmp = new THREE.Vector3();
 
   // Put a disc's label just outside its edge, however far you zoom in.
+  /**
+   * How much bigger to draw the Sun and Moon. Zoomed out, a true-size Moon is a few
+   * pixels across, far smaller than it looks to the eye (a phone held up covers about
+   * 30° of sky, not the 80° it shows). Zoomed in close, it's drawn true to size.
+   */
+  function bodyScale() {
+    if (!layers.bigBodies) return 1;
+    const t = Math.min(1, Math.max(0, (view.state.fov - 3) / (60 - 3)));
+    return 1 + 2.5 * t * t * (3 - 2 * t);
+  }
+  const shownRadius = (body) => body.angularRadius * bodyScale();
+
   function edgeOffset(body) {
-    const px = body.angularRadius * (canvas.clientHeight / (view.state.fov * (Math.PI / 180)));
+    const px = shownRadius(body) * (canvas.clientHeight / (view.state.fov * (Math.PI / 180)));
     const k = Math.max(12, px * 0.75 + 6);
     return [k, -k];
   }
@@ -661,7 +673,7 @@ async function main() {
     const sd = selectionDir();
     if (sd && selection.type !== "constellation") {
       const angR =
-        selection.type === "moon" ? sky.moon.angularRadius : selection.type === "sun" ? sky.sun.angularRadius : 0;
+        selection.type === "moon" ? shownRadius(sky.moon) : selection.type === "sun" ? shownRadius(sky.sun) : 0;
       const px = angR * (canvas.clientHeight / (view.state.fov * (Math.PI / 180)));
       if (px < 14)
         items.push({
@@ -770,8 +782,8 @@ async function main() {
       moonE * Math.max(0, sky.moon.trueDir.y) * mean(tMoon);
     ground.update(groundE, layers.ground);
 
-    sun.update(sky.sun, tSun, sunLevel, exposure, camera, eclipse);
-    moon.update(sky.moon, sky, tMoon, exposure);
+    sun.update(sky.sun, tSun, sunLevel, exposure, camera, eclipse, bodyScale());
+    moon.update(sky.moon, sky, tMoon, exposure, camera, bodyScale());
     planetPoints.update(sky.planets);
     overlays.updateFrames(sky);
     updatePaths(now);

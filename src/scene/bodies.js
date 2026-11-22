@@ -7,6 +7,7 @@ export const MOON_DISTANCE = 980;
 
 const SUN_LUMINANCE = 1.6e9; // cd/m² at the solar surface, seen from outside the atmosphere
 const FULL_MOON_LUMINANCE = 2500; // average cd/m² of the full Moon's disc
+const GLOW_RADII = 10; // the Moon's glow reaches this many lunar radii
 
 /** The Sun: a limb-darkened disc plus a glare halo that scales with how dazzling it is. */
 export function createSun(shared, glsl) {
@@ -69,8 +70,8 @@ export function createSun(shared, glsl) {
   mesh.frustumCulled = false;
 
   /** sky: computeSky().sun, transmit: RGB, dim: 0..1, exposure: current */
-  function update(sun, transmit, dim, exposure, camera, uncovered = 1) {
-    const angR = sun.angularRadius;
+  function update(sun, transmit, dim, exposure, camera, uncovered = 1, scale = 1) {
+    const angR = sun.angularRadius * scale;
     const discRadius = Math.tan(angR) * SUN_DISTANCE;
     const glareScale = 12; // halo extends this many solar radii
     mesh.position.copy(sun.dir).multiplyScalar(SUN_DISTANCE);
@@ -152,8 +153,52 @@ export function createMoon(shared, glsl, texture, textureMean) {
   mesh.matrixAutoUpdate = false;
   const basis = new THREE.Matrix4();
 
-  function update(moon, sky, transmit, exposure) {
-    const r = Math.tan(moon.angularRadius) * MOON_DISTANCE;
+  // The glow around a bright Moon at night: light scattered by haze and inside
+  // the eye. It's what makes the Moon look dazzling, more than the disc itself.
+  const glowUniforms = {
+    uGlow: { value: 0 },
+    uTint: { value: new THREE.Vector3(1, 1, 1) },
+    uDiscFraction: { value: 1 / GLOW_RADII },
+  };
+  const glow = new THREE.Mesh(
+    new THREE.PlaneGeometry(1, 1),
+    new THREE.ShaderMaterial({
+      uniforms: { ...shared, ...glowUniforms },
+      vertexShader: /* glsl */ `
+        ${glsl.PROJECTION}
+        varying vec2 vUv;
+        void main() {
+          vUv = uv * 2.0 - 1.0;
+          gl_Position = projectView(viewMatrix * modelMatrix * vec4(position, 1.0));
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        ${glsl.DISPLAY}
+        uniform float uGlow;
+        uniform vec3 uTint;
+        uniform float uDiscFraction;
+        varying vec2 vUv;
+        void main() {
+          float r = length(vUv) / uDiscFraction; // 1.0 at the Moon's limb
+          if (r < 1.0) discard;
+          float d = r - 1.0;
+          float outer = 1.0 / uDiscFraction;
+          float g = uGlow * (0.5 / (1.0 + d * d * 2.0) + 0.12 * exp(-d * 0.5)) * (1.0 - smoothstep(0.5 * outer, outer, r));
+          gl_FragColor = vec4(linearToSrgb(clamp(uTint * g, 0.0, 1.0)), 0.0); // additive
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.CustomBlending,
+      blendSrc: THREE.OneFactor,
+      blendDst: THREE.OneMinusSrcAlphaFactor,
+    })
+  );
+  glow.renderOrder = 6;
+  glow.frustumCulled = false;
+
+  function update(moon, sky, transmit, exposure, camera, scale = 1) {
+    const r = Math.tan(moon.angularRadius * scale) * MOON_DISTANCE;
     moonOrientation(moon.axis, sky.eqjToWorld, basis);
     mesh.matrix
       .copy(basis)
@@ -169,8 +214,19 @@ export function createMoon(shared, glsl, texture, textureMean) {
     uniforms.uEarthshine.value = FULL_MOON_LUMINANCE * 1.2e-4 * earthPhase * earthPhase;
     uniforms.uMoonExposure.value = Math.min(exposure, 0.9 / FULL_MOON_LUMINANCE);
     mesh.visible = moon.alt > -3;
+
+    // Glow: grows with how bright the Moon is compared with what the eye is adapted to,
+    // so it's strong on a dark night and gone in daylight.
+    const E = (moon.illuminance * (transmit[0] + transmit[1] + transmit[2])) / 3;
+    glowUniforms.uGlow.value = 0.45 * (1 - Math.exp(-E * exposure * 12));
+    const m = Math.max(transmit[0], transmit[1], transmit[2], 1e-6);
+    glowUniforms.uTint.value.set((transmit[0] / m) * 0.95, (transmit[1] / m) * 0.93, (transmit[2] / m) * 0.88);
+    glow.position.copy(moon.dir).multiplyScalar(MOON_DISTANCE);
+    glow.quaternion.copy(camera.quaternion);
+    glow.scale.setScalar(r * 2 * GLOW_RADII);
+    glow.visible = mesh.visible && glowUniforms.uGlow.value > 0.002;
   }
-  return { mesh, update };
+  return { mesh, glow, update };
 }
 
 /** Ground: a dark hemisphere that fades into horizon haze. Can be made see-through. */
