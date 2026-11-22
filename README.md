@@ -30,7 +30,7 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
   Moon looks in your sky right now, so near the equator a crescent lies on its back.
 - **Time tracks:** drag along a 24-hour track shaded by where the Sun is (night, twilight, day), or along a date track
   shaded by day length through the year, with the solstices and equinoxes marked. A year stepper sits beside it, and
-  time can play from −1 month/s to +1 month/s.
+  time can play from −12 hours/s to +12 hours/s.
 - **Wide views without distortion:** zoomed in, the view uses ordinary perspective. Zoom out past about 70° and it
   blends into a stereographic ("fisheye") projection, which keeps circles round, so the Sun's daily arc reads
   correctly. **Look up** shows the whole sky as a dome; press it again to return to the horizon.
@@ -56,6 +56,9 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
   (with no nearer land in the way) are labelled in green. Tap one for its height and distance, or fly to its summit and
   watch the land drop away as you climb. Towns and villages, lighthouses, observatories, and tall towers and
   masts are labelled too, when you can see them.
+- **See through the earth:** turn off **Solid ground** and the hills become a faint outline. Below them the sky is
+  always a dark night sky, whatever the time of day, so you can see the stars, planets, Sun and Moon that are below
+  the land, and read their labels.
   Buildings and trees aren't included, and a 1 km share-link position can move the nearest hills a little.
 - Works with mouse, keyboard and touch.
 
@@ -134,7 +137,7 @@ planetarium/
   public domain)
 - Moon texture: [NASA SVS CGI Moon Kit](https://svs.gsfc.nasa.gov/4720) (LRO, public domain)
 - Coastlines and cities: [Natural Earth](https://www.naturalearthdata.com) (public domain)
-- Mountain names: © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors (ODbL), via the
+- Mountain, place and landmark names: © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors (ODbL), via the
   [Overpass API](https://overpass-api.de)
 - Terrain: [Terrain Tiles on AWS](https://registry.opendata.aws/terrain-tiles/), built by Mapzen from SRTM, EU-DEM,
   Kartverket, GMTED, ETOPO1 and others ([attribution](https://github.com/tilezen/joerd/blob/master/docs/attribution.md))
