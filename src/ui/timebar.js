@@ -102,16 +102,22 @@ export function createTimebar({ clock, getLocation }) {
     })
   );
   const monthStarts = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
-  const monthFmt = new Intl.DateTimeFormat(navigator.language, { month: "short", timeZone: "UTC" });
-  $("year-ticks").replaceChildren(
-    ...monthStarts.map((d, m) => {
-      const s = document.createElement("span");
-      s.className = "month";
-      s.style.left = `${((d + 15) / 365) * 100}%`;
-      s.textContent = monthFmt.format(Date.UTC(2001, m, 15));
-      return s;
-    })
-  );
+  const monthName = (style) => (m) =>
+    new Intl.DateTimeFormat(navigator.language, { month: style, timeZone: "UTC" }).format(Date.UTC(2001, m, 15));
+  const shortMonths = monthStarts.map((_, m) => monthName("short")(m));
+  const narrowMonths = monthStarts.map((_, m) => monthName("narrow")(m));
+  const monthLabels = monthStarts.map((d) => {
+    const s = document.createElement("span");
+    s.className = "month";
+    s.style.left = `${((d + 15) / 365) * 100}%`;
+    return s;
+  });
+  $("year-ticks").replaceChildren(...monthLabels);
+  // Single letters when the track is too narrow for "Jan", "Feb"…
+  new ResizeObserver(() => {
+    const names = yearTrack.clientWidth < 480 ? narrowMonths : shortMonths;
+    monthLabels.forEach((el, m) => (el.textContent = names[m]));
+  }).observe(yearTrack);
 
   // ---- Time of day ----
   let dragDayStart = null;
