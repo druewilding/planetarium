@@ -2,6 +2,7 @@
 // whatever is selected. Expensive searches are cached per local day.
 
 import { A, AU_KM, Body, compassPoint, R2D } from "../astro.js";
+import { seasonAt } from "../season.js";
 import { formatDateTime, formatDuration, formatShortDate, formatTime, startOfLocalDay } from "../timezone.js";
 
 const ENTITIES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\u0022": "&quot;" };
@@ -266,7 +267,15 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, cat
       )
       .join("");
     const sunUp = sky.sun.alt > -6;
-    return `<h3>${esc(loc.name)}</h3><p class="kind">Today at a glance</p>
+    const season = seasonAt(s.ms, loc.lat, startOfLocalDay(s.ms, loc));
+    let seasonText = "Today at a glance";
+    if (season?.event) seasonText = `${season.event} today · ${season.eventMeaning}`;
+    else if (season?.tropical) seasonText = "Tropical: no real summer or winter here";
+    else if (season) {
+      const days = Math.ceil(season.daysToNext);
+      seasonText = `${season.label} · ${days === 1 ? "1 day" : `${days} days`} to the ${season.nextEvent}`;
+    }
+    return `<h3>${esc(loc.name)}</h3><p class="kind">${seasonText}</p>
       <div class="section"><h4><button class="jump" data-select="sun" title="Look at the Sun">Sun</button></h4>${sunDetails(s, false)}</div>
       <div class="section"><h4><button class="jump" data-select="moon" title="Look at the Moon">Moon</button></h4>${moonDetails(s, false)}</div>
       <div class="section"><h4>Planets up now</h4>${visible ? `<dl>${visible}</dl>` : NO_PLANETS}</div>

@@ -752,15 +752,22 @@ input[type="number"]:focus {
 }
 
 .time-readout {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 4px 10px;
+  display: grid;
+  justify-items: start;
+  gap: 2px;
   padding: 0;
   border: 0;
   background: none;
   cursor: pointer;
   text-align: left;
+}
+
+/* The clock and season badge share one line, so nothing jumps as the date changes. */
+.clock-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
 }
 
 #time-clock {
@@ -1119,4 +1126,39 @@ button.info-head:hover {
 .look-up[aria-pressed="true"] {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* Season badge next to the clock */
+.season-badge {
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 16px;
+  border: 1px solid currentColor;
+}
+
+/* Solstice and equinox days stand out */
+.season-badge.event {
+  background: color-mix(in srgb, currentColor 22%, transparent);
+}
+
+.season-badge.spring {
+  color: #8be08b;
+}
+
+.season-badge.summer {
+  color: #ffc76b;
+}
+
+.season-badge.autumn {
+  color: #ff9c6b;
+}
+
+.season-badge.winter {
+  color: #8fc8ff;
+}
+
+.season-badge.tropical {
+  color: #6fe0c8;
 }

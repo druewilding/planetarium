@@ -3,6 +3,7 @@
 // stepper, play/speed buttons and a typed date/time entry.
 
 import { A, Body, D2R } from "../astro.js";
+import { seasonAt } from "../season.js";
 import {
   dayOfYear,
   formatDate,
@@ -228,6 +229,22 @@ export function createTimebar({ clock, getLocation }) {
     }
   }
 
+  // ---- Season badge ----
+  const seasonEl = $("time-season");
+  function showSeason(loc) {
+    const s = seasonAt(clock.ms, loc.lat, startOfLocalDay(clock.ms, loc));
+    seasonEl.hidden = !s;
+    if (!s) return;
+    seasonEl.textContent = s.label;
+    seasonEl.className = `season-badge ${s.name}${s.event ? " event" : ""}`;
+    if (s.event) seasonEl.title = `${s.event} at ${formatTime(s.eventTime, loc)}: ${s.eventMeaning}.`;
+    else if (s.tropical)
+      seasonEl.title =
+        "Close to the equator the Sun is high all year, so there's no real summer or winter. Many places have wet and dry seasons instead.";
+    else
+      seasonEl.title = `Astronomical ${s.name} in the ${loc.lat < 0 ? "southern" : "northern"} hemisphere: ${formatDate(s.start, loc)} – ${formatDate(s.end, loc)}`;
+  }
+
   let lastText = "";
   function update() {
     const loc = getLocation();
@@ -240,12 +257,13 @@ export function createTimebar({ clock, getLocation }) {
     yearThumb.style.left = `${(dayOfYear(clock.ms, loc) / n) * 100}%`;
 
     const seconds = clock.playing && Math.abs(clock.rate) === 1;
-    const text = `${formatTime(clock.ms, loc, seconds)}|${formatDate(clock.ms, loc)}|${zoneLabel(clock.ms, loc)}|${clock.rateLabel}|${clock.playing}`;
+    const text = `${formatTime(clock.ms, loc, seconds)}|${formatDate(clock.ms, loc)}|${zoneLabel(clock.ms, loc)}|${clock.rateLabel}|${clock.playing}|${Math.round(loc.lat)}`;
     if (text !== lastText) {
       lastText = text;
       $("time-clock").textContent = formatTime(clock.ms, loc, seconds);
       $("time-date").textContent = formatDate(clock.ms, loc);
       $("time-zone").textContent = zoneLabel(clock.ms, loc);
+      showSeason(loc);
       $("rate-label").textContent = clock.rateLabel;
       $("year-label").textContent = String(shifted(clock.ms, loc).getUTCFullYear());
       yearTrack.setAttribute("aria-valuetext", formatDate(clock.ms, loc));
