@@ -63,7 +63,11 @@ export function createSensor() {
     const DOE = window.DeviceOrientationEvent;
     if (typeof DOE?.requestPermission === "function") {
       const answer = await DOE.requestPermission();
-      if (answer !== "granted") throw new Error("Motion & orientation access was not allowed.");
+      if (answer !== "granted") {
+        throw new Error(
+          "Motion sensors are blocked for this site. Allow them in the browser's site settings (tap the icon left of the address), then reload."
+        );
+      }
     }
     window.addEventListener("deviceorientationabsolute", onAbsolute);
     window.addEventListener("deviceorientation", onRelative);
