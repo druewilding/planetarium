@@ -272,6 +272,19 @@ async function main() {
   $("zoom-in").addEventListener("click", () => view.zoom(0.6));
   $("zoom-out").addEventListener("click", () => view.zoom(1 / 0.6));
 
+  // ---- Reset: back to the normal field of view, keeping what you were looking at on screen ----
+  const resetBtn = $("reset-view");
+  function resetView() {
+    const base = horizonAltitude(DEFAULT_FOV);
+    const looking = view.state.alt > 80 ? base : view.state.alt;
+    beforeLookUp = null;
+    view.lookTo({ alt: Math.max(base, looking - DEFAULT_FOV / 2 + 12), fov: DEFAULT_FOV });
+  }
+  resetBtn.addEventListener("click", resetView);
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "0" && !e.target.closest("input, textarea, select, dialog, [role=slider]")) resetView();
+  });
+
   // ---- Panels ----
   createLayersPanel({
     onChange: (l) => {
@@ -723,6 +736,8 @@ async function main() {
     info.update();
     const { alt, az } = view.state;
     const up = lookingUp();
+    const changed = up || Math.abs(view.state.fov - DEFAULT_FOV) > 2;
+    if (resetBtn.hidden === changed) resetBtn.hidden = !changed;
     if (up !== (lookUpBtn.getAttribute("aria-pressed") === "true")) {
       lookUpBtn.setAttribute("aria-pressed", String(up));
       lookUpBtn.querySelector("span").textContent = up ? "Back to horizon" : "Look up";

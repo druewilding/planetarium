@@ -43,14 +43,15 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
 
 ### Controls
 
-| Action           | Mouse / touch                | Keyboard   |
-| ---------------- | ---------------------------- | ---------- |
-| Look around      | Drag the sky, or the compass | Arrow keys |
-| Zoom             | Scroll / pinch / + − buttons | `+` / `-`  |
-| Select an object | Click / tap                  |            |
-| Play / pause     | ▶ button                     | Space      |
-| Faster / slower  | ⏩ / ⏪                      | `]` / `[`  |
-| Back to now      | Now                          | `n`        |
+| Action           | Mouse / touch                   | Keyboard   |
+| ---------------- | ------------------------------- | ---------- |
+| Look around      | Drag the sky, or the compass    | Arrow keys |
+| Zoom             | Scroll / pinch / + − buttons    | `+` / `-`  |
+| Select an object | Click / tap                     |            |
+| Reset view       | Reset view button (when zoomed) | `0`        |
+| Play / pause     | ▶ button                        | Space      |
+| Faster / slower  | ⏩ / ⏪                         | `]` / `[`  |
+| Back to now      | Now                             | `n`        |
 
 From the browser console, `planetarium.clock.set(Date.parse("2027-08-02T10:00Z"))` jumps to any instant (that one
 is a total solar eclipse over Spain and North Africa).
