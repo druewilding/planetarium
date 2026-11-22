@@ -39,6 +39,9 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
   the celestial equator, and alt/az and RA/Dec grids.
 - **Info panel:** rise, set and transit times, twilight, day length, Moon phases and age, distances, light travel time,
   and the brightest stars in each constellation.
+- **Point at sky:** on a phone, hold it up and the sky follows it, so you can aim at a star and read its name. It
+  uses the compass for north (via `deviceorientationabsolute` on Android, `webkitCompassHeading` on iOS). Phone
+  compasses are often a few degrees out and point to magnetic north, so dragging sideways turns the sky into line.
 - Works with mouse, keyboard and touch.
 
 ### Controls
@@ -48,6 +51,7 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
 | Look around      | Drag the sky, or the compass | Arrow keys |
 | Zoom             | Scroll / pinch / − + buttons | `+` / `-`  |
 | Select an object | Click / tap                  |            |
+| Point at sky     | Point at sky button (phones) |            |
 | Reset view       | Reset view button            | `0`        |
 | Play / pause     | ▶ button                     | Space      |
 | Faster / slower  | ⏩ / ⏪                      | `]` / `[`  |
@@ -65,7 +69,8 @@ npm start            # live-server on http://localhost:3000
 python3 -m http.server 3000
 ```
 
-Location access needs `https://` or `localhost`.
+Location access and the motion sensors (Point at sky) need `https://` or `localhost`. To try Point at sky on a
+phone before deploying, serve it over HTTPS, for example with a tunnel such as `npx localtunnel --port 3000`.
 
 ## Project structure
 

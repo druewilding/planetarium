@@ -22,6 +22,7 @@ import { createInfo } from "./ui/info.js";
 import { createLabels } from "./ui/labels.js";
 import { createLocation } from "./ui/location.js";
 import { createLayersPanel, createSearch } from "./ui/panels.js";
+import { createSensor, sensorSupported } from "./ui/sensor.js";
 import { createTimebar } from "./ui/timebar.js";
 import { createView } from "./ui/view.js";
 
@@ -263,7 +264,8 @@ async function main() {
     return { alt: Math.max(base, body.alt - fov / 2 + 12), az: body.az, fov };
   }
 
-  const view = createView(camera, canvas, { onClick: pick, unproject: projection.unproject });
+  const sensor = createSensor();
+  const view = createView(camera, canvas, { onClick: pick, unproject: projection.unproject, sensor });
   {
     view.lookTo(defaultView(computeSky(clock.ms, loc)));
     view.update(10);
@@ -346,6 +348,7 @@ async function main() {
   // ---- Compass ----
   const compass = createCompass($("compass"), {
     onTurn: (d) => {
+      if (sensor.active) return sensor.nudge(d); // line the compass up by hand
       view.lookTo({ az: view.state.az + d });
       view.update(1); // apply immediately, no easing while dragging
     },
@@ -362,6 +365,7 @@ async function main() {
   let beforeLookUp = null;
   const lookingUp = () => view.state.alt > 80 && view.state.fov > 140;
   lookUpBtn.addEventListener("click", () => {
+    if (sensor.active) stopSensor();
     if (lookingUp()) {
       view.lookTo(beforeLookUp ?? defaultView(sky));
       beforeLookUp = null;
@@ -371,6 +375,49 @@ async function main() {
       view.lookTo({ alt: 89.9, fov: 180 });
     }
   });
+
+  // ---- Point your phone at the sky ----
+  const sensorBtn = $("sensor-btn");
+  const sensorHint = $("sensor-hint");
+  let hintTimer = 0;
+  function showHint(text, ms = 6000) {
+    sensorHint.textContent = text;
+    sensorHint.hidden = false;
+    clearTimeout(hintTimer);
+    hintTimer = setTimeout(() => (sensorHint.hidden = true), ms);
+  }
+  function stopSensor() {
+    sensor.stop();
+    sensorBtn.setAttribute("aria-pressed", "false");
+  }
+  if (sensorSupported()) {
+    sensorBtn.hidden = false;
+    sensorBtn.addEventListener("click", async () => {
+      if (sensor.active) {
+        stopSensor();
+        return;
+      }
+      try {
+        await sensor.start();
+        sensorBtn.setAttribute("aria-pressed", "true");
+        beforeLookUp = null;
+        if (lookingUp()) view.lookTo({ fov: DEFAULT_FOV });
+        if (!clock.following) clock.now(); // the real sky, right now
+        showHint("Hold your phone up to the sky. If it doesn't line up, drag sideways to turn the sky into place.");
+        // No readings at all usually means a desktop browser or a blocked sensor.
+        setTimeout(() => {
+          if (sensor.active && !sensor.orientation(new THREE.Quaternion())) {
+            stopSensor();
+            showHint("No motion sensor readings came through on this device.");
+          } else if (sensor.active && !sensor.hasCompass) {
+            showHint("No compass on this device, so north may be off. Drag sideways to line the sky up.");
+          }
+        }, 1500);
+      } catch (err) {
+        showHint(err.message || "Couldn't start the motion sensor.");
+      }
+    });
+  }
 
   // Keep floating controls clear of the time bar, whatever height it wraps to.
   const timebarEl = document.querySelector(".timebar");
