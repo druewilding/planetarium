@@ -17,7 +17,7 @@
 
 import { A } from "./astro.js";
 import { cachedFetch } from "./cachedfetch.js";
-import { LAND, loadWater, OPEN_OCEAN } from "./water.js";
+import { LAND, loadWater, OCEAN, OPEN_OCEAN } from "./water.js";
 
 const TILE_URL = (z, x, y) => `https://elevation-tiles-prod.s3.amazonaws.com/terrarium/${z}/${x}/${y}.png`;
 // Public Overpass servers for OpenStreetMap queries, tried in turn: they're often busy.
@@ -280,7 +280,9 @@ export async function computeProfile(lat, lon, { groundHint = null, eye = null, 
     kind = w?.water(laDeg, lo) ?? LAND;
     if (kind === OPEN_OCEAN) return 0;
     const h = levelFor[s].height(laDeg, lo);
-    return w && d <= NEAR_KM * 1000 && h > 30 ? tidyShore(w, levelFor[s], laDeg, lo, h) : h;
+    if (!w || d > NEAR_KM * 1000 || h <= 2) return h;
+    // Nearby the map is sharp enough to trust: where it says sea, it's sea level.
+    return kind === OCEAN ? 2 : h > 30 ? tidyShore(w, levelFor[s], laDeg, lo, h) : h;
   };
   // The elevation tiles have the odd wall of nonsense along a shore (Reykjavík's
   // stands 230 m high, on land 85 m high). A real cliff has land behind it about
@@ -300,7 +302,10 @@ export async function computeProfile(lat, lon, { groundHint = null, eye = null, 
     ]) {
       if (w.fromSea(la + a, lo + b) > sea + 100) behind = Math.max(behind, level.height(la + a, lo + b));
     }
-    return behind > -Infinity && h > behind + 40 ? behind : h;
+    // Narrow land (a pier, a spit, a small island) has nothing behind it: there,
+    // it can't rise out of the water steeper than about 76°.
+    if (behind === -Infinity) return Math.min(h, 5 + 4 * sea);
+    return h > behind + 40 ? behind : h;
   };
 
   /** What the water map says at a distance along a direction. */
