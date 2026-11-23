@@ -1,7 +1,7 @@
 import * as THREE from "three";
 
 import { moonOrientation } from "../astro.js";
-import { SAMPLES as SKYLINE_SAMPLES } from "../terrain.js";
+import { SAMPLES as SKYLINE_SAMPLES, WATER_ROWS, WATER_SCALE, WATER_SPAN } from "../terrain.js";
 
 export const SUN_DISTANCE = 990;
 export const MOON_DISTANCE = 980;
@@ -265,14 +265,27 @@ export function createSkylineTexture() {
 
 /**
  * Ground: a dark hemisphere that fades into horizon haze, cut along the real
- * skyline when there's terrain (see terrain.js). With solid ground off it's only
- * a faint outline of the skyline, and you see through the earth.
+ * skyline when there's terrain (see terrain.js), with the sea, lakes and rivers
+ * mirroring the sky. With solid ground off it's only a faint outline of the
+ * skyline, and you see through the earth.
  */
 export function createGround(shared, glsl) {
   const horizon = shared.uHorizon.value;
+  // Where the water is: columns by azimuth, rows by altitude (see terrain.js).
+  let water = new THREE.DataTexture(new Uint8Array(SKYLINE_SAMPLES * WATER_ROWS), SKYLINE_SAMPLES, WATER_ROWS);
+  water.format = THREE.RedFormat;
+  water.magFilter = water.minFilter = THREE.LinearFilter;
+  water.wrapS = THREE.RepeatWrapping;
+  water.needsUpdate = true;
   const uniforms = {
     ...shared,
     uGroundL: { value: 0 },
+    uWater: { value: water },
+    uWaterCols: { value: SKYLINE_SAMPLES },
+    uSunDir: { value: new THREE.Vector3(0, -1, 0) },
+    uSunLight: { value: new THREE.Vector3() },
+    uMoonDir: { value: new THREE.Vector3(0, -1, 0) },
+    uMoonLight: { value: new THREE.Vector3() },
   };
   const material = new THREE.ShaderMaterial({
     uniforms,
@@ -289,7 +302,54 @@ export function createGround(shared, glsl) {
       ${glsl.SKY_LOOKUP}
       ${glsl.LAND}
       uniform float uGroundL;
+      uniform sampler2D uWater;
+      uniform float uWaterCols;
+      uniform vec3 uSunDir;
+      uniform vec3 uSunLight;
+      uniform vec3 uMoonDir;
+      uniform vec3 uMoonLight;
       varying vec3 vDir;
+
+      // How much of the ground this way is water (0 to 1).
+      float waterAt(vec3 d, float alt) {
+        float az = atan(d.x, -d.z);
+        float x = degrees(alt) / ${WATER_SCALE};
+        float s = sign(x) * log(abs(x) + sqrt(x * x + 1.0)); // asinh
+        float v = 0.5 + 0.5 * s / ${WATER_SPAN.toFixed(6)};
+        float w = texture2D(uWater, vec2(fract(az / 6.28318530718 + 0.5 / uWaterCols), v)).r;
+        // A crisp shore through the blend between samples, rather than steps.
+        return clamp((w - 0.5) / max(fwidth(w), 1e-3) + 0.5, 0.0, 1.0);
+      }
+
+      // Fresnel reflectance of water (Schlick).
+      float fresnel(float c) {
+        return 0.02 + 0.98 * pow(1.0 - clamp(c, 0.0, 1.0), 5.0);
+      }
+
+      // Glitter: sunlight (or moonlight) off the slopes of small waves, with the
+      // usual spread of wave slopes on a breezy day (Cox and Munk). Seen from near
+      // the water it stretches into a path towards the Sun.
+      vec3 glint(vec3 v, vec3 l, vec3 light) {
+        if (l.y <= 0.0 || v.y <= 0.0) return vec3(0.0);
+        vec3 h = normalize(v + l);
+        float t2 = dot(h.xz, h.xz) / (h.y * h.y);
+        const float m2 = 0.03;
+        float D = exp(-t2 / m2) / (3.14159265 * m2 * h.y * h.y * h.y * h.y);
+        return light * fresnel(dot(v, h)) * D / (4.0 * max(v.y, 0.03));
+      }
+
+      // Water: the sky (or the hills across it) mirrored, more so at a low angle,
+      // over the dim colour of the water itself. Ripples blur and darken the hills'
+      // reflection, and the water tints it.
+      vec3 waterColour(vec3 d, vec3 land) {
+        vec3 m = vec3(d.x, -d.y, d.z);
+        bool hills = asin(clamp(m.y, -1.0, 1.0)) < landAlt(m);
+        vec3 mirrored = hills ? land * vec3(0.45, 0.55, 0.65) : skyAt(m);
+        vec3 body = vec3(0.012, 0.03, 0.04) * uGroundL;
+        vec3 c = mix(body, mirrored, fresnel(-d.y) * 0.9);
+        return c + glint(-d, uSunDir, uSunLight) + glint(-d, uMoonDir, uMoonLight);
+      }
+
       void main() {
         vec3 d = normalize(vDir);
         // The skyline appears at full height and fades in, rather than growing.
@@ -319,6 +379,8 @@ export function createGround(shared, glsl) {
         hazeAmount = max(hazeAmount, distance);
         vec3 albedo = vec3(0.11, 0.12, 0.09);
         vec3 ground = albedo * uGroundL;
+        float wet = waterAt(d, alt) * step(0.001, uTerrain);
+        if (wet > 0.0) ground = mix(ground, waterColour(d, ground), wet);
         vec3 haze = skyAt(normalize(vec3(d.x, 0.003, d.z)));
         vec4 c = display(mix(ground, haze, hazeAmount));
         float fadeIn = mix(1.0, uTerrain, smoothstep(-edge, edge, alt));
@@ -339,10 +401,35 @@ export function createGround(shared, glsl) {
     return new THREE.SphereGeometry(900, 180, 48, 0, Math.PI * 2, Math.PI / 2 - top, Math.PI / 2 + top);
   }
 
-  /** horizontal illuminance in lux → ground luminance */
-  function update(illuminance, terrain) {
+  /**
+   * `illuminance`: horizontal illuminance in lux → ground luminance. `sun` and
+   * `moon`: { dir, light: [r, g, b] lux reaching the water } for the glitter.
+   */
+  function update(illuminance, terrain, sun, moon) {
     uniforms.uGroundL.value = illuminance / Math.PI;
     uniforms.uTerrain.value = terrain;
+    uniforms.uSunDir.value.copy(sun.dir);
+    uniforms.uSunLight.value.fromArray(sun.light);
+    uniforms.uMoonDir.value.copy(moon.dir);
+    uniforms.uMoonLight.value.fromArray(moon.light);
+  }
+
+  /** Water on the ground (from a profile, see terrain.js: `cols` directions), or null for none. */
+  function setWater(data, cols = SKYLINE_SAMPLES) {
+    const image = water.image;
+    if (!data) {
+      image.data.fill(0);
+    } else if (image.width !== cols) {
+      // A different size: three.js needs a new texture for that.
+      water.dispose();
+      water = new THREE.DataTexture(data.slice(), cols, WATER_ROWS);
+      water.format = THREE.RedFormat;
+      water.magFilter = water.minFilter = THREE.LinearFilter;
+      water.wrapS = THREE.RepeatWrapping;
+      uniforms.uWater.value = water;
+      uniforms.uWaterCols.value = cols;
+    } else image.data.set(data);
+    water.needsUpdate = true;
   }
 
   let geometryTop = 1;
@@ -362,6 +449,7 @@ export function createGround(shared, glsl) {
   /** Show a skyline (from terrain.js), or null for a flat horizon. */
   function setSkyline(profile) {
     setSkylineAltitudes(profile?.altitude, profile?.max ?? 0);
+    setWater(profile?.water, profile?.waterCols);
   }
-  return { mesh, update, setSkyline, setSkylineAltitudes };
+  return { mesh, update, setSkyline, setSkylineAltitudes, setWater };
 }
