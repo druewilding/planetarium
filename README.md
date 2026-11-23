@@ -56,10 +56,14 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
   (with no nearer land in the way) are labelled in green. Tap one for its height and distance, or fly to its summit and
   watch the land drop away as you climb. Towns and villages, lighthouses, observatories, and tall towers and
   masts are labelled too, when you can see them.
+  Buildings and trees aren't included, and a 1 km share-link position can move the nearest hills a little.
+- **Sea, lakes and rivers:** wherever you are, the water you can see mirrors the sky and the hills across it, more
+  strongly at a low angle, with a glittering path under the Sun or the Moon. The water comes from OpenStreetMap, so
+  it follows the real coast; it's drawn where the land would let you see it, so a headland or a slope down to the
+  shore can hide the sea.
 - **See through the earth:** turn off **Solid ground** and the hills become a faint outline. Below them the sky is
   always a dark night sky, whatever the time of day, so you can see the stars, planets, Sun and Moon that are below
   the land, and read their labels.
-  Buildings and trees aren't included, and a 1 km share-link position can move the nearest hills a little.
 - Works with mouse, keyboard and touch.
 
 ### Controls
@@ -114,6 +118,8 @@ planetarium/
 │   ├── timezone.js        # wall-clock time for any location
 │   ├── projection.js      # perspective ↔ stereographic projection (JS side)
 │   ├── terrain.js         # elevation tiles → skyline profile, and when bodies clear it
+│   ├── water.js           # map tiles → where the sea, lakes and rivers are
+│   ├── cachedfetch.js     # fetch, keeping a copy in Cache Storage
 │   ├── scene/
 │   │   ├── atmosphere.js  # scattering model (GLSL + JS twin)
 │   │   ├── bodies.js      # Sun, Moon, ground
@@ -139,6 +145,8 @@ planetarium/
 - Coastlines and cities: [Natural Earth](https://www.naturalearthdata.com) (public domain)
 - Mountain, place and landmark names: © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors (ODbL), via the
   [Overpass API](https://overpass-api.de)
+- Water: [OpenFreeMap](https://openfreemap.org) vector tiles, © [OpenMapTiles](https://www.openmaptiles.org),
+  data © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors (ODbL)
 - Terrain: [Terrain Tiles on AWS](https://registry.opendata.aws/terrain-tiles/), built by Mapzen from SRTM, EU-DEM,
   Kartverket, GMTED, ETOPO1 and others ([attribution](https://github.com/tilezen/joerd/blob/master/docs/attribution.md))
 

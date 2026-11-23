@@ -11,8 +11,13 @@
 //
 // Distances bend with the Earth's curve, eased by terrestrial refraction (light
 // near the ground curves down a little, k ≈ 0.13), so far peaks sink as they do.
+//
+// On the same walk it notes which of the ground in view is water (see water.js),
+// so the ground shader can draw the sea, lakes and rivers.
 
 import { A } from "./astro.js";
+import { cachedFetch } from "./cachedfetch.js";
+import { LAND, loadWater, OPEN_OCEAN } from "./water.js";
 
 const TILE_URL = (z, x, y) => `https://elevation-tiles-prod.s3.amazonaws.com/terrarium/${z}/${x}/${y}.png`;
 // Public Overpass servers for OpenStreetMap queries, tried in turn: they're often busy.
@@ -38,13 +43,25 @@ const featuresQuery = (lat, lon, radiusM) => {
   );
 };
 const FEATURE_RADIUS_KM = 50;
-const CACHE_NAME = "terrain-v1";
 const EARTH_R = 6371000;
 const REFRACTION_K = 0.13;
 const R_EFF = EARTH_R / (1 - REFRACTION_K);
 const EYE_HEIGHT = 2; // metres above the ground
 export const SAMPLES = 720; // compass directions, every half degree
 const MAX_LAT = 84; // web-mercator tiles stop at ±85°
+
+// Water on the ground, for each compass direction, by how far below (or above) the
+// horizon you look: rows spaced finely near the horizon, where the land is
+// squeezed into a sliver, and coarsely further down.
+export const WATER_ROWS = 512;
+export const WATER_DETAIL = 4;
+const NEAR_KM = 30; // where the water tiles are fine enough to tidy shores with // directions for water per skyline sample
+export const WATER_SCALE = 0.05; // degrees: rows are spaced evenly in asinh(altitude / this)
+export const WATER_SPAN = Math.asinh(90 / WATER_SCALE);
+const WATER_ROW_ALT = Array.from(
+  { length: WATER_ROWS },
+  (_, r) => WATER_SCALE * Math.sinh((((r + 0.5) / WATER_ROWS) * 2 - 1) * WATER_SPAN)
+);
 
 // Finer tiles near you, coarser further out: [target metres per pixel, reach in km].
 const LEVELS = [
@@ -53,6 +70,13 @@ const LEVELS = [
   [450, 150],
 ];
 const MAX_TILES_PER_LEVEL = 25;
+// Water needs finer rings than the hills: shores close by are seen large.
+const WATER_LEVELS = [
+  [4, 1.5],
+  [12, 6],
+  [50, 30],
+  [200, 150],
+];
 
 const tileCache = new Map(); // "z/x/y" → Promise<Float32Array | null>
 
@@ -64,38 +88,6 @@ function loadTile(z, x, y) {
     tileCache.set(key, fetchTile(z, ((x % n) + n) % n, y));
   }
   return tileCache.get(key);
-}
-
-/**
- * Fetch, keeping a copy in the browser's Cache Storage. Tiles never change and
- * peaks hardly do, and neither server sends caching headers, so the ordinary
- * HTTP cache would only be guessing.
- */
-async function cachedFetch(url, sources = [url], { tries = 2, check = null } = {}) {
-  let cache = null;
-  try {
-    cache = await caches.open(CACHE_NAME);
-    const hit = await cache.match(url);
-    if (hit) return hit;
-  } catch {
-    // No Cache Storage (private window, or not a secure page): just fetch.
-  }
-  let error = null;
-  // By default each source gets a second try: a dropped connection would leave a hole
-  // in the hills. `check` can turn down an answer that came back "OK" but isn't, so
-  // it's never cached.
-  for (const src of sources.flatMap((s) => Array(tries).fill(s))) {
-    try {
-      const res = await fetch(src);
-      if (!res.ok) throw new Error(`HTTP ${res.status} from ${new URL(src).host}`);
-      if (check) await check(res.clone(), src);
-      cache?.put(url, res.clone()).catch(() => {});
-      return res;
-    } catch (err) {
-      error = err;
-    }
-  }
-  throw error;
 }
 
 async function fetchTile(z, x, y) {
@@ -233,8 +225,12 @@ async function loadLevel(lat, lon, metresPerPixel, reachKm) {
  */
 export async function computeProfile(lat, lon, { groundHint = null, eye = null, fast = false } = {}) {
   if (Math.abs(lat) > MAX_LAT) return null;
-  const levels = await Promise.all(LEVELS.map(([m, km]) => loadLevel(lat, lon, m, km)));
+  const [levels, waters] = await Promise.all([
+    Promise.all(LEVELS.map(([m, km]) => loadLevel(lat, lon, m, km))),
+    Promise.all(WATER_LEVELS.map(([m, km]) => loadWater(lat, lon, m, km).catch(() => null))),
+  ]);
   if (levels.every((l) => l.loaded === 0)) return null;
+  const hasWater = waters.some((w) => w?.loaded > 0);
 
   // Standing on a summit: the elevation model rounds peaks off, so trust its mapped height.
   const dem = levels[0].height(lat, lon);
@@ -252,28 +248,146 @@ export async function computeProfile(lat, lon, { groundHint = null, eye = null, 
   // (`fast`, for the frames of a flight, samples more sparsely.)
   for (let d = 100; d <= maxD; d += fast ? Math.max(50, d * 0.02) : Math.max(20, d * 0.008)) steps.push(d);
   const levelFor = steps.map((d) => levels.find((l) => d <= l.reach) ?? levels[levels.length - 1]);
+  const waterFor = steps.map(
+    (d) =>
+      waters[
+        Math.max(
+          0,
+          WATER_LEVELS.findIndex(([, km]) => d <= km * 1000)
+        )
+      ]
+  );
+  // Water gets finer directions than the skyline, so shores running away from
+  // you aren't stepped (not in a flight's frames, which only flash by).
+  const cols = hasWater && !fast ? SAMPLES * WATER_DETAIL : SAMPLES;
+  const per = cols / SAMPLES;
+  const water = hasWater ? new Uint8Array(cols * WATER_ROWS) : null;
+  const visAlt = new Float32Array(steps.length);
+  const visFrom = new Float32Array(steps.length);
+  const visD = new Float32Array(steps.length);
+  const visStep = new Uint16Array(steps.length);
+  const visWater = new Uint8Array(steps.length);
+  const eyeAbove = h0 - ground;
 
-  for (let i = 0; i < SAMPLES; i++) {
+  // The ground at a step along a direction: its height, and what the map says is there.
+  // Out in open ocean the sea is flat, whatever the elevation tiles say.
+  let kind = LAND;
+  const heightAt = (s, d, north, east) => {
+    const la = latR + (d * north) / EARTH_R;
+    const lo = lon + ((d * east) / (EARTH_R * Math.cos(la))) * (180 / Math.PI);
+    const laDeg = (la * 180) / Math.PI;
+    const w = waterFor[s];
+    kind = w?.water(laDeg, lo) ?? LAND;
+    if (kind === OPEN_OCEAN) return 0;
+    const h = levelFor[s].height(laDeg, lo);
+    return w && d <= NEAR_KM * 1000 && h > 30 ? tidyShore(w, levelFor[s], laDeg, lo, h) : h;
+  };
+  // The elevation tiles have the odd wall of nonsense along a shore (Reykjavík's
+  // stands 230 m high, on land 85 m high). A real cliff has land behind it about
+  // as high as its top; a rim standing well above the land behind it is brought
+  // down to that land.
+  const tidyShore = (w, level, la, lo, h) => {
+    const sea = w.fromSea(la, lo);
+    if (sea > 150) return h;
+    const dLat = 200 / 111320;
+    const dLon = dLat / Math.cos((la * Math.PI) / 180);
+    let behind = -Infinity;
+    for (const [a, b] of [
+      [dLat, 0],
+      [-dLat, 0],
+      [0, dLon],
+      [0, -dLon],
+    ]) {
+      if (w.fromSea(la + a, lo + b) > sea + 100) behind = Math.max(behind, level.height(la + a, lo + b));
+    }
+    return behind > -Infinity && h > behind + 40 ? behind : h;
+  };
+
+  /** What the water map says at a distance along a direction. */
+  const waterKindAt = (d, north, east) => {
+    const w =
+      waters[
+        Math.max(
+          0,
+          WATER_LEVELS.findIndex(([, km]) => d <= km * 1000)
+        )
+      ];
+    const la = latR + (d * north) / EARTH_R;
+    const lo = lon + ((d * east) / (EARTH_R * Math.cos(la))) * (180 / Math.PI);
+    return w ? w.water((la * 180) / Math.PI, lo) : LAND;
+  };
+
+  for (let j = 0; j < cols; j++) {
     // Yield now and then so the page stays responsive.
-    if (i % 60 === 0) await new Promise((r) => setTimeout(r, 0));
-    const az = (i / SAMPLES) * 2 * Math.PI;
+    if (j % (60 * per) === 0) await new Promise((r) => setTimeout(r, 0));
+    const az = (j / cols) * 2 * Math.PI;
     const north = Math.cos(az);
     const east = Math.sin(az);
     let best = -Infinity;
     let bestD = maxD;
+    let seen = 0; // ground in view along this direction, nearest first
+    let level = 0; // the height of the water in view just before
     for (let s = 0; s < steps.length; s++) {
       const d = steps[s];
-      const la = latR + (d * north) / EARTH_R;
-      const lo = lon + ((d * east) / (EARTH_R * Math.cos(la))) * (180 / Math.PI);
-      const h = levelFor[s].height((la * 180) / Math.PI, lo);
+      const h = heightAt(s, d, north, east);
       const t = (h - h0 - (d * d) / (2 * R_EFF)) / d;
       if (t > best) {
         best = t;
         bestD = d;
+        if (water) {
+          // Water is flat, so from here it fills only the sliver of view that a
+          // level surface would: never the face of a slope (where the map's coast
+          // and the elevations don't quite line up), and never above eye level.
+          // Water seen just before is the same surface, whatever small bumps the
+          // elevations put in between; ground rising well above it is the shore.
+          const before = seen > 0 && visWater[seen - 1] > 0;
+          const wet = h < h0 && kind !== LAND && !(before && h > level + 3);
+          const dp = s ? steps[s - 1] : d;
+          const flat = (Math.atan((h - h0 - (dp * dp) / (2 * R_EFF)) / dp) * 180) / Math.PI;
+          if (wet) level = before ? Math.min(level, h) : h;
+          visAlt[seen] = (Math.atan(t) * 180) / Math.PI;
+          visD[seen] = d;
+          visStep[seen] = s;
+          visFrom[seen] = wet && !before ? flat : -90;
+          visWater[seen++] = wet ? 255 : 0;
+        }
       }
     }
-    altitude[i] = (Math.atan(best) * 180) / Math.PI;
-    distance[i] = bestD / 1000;
+    if (j % per === 0) {
+      altitude[j / per] = (Math.atan(best) * 180) / Math.PI;
+      distance[j / per] = bestD / 1000;
+    }
+
+    if (water) {
+      // For each row, the nearest ground in view at that angle. Closer than the
+      // first step, the ground is taken as flat.
+      let k = 0;
+      for (let r = 0; r < WATER_ROWS; r++) {
+        const a = WATER_ROW_ALT[r];
+        let w;
+        if (a < visAlt[0] || !seen) {
+          const d = eyeAbove / Math.tan((Math.max(0.01, -a) * Math.PI) / 180);
+          if (d < steps[0] || !seen) {
+            heightAt(0, Math.min(d, steps[0]), north, east);
+            w = kind !== LAND ? 255 : 0;
+          } else w = visWater[0];
+        } else {
+          while (k < seen - 1 && visAlt[k] < a) k++;
+          // A lone wet point is most likely a beach the map and elevations disagree on.
+          const wetAt = (m) => visWater[m] > 0 && (visWater[m - 1] > 0 || visWater[m + 1] > 0);
+          const here = wetAt(k);
+          if (k > 0 && here && !wetAt(k - 1) && visStep[k] === visStep[k - 1] + 1 && a >= visFrom[k]) {
+            // Land down to water between two neighbouring samples: ask the map at
+            // this row's distance. (Not water up to land: the rows between are the
+            // rising shore. Nor across hidden ground: those rows see the far sample.)
+            const f = (a - visAlt[k - 1]) / (visAlt[k] - visAlt[k - 1]);
+            const d = visD[k - 1] + (visD[k] - visD[k - 1]) * f;
+            w = waterKindAt(d, north, east) !== LAND ? 255 : 0;
+          } else w = here && a >= visFrom[k] ? 255 : 0;
+        }
+        water[r * cols + j] = w;
+      }
+    }
   }
   /**
    * Where a summit appears from here (degrees), or null if it's hidden behind
@@ -297,9 +411,7 @@ export async function computeProfile(lat, lon, { groundHint = null, eye = null, 
     const stop = d - Math.max(200, d * 0.03);
     for (let s = 0; s < steps.length && steps[s] < stop; s++) {
       const ds = steps[s];
-      const la = latR + (ds * north) / EARTH_R;
-      const lo = lon + ((ds * east) / (EARTH_R * Math.cos(la))) * (180 / Math.PI);
-      const hs = levelFor[s].height((la * 180) / Math.PI, lo);
+      const hs = heightAt(s, ds, north, east);
       const allowed = strict || ds < d * 0.7 ? 0.003 : 0.035; // tan of about 0.2° or 2°
       if ((hs - h0 - (ds * ds) / (2 * R_EFF)) / ds > t + allowed) return null;
     }
@@ -307,7 +419,16 @@ export async function computeProfile(lat, lon, { groundHint = null, eye = null, 
     return { az, alt: (Math.atan(t) * 180) / Math.PI, distance: d / 1000, height: h };
   }
 
-  return { lat, lon, ground, altitude, distance, max: Math.max(...altitude), summit };
+  return { lat, lon, ground, altitude, distance, water, waterCols: cols, max: Math.max(...altitude), summit };
+}
+
+/** Water rows with fewer directions: every `cols / to`-th column. */
+export function thinWater(water, cols, to) {
+  if (cols === to) return water;
+  const out = new Uint8Array(to * WATER_ROWS);
+  const per = cols / to;
+  for (let r = 0; r < WATER_ROWS; r++) for (let i = 0; i < to; i++) out[r * to + i] = water[r * cols + i * per];
+  return out;
 }
 
 /** A peak's everyday name: "Tromsdalstinden - Sálašoaivi" → "Tromsdalstinden". */

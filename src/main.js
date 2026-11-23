@@ -19,7 +19,14 @@ import * as glsl from "./scene/glsl.js";
 import { createMilkyWay } from "./scene/milkyway.js";
 import { createOverlays } from "./scene/overlays.js";
 import { createPlanetPoints, createPointsMaterial, createStars } from "./scene/points.js";
-import { computeProfile, createTerrain, skylineAt } from "./terrain.js";
+import {
+  computeProfile,
+  createTerrain,
+  SAMPLES as SKYLINE_SAMPLES,
+  skylineAt,
+  thinWater,
+  WATER_ROWS,
+} from "./terrain.js";
 import { formatDateTime, formatTime, startOfLocalDay } from "./timezone.js";
 import { createCompass } from "./ui/compass.js";
 import { createInfo } from "./ui/info.js";
@@ -224,6 +231,10 @@ async function main() {
       const out = flight.view.altitude;
       for (let j = 0; j < out.length; j++) out[j] = a[j] + (b[j] - a[j]) * f;
       ground.setSkylineAltitudes(out, flight.top);
+      const [wa, wb] = [flight.water[i], flight.water[i + 1]];
+      const wet = flight.view.water;
+      if (wa && wb) for (let j = 0; j < wet.length; j++) wet[j] = wa[j] + (wb[j] - wa[j]) * f;
+      ground.setWater(wa && wb ? wet : null, SKYLINE_SAMPLES);
       skyline = flight.view;
       skylineFade = 1;
       if (!locTween) {
@@ -692,6 +703,9 @@ async function main() {
       const endEye = final.ground + 2;
       const climb = Math.min(1200, 150 + 60 * p.distance); // metres above the straight line
       const frames = [start.altitude];
+      // The frames' water is coarser; match the ends to it.
+      const coarse = (p) => p.water && thinWater(p.water, p.waterCols, SKYLINE_SAMPLES);
+      const water = [coarse(start)];
       for (let i = 1; i < steps; i++) {
         const t = i / steps;
         const eye = startEye + (endEye - startEye) * t + climb * Math.sin(Math.PI * t);
@@ -700,12 +714,19 @@ async function main() {
         const frame = await computeProfile(lat, lon, { eye, fast: true });
         if (!frame) throw new Error("No terrain along the way");
         frames.push(frame.altitude);
+        water.push(frame.water);
       }
       frames.push(final.altitude);
+      water.push(coarse(final));
       let top = 0;
       for (const f of frames) for (const v of f) top = Math.max(top, v);
-      const view = { altitude: new Float32Array(final.altitude.length), max: top, ground: final.ground };
-      flight = { frames, final, top, view };
+      const view = {
+        altitude: new Float32Array(final.altitude.length),
+        water: new Uint8Array(WATER_ROWS * SKYLINE_SAMPLES),
+        max: top,
+        ground: final.ground,
+      };
+      flight = { frames, water, final, top, view };
       toast.hidden = true;
       setLocation(dest, true, { duration: Math.min(7, Math.max(3, 2.5 + p.distance * 0.3)) });
     } catch (err) {
@@ -1115,7 +1136,9 @@ async function main() {
     updateGlow(now, atm, lights, ambient);
 
     updateSkyline(dt);
-    ground.update(groundE, skylineFade);
+    // Light reaching the water for its glitter: through the air, and over the hills.
+    const lightOn = (b, e, t) => ({ dir: b.trueDir, light: t.map((c) => c * e * overHills(b)) });
+    ground.update(groundE, skylineFade, lightOn(sky.sun, sunE, tSun), lightOn(sky.moon, moonE, tMoon));
     shared.uSeeThrough.value = layers.ground ? 0 : 1;
 
     sun.update(sky.sun, tSun, sunLevel, exposure, camera, eclipse, bodyScale(), sunThrough);
