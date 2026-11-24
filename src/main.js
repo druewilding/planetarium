@@ -395,6 +395,8 @@ async function main() {
     onLook: () => lookAtSelection(),
     onClear: () => select(null),
     onGo: () => selection?.type === "feature" && flyTo(selection.feature),
+    onEclipse: (body, ms, place) => goToEclipse(body, ms, place),
+    placeName: (lat, lon) => location.fromPoint(lat, lon).name,
     onSelect: (type, id) => {
       if (type === "sun") select(selectSun(), { look: true });
       else if (type === "moon") select(selectMoon(), { look: true });
@@ -676,6 +678,16 @@ async function main() {
     else view.lookAt(d, fov);
   }
 
+  /** Jump to an eclipse's peak (moving to `place` first, if given) and look at the Sun or Moon. */
+  function goToEclipse(body, ms, place) {
+    const dest = place ? location.fromPoint(place.lat, place.lon) : loc;
+    if (place) setLocation(dest, true);
+    clock.set(ms);
+    // Aim using the sky as it will be there and then, not as it is now.
+    sky = computeSky(ms, dest);
+    select(body === "moon" ? selectMoon() : selectSun(), { look: true });
+  }
+
   const selectSun = () => ({ type: "sun", name: "Sun" });
   const selectMoon = () => ({ type: "moon", name: "Moon" });
   const selectPlanet = (p) => ({ type: "planet", id: p.id, name: p.name });
@@ -894,7 +906,11 @@ async function main() {
           always: true,
           offset: edgeOffset(sky.sun),
         });
-      if (!hidden(sky.moon.dir))
+      if (!hidden(sky.moon.dir)) {
+        // Near the Sun (as in a solar eclipse), put the Moon's name below its disc
+        // rather than on top of the Sun's.
+        const [dx, dy] = edgeOffset(sky.moon);
+        const nearSun = sky.moon.dir.angleTo(sky.sun.dir) < 3 * (shownRadius(sky.sun) + shownRadius(sky.moon));
         items.push({
           key: "moon",
           text: "Moon",
@@ -902,8 +918,9 @@ async function main() {
           cls: "body moon",
           priority: 99,
           always: true,
-          offset: edgeOffset(sky.moon),
+          offset: nearSun ? [dx, -dy] : [dx, dy],
         });
+      }
       for (const p of sky.planets) {
         if (hidden(p.dir)) continue;
         items.push({

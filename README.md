@@ -28,6 +28,11 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
   Moon are drawn up to 3½ times larger, because at true size a wide view shrinks them to a few pixels; zoom in and
   they're true to size (or turn off **Enlarge Sun & Moon**). The phase icon in the info panel is turned the way the
   Moon looks in your sky right now, so near the equator a crescent lies on its back.
+- **Eclipses:** in a solar eclipse the Moon covers the Sun and the sky darkens with it. In a lunar eclipse the Earth's
+  shadow creeps across the Moon, which turns a dim copper red: the only sunlight reaching it has been bent through the
+  Earth's air. The shadow's size comes from the same geometry as the eclipse predictions, so the two agree. The info
+  panel lists the next solar and lunar eclipses you can see from where you are, and the next total solar eclipse
+  anywhere; tap one to go to its peak (or to its centre line).
 - **Time tracks:** drag along a 24-hour track shaded by where the Sun is (night, twilight, day), or along a date track
   shaded by day length through the year, with the solstices and equinoxes marked. A year stepper sits beside it, and
   time can play from −12 hours/s to +12 hours/s.
@@ -95,8 +100,7 @@ you're standing on, so `lat` and `lon` will mean the same thing on the Moon or M
 `planet:Mars`, `star:Sirius` (or a Hipparcos number, `star:32349`) or `con:Ori`. Editing the address in place jumps
 there.
 
-From the browser console, `planetarium.clock.set(Date.parse("2027-08-02T10:00Z"))` jumps to any instant (that one
-is a total solar eclipse over Spain and North Africa).
+From the browser console, `planetarium.clock.set(Date.parse("2027-08-02T10:00Z"))` jumps to any instant.
 
 ## Running locally
 
@@ -140,6 +144,7 @@ planetarium/
 │   ├── water.js           # map tiles → where the sea, lakes and rivers are
 │   ├── cachedfetch.js     # fetch, keeping a copy in Cache Storage
 │   ├── space.js           # positions in space (Sun-centred, J2000), for distances from wherever you stand
+│   ├── eclipses.js        # the Earth's shadow on the Moon, and finding eclipses
 │   ├── scene/
 │   │   ├── atmosphere.js  # scattering model (GLSL + JS twin)
 │   │   ├── bodies.js      # Sun, Moon, ground
@@ -181,5 +186,5 @@ planetarium/
 4. Standing on the Moon: Earth's phases, the two-week day
 5. Planets and moons: Jupiter's Galilean moons, Saturn's rings and Titan, Mars' moons
 6. The Martian sky, with its blue sunset
-7. Eclipses: find them, jump to them, see the shadow on Earth
+7. Eclipses: ✅ find them and jump to them, ✅ the red Moon; still to come: the Moon's shadow on the Earth
 8. ✅ Shareable links (place, time, view in the URL)

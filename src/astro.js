@@ -6,6 +6,8 @@
 import * as A from "astronomy-engine";
 import { Matrix4, Vector3 } from "three";
 
+import { earthShadow, moonInShadow } from "./eclipses.js";
+
 export const Body = A.Body;
 export const AU_KM = 149597870.7;
 export const D2R = Math.PI / 180;
@@ -123,6 +125,16 @@ export function computeSky(ms, loc) {
   moon.mag = moonIllum.mag;
   moon.phaseFraction = moonIllum.phase_fraction;
   moon.phaseAngle = A.MoonPhase(time); // 0 new, 90 first quarter, 180 full…
+  // The Earth's shadow, for lunar eclipses: in the world frame for drawing, and how much it dims the Moon.
+  const shadow = earthShadow(time);
+  moon.shadow = {
+    axis: new Vector3(shadow.axis.x, shadow.axis.y, shadow.axis.z).applyMatrix4(eqjToWorld),
+    centreKm: new Vector3(shadow.moon.x, shadow.moon.y, shadow.moon.z).applyMatrix4(eqjToWorld),
+    umbraKm: shadow.umbraKm,
+    penumbraKm: shadow.penumbraKm,
+    ...moonInShadow(shadow),
+  };
+  if (moon.shadow.light < 1) moon.mag -= 2.5 * Math.log10(moon.shadow.light);
   moon.illuminance = sun.illuminance * 10 ** (-0.4 * (moon.mag - sun.mag));
   moon.sunDir = sun.vecAU.clone().sub(moon.vecAU).normalize();
   moon.axis = A.RotationAxis(Body.Moon, time);

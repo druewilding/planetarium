@@ -82,10 +82,17 @@ const fmtDate = new Intl.DateTimeFormat(locale, {
   year: "numeric",
 });
 const fmtShortDate = new Intl.DateTimeFormat(locale, { timeZone: "UTC", day: "numeric", month: "short" });
+const fmtYearDate = new Intl.DateTimeFormat(locale, {
+  timeZone: "UTC",
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
 
 export const formatTime = (ms, loc, seconds = false) => (seconds ? fmtTimeSec : fmtTime).format(shifted(ms, loc));
 export const formatDate = (ms, loc) => fmtDate.format(shifted(ms, loc));
 export const formatShortDate = (ms, loc) => fmtShortDate.format(shifted(ms, loc));
+export const formatYearDate = (ms, loc) => fmtYearDate.format(shifted(ms, loc));
 
 export function formatDateTime(ms, loc) {
   return `${formatShortDate(ms, loc)} ${formatTime(ms, loc)}`;
