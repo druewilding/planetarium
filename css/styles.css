@@ -928,9 +928,29 @@ input[type="range"] {
   z-index: 2;
 }
 
-/* Up above the Earth, pointing your phone at the real sky no longer makes sense */
-body.aloft #sensor-btn {
+/* Up above the Earth, pointing your phone at the real sky, the compass and
+   looking up no longer make sense, and the − + set your height instead of the zoom
+   (scroll or pinch still zooms) */
+body.aloft #sensor-btn,
+body.aloft #look-up,
+body.aloft .compass-widget,
+body.aloft .zoom {
   display: none;
+}
+
+/* Controls swapping between the ground and space fade in rather than pop */
+@keyframes appear {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+body.aloft .altitude,
+body:not(.aloft) .zoom,
+body:not(.aloft) .compass-widget,
+body:not(.aloft) #look-up {
+  animation: appear 0.5s ease;
 }
 
 .rise-btn[aria-pressed="true"] {
@@ -1059,6 +1079,12 @@ body.aloft #sensor-btn {
 .label.path {
   font-size: 10px;
   color: rgba(255, 255, 255, 0.6);
+}
+
+/* The first of each month, along the Earth's orbit */
+.label.month {
+  font-size: 10px;
+  color: rgba(111, 211, 255, 0.85);
 }
 
 .label.selected-ring {

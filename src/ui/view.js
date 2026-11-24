@@ -21,6 +21,7 @@ export function createView(camera, canvas, { onClick, unproject, sensor } = {}) 
   const target = new Quaternion();
   const forward = new Vector3();
   let following = false; // camera currently aimed by the sensor
+  let touchedAt = -Infinity; // when you last turned or zoomed the view yourself
   const sensorOn = () => sensor?.active;
 
   function degPerPixel() {
@@ -51,6 +52,7 @@ export function createView(camera, canvas, { onClick, unproject, sensor } = {}) 
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     dragDist = 0;
     tween = null;
+    touchedAt = performance.now();
     vel.az = vel.alt = 0;
     canvas.classList.add("dragging");
     if (pointers.size === 2) {
@@ -113,6 +115,7 @@ export function createView(camera, canvas, { onClick, unproject, sensor } = {}) 
     (e) => {
       e.preventDefault();
       tween = null;
+      touchedAt = performance.now();
       state.fov *= Math.exp(e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0015));
     },
     { passive: false }
@@ -133,6 +136,7 @@ export function createView(camera, canvas, { onClick, unproject, sensor } = {}) 
     if (keys[e.key]) {
       e.preventDefault();
       tween = null;
+      touchedAt = performance.now();
       keys[e.key]();
     }
   });
@@ -147,7 +151,8 @@ export function createView(camera, canvas, { onClick, unproject, sensor } = {}) 
     lookTo({ alt, az, fov });
   }
 
-  function lookTo({ alt = state.alt, az = state.az, fov = state.fov }) {
+  /** Smoothly turn (and zoom) to a view. `duration` in seconds: a slow drift, or a quick turn. */
+  function lookTo({ alt = state.alt, az = state.az, fov = state.fov }, { duration = 0.9 } = {}) {
     if (sensorOn()) {
       // Only you can turn the phone, but we can still zoom.
       alt = state.alt;
@@ -160,6 +165,7 @@ export function createView(camera, canvas, { onClick, unproject, sensor } = {}) 
       from: { ...state },
       to: { alt, az: state.az + dAz, fov: MathUtils.clamp(fov, MIN_FOV, MAX_FOV) },
       t: 0,
+      duration,
     };
   }
 
@@ -187,7 +193,7 @@ export function createView(camera, canvas, { onClick, unproject, sensor } = {}) 
       vel.az = vel.alt = 0;
     } else following = false;
     if (tween) {
-      tween.t = Math.min(1, tween.t + dt / 0.9);
+      tween.t = Math.min(1, tween.t + dt / tween.duration);
       const k = tween.t < 0.5 ? 2 * tween.t * tween.t : 1 - (-2 * tween.t + 2) ** 2 / 2;
       if (!following) state.alt = MathUtils.lerp(tween.from.alt, tween.to.alt, k);
       if (!following) state.az = MathUtils.lerp(tween.from.az, tween.to.az, k);
@@ -219,5 +225,7 @@ export function createView(camera, canvas, { onClick, unproject, sensor } = {}) 
     zoom,
     dirAt,
     shift,
+    /** When you last turned or zoomed the view yourself (performance.now()). */
+    touchedAt: () => touchedAt,
   };
 }

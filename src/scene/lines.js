@@ -4,6 +4,10 @@
 
 import * as THREE from "three";
 
+/**
+ * `radius`: how far out to draw the line (which sets what it's in front of), or
+ * null to take it from each vertex's length (see orbits.js).
+ */
 export function createLineMaterial(sharedUniforms, glsl, { color, opacity = 1, refract = true, radius = 960 }) {
   return new THREE.ShaderMaterial({
     uniforms: {
@@ -11,7 +15,7 @@ export function createLineMaterial(sharedUniforms, glsl, { color, opacity = 1, r
       uColor: { value: new THREE.Color().setStyle(color, THREE.LinearSRGBColorSpace) },
       uOpacity: { value: opacity },
       uRefract: refract ? sharedUniforms.uRefract : { value: 0 },
-      uRadius: { value: radius },
+      uRadius: { value: radius ?? 0 },
       uStereo: sharedUniforms.uStereo,
       uProjScale: sharedUniforms.uProjScale,
       uAspect: sharedUniforms.uAspect,
@@ -22,7 +26,8 @@ export function createLineMaterial(sharedUniforms, glsl, { color, opacity = 1, r
       uniform float uRadius;
       void main() {
         vec3 d = refractDir(normalize(mat3(modelMatrix) * position));
-        gl_Position = projectView(viewMatrix * vec4(d * uRadius, 1.0));
+        float r = uRadius > 0.0 ? uRadius : length(position);
+        gl_Position = projectView(viewMatrix * vec4(d * r, 1.0));
       }
     `,
     fragmentShader: /* glsl */ `
@@ -89,4 +94,18 @@ export function lines(geometry, material, renderOrder = 2) {
   obj.frustumCulled = false;
   obj.renderOrder = renderOrder;
   return obj;
+}
+
+/**
+ * Fade a line (or a group of them) to a fraction of its own opacity, and hide it
+ * once it's gone. Used as you rise from the ground into space and back.
+ */
+export function setFade(obj, f) {
+  obj.visible = f > 0.002;
+  obj.traverse((o) => {
+    const u = o.material?.uniforms?.uOpacity;
+    if (!u) return;
+    o.userData.baseOpacity ??= u.value;
+    u.value = o.userData.baseOpacity * f;
+  });
 }
