@@ -377,14 +377,14 @@ async function main() {
   }
   /** Face the Sun or Moon if up (keeping the horizon in view), else the equator side of the sky. */
   /**
-   * A view with the Earth (straight below you) in the lower third of the sky that
-   * shows above the time bar, still facing the same way.
+   * A view with the Earth (straight below you) rising half into view above the
+   * time bar, so it fills the bottom of the sky with your spot still in sight.
    */
   function earthBelowView(fov) {
     fov = Math.max(50, Math.min(fov, 100));
     const h = window.innerHeight;
     const barTop = document.querySelector(".timebar").getBoundingClientRect().top;
-    const y = barTop - Math.min(barTop, h) / 6; // where the Earth's centre goes on screen
+    const y = barTop - 40; // the Earth's centre (and your spot, at first) just above the time bar
     const below = projection.altitudeForHorizonAt(-(y - h / 2) / (h / 2), fov); // how far below the middle that is
     return { alt: Math.max(-89.9, -90 + below), az: view.state.az, fov };
   }
@@ -605,6 +605,7 @@ async function main() {
     aloft.startedAt = performance.now();
     aloft.panned = false;
     beforeLookUp = null;
+    view.setFree(true); // no up or down in space
     setAloftUi(true);
   }
   function comeDown() {
@@ -655,6 +656,7 @@ async function main() {
         // Down: back on the ground, in its own (turning) frame.
         aloft.frame = aloft.dir = aloft.tween = null;
         aloft.km = 0;
+        view.setFree(false);
         setAloftUi(false);
         return;
       }

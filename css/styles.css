@@ -1087,9 +1087,6 @@ body:not(.aloft) #look-up {
   font-style: italic;
   opacity: 0.9;
 }
-.label.orbit.earth {
-  color: #6fd3ff;
-}
 .label.orbit.moon {
   color: #c9d6ff;
 }

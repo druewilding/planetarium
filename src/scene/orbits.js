@@ -7,9 +7,9 @@
 // smoothly across the sky, and each point is drawn either just in front of the
 // Earth or behind it, so the Earth hides the parts of an orbit on its far side.
 //
-// To show how far away each part is, the line fades with distance, and beads
-// spaced evenly in time along it are drawn bigger the nearer they are (bunching up
-// as they go into the distance, like fence posts).
+// To show how far away each part is, the line fades with distance: strongly
+// along each orbit (the far side of Mars's is a ghost of its near side), and
+// overall the further out the orbit is.
 
 import * as THREE from "three";
 
@@ -24,7 +24,6 @@ const BEHIND = 960;
 const MAX_STEP = (1.5 * Math.PI) / 180; // longest piece of line, as an angle on the sky
 const MAX_BEND = (0.05 * Math.PI) / 180; // split a piece that bends more than this
 const MAX_SPLITS = 14;
-const BEADS = 24; // along each planet's orbit (and the Earth's)
 
 /** Sidereal periods, in days. */
 const PERIOD = {
@@ -38,7 +37,7 @@ const PERIOD = {
   Neptune: 60182,
 };
 const MOON_MONTH = 27.3217; // days
-const MOON_STEP = 2 * 3600000; // between the Moon's positions: one bead a day is every 12th
+const MOON_STEP = 2 * 3600000; // between the Moon's positions
 
 export const ORBIT_COLORS = {
   moon: "#c9d6ff",
@@ -136,43 +135,6 @@ function lineMaterial(shared, color, opacity) {
   });
 }
 
-function beadMaterial(shared, color, opacity) {
-  return new THREE.ShaderMaterial({
-    uniforms: {
-      uColor: { value: new THREE.Color().setStyle(color, THREE.LinearSRGBColorSpace) },
-      uOpacity: { value: opacity },
-      uRefract: shared.uRefract,
-      uStereo: shared.uStereo,
-      uProjScale: shared.uProjScale,
-      uAspect: shared.uAspect,
-      uPixelRatio: shared.uPixelRatio,
-    },
-    vertexShader: /* glsl */ `
-      ${shared.glsl.REFRACTION}
-      ${shared.glsl.PROJECTION}
-      uniform float uPixelRatio;
-      attribute float aSize;
-      void main() {
-        vec3 d = refractDir(normalize(mat3(modelMatrix) * position));
-        gl_PointSize = aSize * uPixelRatio;
-        gl_Position = projectView(viewMatrix * vec4(d * length(position), 1.0));
-      }
-    `,
-    fragmentShader: /* glsl */ `
-      uniform vec3 uColor;
-      uniform float uOpacity;
-      void main() {
-        vec2 c = gl_PointCoord * 2.0 - 1.0;
-        float r2 = dot(c, c);
-        if (r2 > 1.0) discard;
-        gl_FragColor = vec4(uColor, uOpacity * (1.0 - smoothstep(0.55, 1.0, r2)));
-      }
-    `,
-    transparent: true,
-    depthWrite: false,
-  });
-}
-
 /** A growable Float32Array buffer behind a geometry attribute. */
 function setAttribute(geom, name, data, size, count) {
   let attr = geom.getAttribute(name);
@@ -190,15 +152,11 @@ export function createOrbits(shared, glsl) {
   const group = new THREE.Group();
   const make = (key, opacity) => {
     const line = lines(new THREE.BufferGeometry(), lineMaterial(ctx, ORBIT_COLORS[key], opacity), 3);
-    const beads = new THREE.Points(new THREE.BufferGeometry(), beadMaterial(ctx, ORBIT_COLORS[key], 0.85));
-    beads.frustumCulled = false;
-    beads.renderOrder = 3;
-    line.add(beads); // (fades and hides with its line)
-    return { key, line, beads, ring: null };
+    return { key, line, ring: null };
   };
-  const moon = make("moon", 0.6);
-  const earth = make("earth", 0.6);
-  const planets = PLANETS.map((p) => ({ ...make(p.id, 0.55), name: p.name }));
+  const moon = make("moon", 0.7);
+  const earth = make("earth", 0.75);
+  const planets = PLANETS.map((p) => ({ ...make(p.id, 0.8), name: p.name }));
   const planetGroup = new THREE.Group();
   planetGroup.add(...planets.map((p) => p.line));
   group.add(moon.line, earth.line, planetGroup);
@@ -241,7 +199,8 @@ export function createOrbits(shared, glsl) {
   };
 
   /** Draw ring `c` seen from `o` (same frame), with the Earth's centre at `e` (relative to you). */
-  function draw(orbit, c, o, e, beadEvery) {
+  /** `close`: distances nearer than this (AU) all count as near, for the fade. */
+  function draw(orbit, c, o, e, close = 0) {
     const rel = (s) => {
       const p = pointAt(c, s, [0, 0, 0]);
       return [p[0] - o.x, p[1] - o.y, p[2] - o.z];
@@ -267,29 +226,17 @@ export function createOrbits(shared, glsl) {
       piece(i, i + 1, a, b, 0);
       a = b;
     }
-    // Fainter the further away, against the nearest part of this orbit.
+    // Fainter the further away: against the nearest part of this orbit, and for
+    // the whole orbit, the further out it is.
     let near = Infinity;
     for (let i = 0; i < count; i++) near = Math.min(near, dist[i]);
-    for (let i = 0; i < count; i++) dist[i] = 0.25 + 0.75 * Math.sqrt(near / dist[i]);
+    near = Math.max(near, close);
+    const overall = close > 0 ? Math.max(0.3, (1 / Math.max(1, near)) ** 0.35) : 1;
+    for (let i = 0; i < count; i++) dist[i] = Math.max(0.1, Math.min(1, (near / dist[i]) ** 1.2)) * overall;
     const geom = orbit.line.geometry;
     setAttribute(geom, "position", pos, 3, count);
     setAttribute(geom, "aFade", dist, 1, count);
     geom.setDrawRange(0, count);
-
-    // Beads, evenly spaced in time, bigger the nearer they are.
-    const n = Math.floor((last + 1e-9) / beadEvery) + (c.open ? 1 : 0);
-    const bp = new Float32Array(n * 3);
-    const size = new Float32Array(n);
-    for (let k = 0; k < n; k++) {
-      const [x, y, z] = rel(k * beadEvery);
-      const r = Math.hypot(x, y, z);
-      const depth = (behindEarth(x, y, z, e) ? BEHIND : IN_FRONT) / r;
-      bp.set([x * depth, y * depth, z * depth], k * 3);
-      size[k] = Math.min(9, Math.max(2.5, 2 + 3 / Math.sqrt(r / near)));
-    }
-    setAttribute(orbit.beads.geometry, "position", bp, 3, n);
-    setAttribute(orbit.beads.geometry, "aSize", size, 1, n);
-    orbit.beads.geometry.setDrawRange(0, n);
   }
 
   /** A direction from you to a point on a ring, for a label, or null when the Earth hides it. */
@@ -316,7 +263,7 @@ export function createOrbits(shared, glsl) {
         if (!p.ring || Math.abs(ms - p.ring.epoch) > 20 * YEAR) {
           p.ring = sample(ms, (PERIOD[p.key] * DAY) / 360, 360, helio(Body[p.key]));
         }
-        draw(p, p.ring, o, e, 360 / BEADS);
+        draw(p, p.ring, o, e, 0.3);
         // Name each orbit an eighth of the way round ahead of its planet.
         const dir = labelAt(p.ring, (indexAt(p.ring, ms) + 45) % 360, o, e);
         if (dir) names.push({ key: `orbit${p.key}`, text: `${p.name}’s orbit`, cls: `orbit ${p.key}`, dir });
@@ -330,18 +277,7 @@ export function createOrbits(shared, glsl) {
       const s = indexAt(c, ms);
       const at = pointAt({ ...c, fix: null }, s, [0, 0, 0]);
       c.fix = { s, width: 1.5, dx: earthNow.x - at[0], dy: earthNow.y - at[1], dz: earthNow.z - at[2] };
-      draw(earth, c, o, e, 366 / BEADS);
-      // You're standing right beside the Earth's path, so its next and last few hours
-      // sweep past beneath you, and the rest runs off into the distance from two points
-      // on opposite sides of the sky: where the Earth is heading, and where it's come from.
-      const perDay = c.n / PERIOD.Earth;
-      for (const [key, days, text] of [
-        ["heading", 3, "Where the Earth is heading"],
-        ["came", -3, "Where the Earth has come from"],
-      ]) {
-        const dir = labelAt(c, (s + days * perDay + c.n) % c.n, o, e);
-        if (dir) names.push({ key, text, cls: "orbit earth", dir });
-      }
+      draw(earth, c, o, e, 0.3);
       updateMonths(ms);
     }
 
@@ -359,7 +295,7 @@ export function createOrbits(shared, glsl) {
         );
         moon.ring.centre = centre;
       }
-      draw(moon, moon.ring, you, e, DAY / MOON_STEP);
+      draw(moon, moon.ring, you, e);
       const dir = labelAt(moon.ring, indexAt(moon.ring, ms + 4 * DAY), you, e);
       if (dir) names.push({ key: "orbitMoon", text: "Moon’s orbit", cls: "orbit moon", dir });
     }

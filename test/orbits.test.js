@@ -61,13 +61,17 @@ describe("orbits", () => {
     expect(d.filter((r) => r === 870).length).toBeGreaterThan(d.length / 2);
   });
 
-  test("beads mark equal times along each orbit: 24 round a planet's, one a day along the Moon's", () => {
-    orbits.update(MS, above(20000), { moonOrbit: true, planetOrbits: true });
-    for (const line of orbits.layers.planetOrbits.children) expect(line.children[0].geometry.drawRange.count).toBe(24);
-    expect(orbits.layers.moonOrbit.children[0].geometry.drawRange.count).toBe(28);
+  test("lines fade with distance: the far side of Mars's orbit is far fainter than the near side", () => {
+    orbits.update(MS, above(20000), { planetOrbits: true });
+    const fade = orbits.layers.planetOrbits.children[2].geometry.attributes.aFade;
+    const n = orbits.layers.planetOrbits.children[2].geometry.drawRange.count;
+    const values = Array.from(fade.array.subarray(0, n));
+    expect(Math.max(...values)).toBeGreaterThan(0.9);
+    expect(Math.min(...values)).toBeLessThan(0.25);
   });
 
   test("each orbit is named, along the line", () => {
+    orbits.update(MS, above(20000), { moonOrbit: true, planetOrbits: true });
     const names = orbits.names().map((n) => n.text);
     expect(names).toContain("Mars’s orbit");
     expect(names).toContain("Moon’s orbit");
