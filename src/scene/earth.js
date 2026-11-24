@@ -8,6 +8,10 @@
 
 import * as THREE from "three";
 
+import { MOON_RADIUS_KM, SUN_RADIUS_KM } from "../constants.js";
+
+const EARTH_RADIUS_KM = 6371;
+
 const SHELL = 920; // in front of the Sun (990), the Moon (980) and the stars, behind the ground (900)
 
 export function createEarth(shared, glsl) {
@@ -22,6 +26,8 @@ export function createEarth(shared, glsl) {
     uToEarth: { value: new THREE.Matrix3() }, // view frame → the Earth's own axes
     uSunDir: { value: new THREE.Vector3(0, 1, 0) },
     uSunE: { value: 0 }, // sunlight on the Earth, lux
+    uSunDist: { value: 23455 }, // to the Sun, in Earth radii
+    uMoonPos: { value: new THREE.Vector3(0, 0, 60) }, // the Moon, from the Earth's centre, in Earth radii
     uAirGlow: { value: 1 }, // 1 while you're in the air and the sky glows around you, 0 in space
   };
   const material = new THREE.ShaderMaterial({
@@ -46,6 +52,27 @@ export function createEarth(shared, glsl) {
       uniform mat3 uToEarth;
       uniform vec3 uSunDir;
       uniform float uSunE;
+      uniform float uSunDist;
+      uniform vec3 uMoonPos;
+
+      // How much of the Sun shows from a point p on the Earth (in Earth radii, from
+      // its centre): where the Moon covers it, that's the Moon's shadow. The
+      // overlap of the two discs, as in astro.js sunVisibleFraction.
+      float sunShowing(vec3 p) {
+        vec3 s = uSunDir * uSunDist - p;
+        vec3 m = uMoonPos - p;
+        if (dot(s, m) <= 0.0) return 1.0;
+        float rs = ${(SUN_RADIUS_KM / EARTH_RADIUS_KM).toFixed(4)} / length(s);
+        float rm = ${(MOON_RADIUS_KM / EARTH_RADIUS_KM).toFixed(6)} / length(m);
+        float d = atan(length(cross(s, m)), dot(s, m)); // (keeps its precision at small angles)
+        if (d >= rs + rm) return 1.0;
+        if (d <= rm - rs) return 0.0; // total
+        if (d <= rs - rm) return 1.0 - (rm * rm) / (rs * rs); // annular
+        float a1 = rs * rs * acos(clamp((d * d + rs * rs - rm * rm) / (2.0 * d * rs), -1.0, 1.0));
+        float a2 = rm * rm * acos(clamp((d * d + rm * rm - rs * rs) / (2.0 * d * rm), -1.0, 1.0));
+        float a3 = 0.5 * sqrt(max(0.0, (-d + rs + rm) * (d + rs - rm) * (d - rs + rm) * (d + rs + rm)));
+        return 1.0 - (a1 + a2 - a3) / (3.14159265 * rs * rs);
+      }
       uniform float uAirGlow;
       varying vec3 vDir;
       const float PI = 3.14159265359;
@@ -75,13 +102,17 @@ export function createEarth(shared, glsl) {
         float blur = clamp(6.0 - log2(max(km, 0.01) / 2.0), 0.0, 9.0);
 
         float sun = dot(n, uSunDir);
+        // Under the Moon's shadow, less: squared, so the soft outer shadow (where the
+        // Sun is partly covered) reads as clearly as it does in photos from space.
+        float shown = sunShowing(n);
+        shown *= shown;
         float lit = smoothstep(-0.1, 0.2, sun);
         vec3 albedo = pow(texture2D(uDay, uv, blur).rgb, vec3(2.2)) * 0.9;
-        vec3 L = albedo * uSunE / PI * max(sun, 0.0) * lit;
+        vec3 L = albedo * uSunE / PI * max(sun, 0.0) * lit * shown;
         // The Sun's reflection off the sea.
         float ocean = texture2D(uOcean, uv, blur).r;
         vec3 r = reflect(-uSunDir, n);
-        L += ocean * pow(max(dot(r, -d), 0.0), 80.0) * uSunE * 0.004 * lit;
+        L += ocean * pow(max(dot(r, -d), 0.0), 80.0) * uSunE * 0.004 * lit * shown;
         // City lights where it's dark, without the map's dim blue land behind them.
         vec3 lights = max(texture2D(uNight, uv, blur).rgb - vec3(0.12, 0.12, 0.2), 0.0);
         // (Never dimmer than shows on screen: with a sunlit crescent in view the eye
@@ -90,7 +121,7 @@ export function createEarth(shared, glsl) {
         L += pow(lights, vec3(1.4)) * vec3(1.0, 0.8, 0.55) * glow * (1.0 - smoothstep(-0.12, 0.04, sun));
         // The air: blue haze, strongest towards the edge on the day side.
         float rim = pow(1.0 - max(dot(n, -d), 0.0), 4.0);
-        L += vec3(0.25, 0.45, 1.0) * uSunE / PI * 0.04 * (0.2 + 1.5 * rim) * smoothstep(-0.2, 0.3, sun);
+        L += vec3(0.25, 0.45, 1.0) * uSunE / PI * 0.04 * (0.2 + 1.5 * rim) * smoothstep(-0.2, 0.3, sun) * shown;
         L = mix(vec3(0.02, 0.025, 0.04) * uSunE / PI * 0.05, L, uReady);
         // Looking through the air: the land fades into the haze along the horizon,
         // the more air the line of sight crosses (all of it near the ground; from
@@ -130,7 +161,10 @@ export function createEarth(shared, glsl) {
    * earthDir: world direction to the Earth's centre; heightRadii: how high you are;
    * toEarth: Matrix3 from the world frame to the Earth's own axes; sunDir, sunE.
    */
-  function update({ earthDir, heightRadii, toEarth, sunDir, sunE, airGlow = 0 }) {
+  /** sunDist: to the Sun, and moonPos: the Moon from the Earth's centre (world frame), both in Earth radii. */
+  function update({ earthDir, heightRadii, toEarth, sunDir, sunE, airGlow = 0, sunDist, moonPos }) {
+    if (sunDist) uniforms.uSunDist.value = sunDist;
+    if (moonPos) uniforms.uMoonPos.value.copy(moonPos);
     uniforms.uAirGlow.value = airGlow;
     uniforms.uEarthDir.value.copy(earthDir);
     uniforms.uHeight.value = heightRadii;

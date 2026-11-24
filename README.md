@@ -34,7 +34,9 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
   shadow creeps across the Moon, which turns a dim copper red: the only sunlight reaching it has been bent through the
   Earth's air. The shadow's size comes from the same geometry as the eclipse predictions, so the two agree. The info
   panel lists the next solar and lunar eclipses you can see from where you are, and the next total solar eclipse
-  anywhere; tap one to go to its peak (or to its centre line).
+  anywhere; tap one to go to its peak (or to its centre line). Risen up above the Earth, a solar eclipse is the Moon's
+  shadow on the Earth: tapping one glides you round to look down on it, a dark spot with a soft grey edge where the Sun
+  is partly covered. A lunar eclipse turns you to the red Moon, which looks the same from up there.
 - **Time tracks:** drag along a 24-hour track shaded by where the Sun is (night, twilight, day), or along a date track
   shaded by day length through the year. Dots mark the solstices, the equinoxes and the eclipses you can see from where
   you are on the date track, and an eclipse's moment on the time track (with a band for how long it lasts). Hover for what each one is, or tap to go there. A year stepper sits beside it, and
@@ -208,5 +210,5 @@ planetarium/
 4. Standing on the Moon: Earth's phases, the two-week day
 5. Planets and moons: Jupiter's Galilean moons, Saturn's rings and Titan, Mars' moons
 6. The Martian sky, with its blue sunset
-7. Eclipses: ✅ find them and jump to them, ✅ the red Moon; still to come: the Moon's shadow on the Earth
+7. ✅ Eclipses: find them and jump to them, the red Moon, the Moon's shadow on the Earth
 8. ✅ Shareable links (place, time, view in the URL)

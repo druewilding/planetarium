@@ -676,8 +676,7 @@ async function main() {
    * end up just as if you'd taken off from there now: the Earth still below you,
    * and the stars turned to match (you're over another part of the Earth).
    */
-  function moveAloftOver(place, animate) {
-    const ms = clock.ms;
+  function moveAloftOver(place, animate, ms = clock.ms) {
     const frame = horizonFrame(ms, place);
     const dir = toVector3(surfaceDirection(place.lat, place.lon, ms));
     aloft.takeoff = ms;
@@ -687,7 +686,7 @@ async function main() {
       aloft.frame.copy(frame);
       aloft.dir.copy(dir);
       aloft.move = null;
-      return;
+      return { frame, dir };
     }
     aloft.move = {
       from: new THREE.Quaternion().setFromRotationMatrix(aloft.frame),
@@ -696,6 +695,7 @@ async function main() {
       toDir: dir,
       t: 0,
     };
+    return { frame, dir };
   }
   const moveTurn = new THREE.Quaternion();
   function updateMove(dt) {
@@ -900,7 +900,22 @@ async function main() {
     const { x, y, z } = earthAxes(clock.ms);
     earthTurn.makeBasis(toVector3(x), toVector3(y), toVector3(z)).premultiply(aloft.frame);
     toEarth.setFromMatrix4(earthTurn).transpose();
-    earth.update({ earthDir: aloft.earthDir, heightRadii: height, toEarth, sunDir: sky.sun.trueDir, sunE, airGlow });
+    // The Sun and the Moon from the Earth's centre, for the Moon's shadow on it.
+    const time = A.MakeTime(new Date(clock.ms));
+    const inRadii = AU_KM / EARTH_RADIUS_KM;
+    const toWorld = (v) => toVector3(v).applyMatrix4(aloft.frame).multiplyScalar(inRadii);
+    const sunPos = toWorld(A.GeoVector(Body.Sun, time, true));
+    const moonPos = toWorld(A.GeoMoon(time));
+    earth.update({
+      earthDir: aloft.earthDir,
+      heightRadii: height,
+      toEarth,
+      sunDir: sunPos.clone().normalize(),
+      sunDist: sunPos.length(),
+      moonPos,
+      sunE,
+      airGlow,
+    });
   }
 
   /** Your spot on the Earth, while you're up: where it is now, if it's on the side facing you. */
@@ -1180,6 +1195,25 @@ async function main() {
     const dest = place ? location.fromPoint(place.lat, place.lon) : loc;
     if (place) setLocation(dest, true);
     clock.set(ms);
+    if (isAloft() && !aloft.tween?.landing) {
+      // Up above the Earth: glide round to float over the place as it will be then.
+      if (glasses) setGlasses(false);
+      const there = moveAloftOver(dest, true, ms);
+      if (body === "moon") {
+        // The Moon in the Earth's shadow looks the same from up here: turn to it,
+        // as it will be seen from there and then.
+        const r = (EARTH_RADIUS_KM + aloft.km) / AU_KM;
+        const pos = { x: there.dir.x * r, y: there.dir.y * r, z: there.dir.z * r };
+        const then = computeSky(ms, dest, { posAU: pos, eqjToWorld: there.frame, air: 0 });
+        select(selectMoon());
+        view.lookAt(then.moon.dir, Math.min(view.state.fov, 40));
+      } else {
+        // A solar eclipse, seen from space, is the Moon's shadow on the Earth: look down at it.
+        select(selectSun());
+        view.lookTo(earthBelowView(view.state.fov));
+      }
+      return;
+    }
     if (glasses) {
       // Already looking at the Sun, and the view follows it through the jump
       // (see followSun), so turning to it as well would turn twice.
@@ -1601,6 +1635,7 @@ async function main() {
     getSky: () => sky,
     getSkyline: () => skyline,
     getAloft: () => aloft,
+    goToEclipse: (body, ms, place) => goToEclipse(body, ms, place),
   };
 
   // ---- The land falling away as you rise ----
