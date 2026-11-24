@@ -46,9 +46,10 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
   uses the compass for north (via `deviceorientationabsolute` on Android, `webkitCompassHeading` on iOS). Phone
   compasses are often a few degrees out and point to magnetic north, so dragging sideways turns the sky into line.
 - **Share links:** the address always holds where you're standing, the moment, which way you're looking, the zoom
-  and whatever you've picked out, so a link opens exactly the sky you saw. The **Share** button sends it (or copies
-  it). Layer toggles stay out of the link, since those are each person's own preferences. Positions are rounded to
-  about a kilometre.
+  and whatever you've picked out, so a link opens exactly the sky you saw. While the clock is on now (real time), the
+  link leaves the time out, so it opens on the sky as it is whenever it's followed. The **Share** button sends it (or
+  copies it). Layer toggles stay out of the link, since those are each person's own preferences. Positions are
+  rounded to about a kilometre.
 - **Hills and mountains:** the real skyline around you, from free elevation maps. The Sun can be up and still hidden:
   from Tromsø in late November it never clears the mountains, and the info panel shows when the Sun, Moon and
   planets are actually **over the mountains** (in Tromsø the Sun first shows again on 21 January, Soldagen). The
