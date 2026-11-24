@@ -48,6 +48,11 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
   and daylight saving), or typed coordinates. The map zooms and pans (scroll, pinch or drag), and shows the cities as
   dots: the biggest when zoomed out, more as you zoom in. Dots swell as the pointer comes near, and clicking one stands
   you in that city. Changing location glides smoothly.
+- **Rise up:** lift straight up from where you're standing until the whole Earth is below you, lit by the Sun, with
+  city lights on the night side and your spot marked. You stay still against the stars while the Earth turns beneath
+  you, so you can watch your spot carried round into the night and back into the day, with the clock running as
+  usual. Drag to fly round the Earth, and scroll, pinch or use − + to go higher or lower. **Back to the ground**
+  brings you down to wherever your spot has turned to.
 - **Overlays:** the Sun's path today with hour marks, the solstice and equinox paths, the Moon's path, the ecliptic,
   the celestial equator, and alt/az and RA/Dec grids.
 - **Info panel:** rise, set and transit times, twilight, day length, Moon phases and age, distances, light travel time,
@@ -151,6 +156,7 @@ planetarium/
 │   ├── constants.js       # sizes and distances shared by the astronomy and the drawing
 │   ├── scene/
 │   │   ├── atmosphere.js  # scattering model (GLSL + JS twin)
+│   │   ├── orbit.js       # the view from space: the Earth, the Sun and the stars
 │   │   ├── bodies.js      # Sun, Moon, ground
 │   │   ├── points.js      # stars and planets as points
 │   │   ├── lines.js       # lines on the sky (refraction-aware)
@@ -158,7 +164,7 @@ planetarium/
 │   │   └── glsl.js        # shared shader code: tone mapping, sky lookup, refraction
 │   └── ui/                # time bar, compass, location dialog, info panel, layers, search, labels, camera
 ├── data/                  # stars, constellations, cities, land outlines (compact JSON)
-├── textures/moon.jpg
+├── textures/            # the Moon, the Milky Way, and the Earth by day, by night and its seas
 ├── test/                  # Vitest tests
 └── tools/                 # scripts that produced data/, and the import map updater
 ```
@@ -174,6 +180,8 @@ planetarium/
 - Milky Way: [NASA SVS Deep Star Maps 2020](https://svs.gsfc.nasa.gov/4851) (the star-free Milky Way layer,
   public domain)
 - Moon texture: [NASA SVS CGI Moon Kit](https://svs.gsfc.nasa.gov/4720) (LRO, public domain)
+- Earth by day, its city lights and its seas: NASA's Blue Marble and Earth at Night (public domain), as prepared for
+  the [three.js examples](https://github.com/mrdoob/three.js/tree/dev/examples/textures/planets)
 - Coastlines and cities: [Natural Earth](https://www.naturalearthdata.com) (public domain)
 - Mountain, place and landmark names: © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors (ODbL), via the
   [Overpass API](https://overpass-api.de)
@@ -185,7 +193,7 @@ planetarium/
 ## Roadmap
 
 1. ✅ The sky from your location
-2. Earth from orbit: textured globe, day/night terminator, the Moon's orbit
+2. Earth from orbit: ✅ textured globe, day/night terminator; still to come: the Moon, the planets and their orbits
 3. Fly-to travel between bodies, orbit trails
 4. Standing on the Moon: Earth's phases, the two-week day
 5. Planets and moons: Jupiter's Galilean moons, Saturn's rings and Titan, Mars' moons

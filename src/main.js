@@ -17,6 +17,7 @@ import {
 import { createGround, createMoon, createSkylineTexture, createSun, SUN_LUMINANCE } from "./scene/bodies.js";
 import * as glsl from "./scene/glsl.js";
 import { createMilkyWay } from "./scene/milkyway.js";
+import { createOrbitView } from "./scene/orbit.js";
 import { createOverlays } from "./scene/overlays.js";
 import { createPlanetPoints, createPointsMaterial, createStars } from "./scene/points.js";
 import {
@@ -209,6 +210,18 @@ async function main() {
   const ground = createGround(shared, glsl);
   scene.add(moon.mesh, moon.glow, sun.mesh, ground.mesh);
 
+  // The view from space (Rise up). Its Earth maps load the first time you go up.
+  const orbit = createOrbitView(renderer, canvas, {
+    starData,
+    milkyWayTexture: milkyWayTex,
+    loadTextures: () =>
+      Promise.all(
+        ["textures/earth-day.jpg", "textures/earth-night.jpg", "textures/earth-ocean.jpg"].map((url) =>
+          new THREE.TextureLoader().loadAsync(url)
+        )
+      ),
+  });
+
   // Hills and mountains on the horizon, loaded for wherever you're standing.
   const terrain = createTerrain({ onReady: () => info?.update(true) });
   let skyline = null; // the profile the ground is showing
@@ -346,8 +359,8 @@ async function main() {
     view.update(10);
     // (Aimed again after the first frame, once the time bar has its real height.)
   }
-  $("zoom-in").addEventListener("click", () => view.zoom(0.6));
-  $("zoom-out").addEventListener("click", () => view.zoom(1 / 0.6));
+  $("zoom-in").addEventListener("click", () => (orbit.active ? orbit.zoom(1 / 0.6) : view.zoom(0.6)));
+  $("zoom-out").addEventListener("click", () => (orbit.active ? orbit.zoom(0.6) : view.zoom(1 / 0.6)));
 
   // ---- Reset: back to the starting view (facing the Sun or Moon, else the equator side) ----
   const resetBtn = $("reset-view");
@@ -366,7 +379,8 @@ async function main() {
   }
   resetBtn.addEventListener("click", resetView);
   window.addEventListener("keydown", (e) => {
-    if (e.key === "0" && !e.target.closest("input, textarea, select, dialog, [role=slider]")) resetView();
+    if (e.key === "0" && !orbit.active && !e.target.closest("input, textarea, select, dialog, [role=slider]"))
+      resetView();
   });
 
   // ---- Panels ----
@@ -498,6 +512,50 @@ async function main() {
       view.lookTo({ alt: 89.9, fov: 180 });
     }
   });
+
+  // ---- Rise up: from the ground into space, and back down ----
+  const riseBtn = $("rise-btn");
+  const fadeEl = $("fade");
+  let moving = false; // between the ground and space
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  async function fadeTo(black) {
+    fadeEl.classList.toggle("on", black);
+    await wait(260);
+  }
+  function setRiseButton(up) {
+    riseBtn.setAttribute("aria-pressed", String(up));
+    riseBtn.querySelector("span").textContent = up ? "Back to the ground" : "Rise up";
+    riseBtn.title = up
+      ? "Come back down to where you're standing"
+      : "Rise straight up from where you're standing and see the Earth from space";
+  }
+  async function riseUp() {
+    if (moving || orbit.active) return;
+    moving = true;
+    if (sensor.active) stopSensor();
+    if (glasses) setGlasses(false);
+    await fadeTo(true);
+    view.setEnabled(false);
+    document.body.classList.add("in-space");
+    setRiseButton(true);
+    orbit.rise(clock.ms, loc);
+    await fadeTo(false);
+    moving = false;
+  }
+  function comeDown() {
+    if (moving || !orbit.active) return;
+    moving = true;
+    orbit.descend(clock.ms, loc, async () => {
+      await fadeTo(true);
+      orbit.leave();
+      document.body.classList.remove("in-space");
+      view.setEnabled(true);
+      setRiseButton(false);
+      await fadeTo(false);
+      moving = false;
+    });
+  }
+  riseBtn.addEventListener("click", () => (orbit.active ? comeDown() : riseUp()));
 
   // ---- Point your phone at the sky ----
   const sensorBtn = $("sensor-btn");
@@ -1096,6 +1154,7 @@ async function main() {
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
+    orbit.resize(w, h);
     labels.resize(w, h);
     shared.uPixelRatio.value = renderer.getPixelRatio();
   }
@@ -1106,6 +1165,7 @@ async function main() {
   window.planetarium = {
     clock,
     view,
+    orbit,
     scene,
     setLocation: (l) => setLocation(l, true),
     getSky: () => sky,
@@ -1124,6 +1184,21 @@ async function main() {
     return t * t * (3 - 2 * t);
   };
 
+  /** A frame of the view from space: the Earth, the Sun and the stars, with the clock running as usual. */
+  function spaceFrame(dt, now) {
+    orbit.update(dt, clock.ms, loc);
+    renderer.render(orbit.scene, orbit.camera);
+    labels.render(orbit.labels(loc.name), orbit.project);
+    timebar.update();
+    info.update();
+    const km = orbit.altitudeKm;
+    $("fov-label").textContent =
+      km < 10000
+        ? `${Math.round(km).toLocaleString("en-GB")} km`
+        : `${Math.round(km / 1000).toLocaleString("en-GB")}k km`;
+    updateLink(now);
+  }
+
   function frame(now) {
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
@@ -1134,6 +1209,11 @@ async function main() {
 
     sky = computeSky(clock.ms, loc);
     followSun();
+    if (orbit.active) {
+      spaceFrame(dt, now);
+      requestAnimationFrame(frame);
+      return;
+    }
     const atm = layers.atmosphere ? ATMOSPHERES.earth : NONE;
     atmosphere.setParams(atm);
     shared.uRefract.value = layers.atmosphere && layers.refraction ? 1 : 0;

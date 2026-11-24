@@ -926,6 +926,40 @@ input[type="range"] {
   z-index: 2;
 }
 
+/* A quick fade to black between the ground and space */
+#fade {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s;
+  z-index: 2;
+}
+
+#fade.on {
+  opacity: 1;
+}
+
+/* Up in space: the controls for looking round the sky from the ground step aside */
+body.in-space #look-up,
+body.in-space #compass,
+body.in-space #reset-view,
+body.in-space #sensor-btn,
+body.in-space #glasses-btn {
+  display: none;
+}
+
+.rise-btn[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.label.you {
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .label {
   position: absolute;
   left: 0;
