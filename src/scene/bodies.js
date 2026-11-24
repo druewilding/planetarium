@@ -334,8 +334,9 @@ export function createGround(shared, glsl) {
   const uniforms = {
     ...shared,
     uGroundL: { value: 0 },
-    uFall: { value: 0 }, // rising off the ground: 0 standing, 1 gone
-    uDrop: { value: 0 }, // how far the horizon has dropped below level (radians)
+    uFall: { value: 0 }, // rising off the ground: 0 standing, 1 faded into the Earth below
+    uFloor: { value: 0 }, // the lowest the land's edge can be (radians): level on the ground, none up above
+    uRise: { value: 1 }, // eye height on the ground ÷ eye height now (for where the water has sunk to)
     uWater: { value: water },
     uWaterCols: { value: SKYLINE_SAMPLES },
     uSunDir: { value: new THREE.Vector3(0, -1, 0) },
@@ -359,7 +360,8 @@ export function createGround(shared, glsl) {
       ${glsl.LAND}
       uniform float uGroundL;
       uniform float uFall;
-      uniform float uDrop;
+      uniform float uFloor;
+      uniform float uRise;
       uniform sampler2D uWater;
       uniform float uWaterCols;
       uniform vec3 uSunDir;
@@ -369,14 +371,14 @@ export function createGround(shared, glsl) {
       varying vec3 vDir;
 
       // How much of the ground this way is water (0 to 1).
-      float waterAt(vec3 d, float alt) {
+      float waterAt(vec3 d, float alt, float soft) {
         float az = atan(d.x, -d.z);
         float x = degrees(alt) / ${WATER_SCALE};
         float s = sign(x) * log(abs(x) + sqrt(x * x + 1.0)); // asinh
         float v = 0.5 + 0.5 * s / ${WATER_SPAN.toFixed(6)};
         float w = texture2D(uWater, vec2(fract(az / 6.28318530718 + 0.5 / uWaterCols), v)).r;
         // A crisp shore through the blend between samples, rather than steps.
-        return clamp((w - 0.5) / max(fwidth(w), 1e-3) + 0.5, 0.0, 1.0);
+        return clamp((w - 0.5) / (max(fwidth(w), 1e-3) + soft) + 0.5, 0.0, 1.0);
       }
 
       // Fresnel reflectance of water (Schlick).
@@ -413,9 +415,6 @@ export function createGround(shared, glsl) {
         // The skyline appears at full height and fades in, rather than growing.
         float hAlt = landAlt(d);
         float alt = asin(clamp(d.y, -1.0, 1.0));
-        // Rising: the hills flatten and the land sinks away below you.
-        hAlt *= 1.0 - uFall;
-        alt += uDrop;
 
         if (uSeeThrough > 0.5) {
           // Peering through the earth: only a faint grey line along the hills.
@@ -430,7 +429,7 @@ export function createGround(shared, glsl) {
         // land below eye level shows against the hazy far distance, drawn with the
         // sky's colour at the horizon (the sky texture below 0° isn't meant to be seen).
         float edge = max(fwidth(alt) * 0.75, 1e-5);
-        float top = max(hAlt, 0.0);
+        float top = max(hAlt, uFloor);
         float cover = 1.0 - smoothstep(top - edge, top + edge, alt);
         if (cover <= 0.0) discard;
         float distance = smoothstep(hAlt - edge, hAlt + edge, alt);
@@ -440,8 +439,12 @@ export function createGround(shared, glsl) {
         hazeAmount = max(hazeAmount, distance);
         vec3 albedo = vec3(0.11, 0.12, 0.09);
         vec3 ground = albedo * uGroundL;
-        // (The water map is for eye height on the ground: it goes first as you rise.)
-        float wet = waterAt(d, alt) * step(0.001, uTerrain) * (1.0 - smoothstep(0.0, 0.03, uFall));
+        // The water map is for eye height on the ground. Risen up, the water below
+        // has sunk with the land: look it up where it was seen from the ground.
+        // (The map is only so detailed: rising, its shores soften, and a few hundred
+        // metres up the water has gone into the land.)
+        float wAlt = atan(tan(alt) * uRise);
+        float wet = waterAt(d, wAlt, 1.0 - uRise) * step(0.001, uTerrain) * smoothstep(0.03, 0.4, uRise);
         if (wet > 0.0) ground = mix(ground, waterColour(d, ground), wet);
         vec3 haze = skyAt(normalize(vec3(d.x, 0.003, d.z)));
         vec4 c = display(mix(ground, haze, hazeAmount));
@@ -467,10 +470,12 @@ export function createGround(shared, glsl) {
    * `illuminance`: horizontal illuminance in lux → ground luminance. `sun` and
    * `moon`: { dir, light: [r, g, b] lux reaching the water } for the glitter.
    */
-  function update(illuminance, terrain, sun, moon, { fall = 0, drop = 0 } = {}) {
+  /** `fall`, `floor`, `rise`: rising off the ground (see the uniforms above). */
+  function update(illuminance, terrain, sun, moon, { fall = 0, floor = 0, rise = 1 } = {}) {
     uniforms.uGroundL.value = illuminance / Math.PI;
     uniforms.uFall.value = fall;
-    uniforms.uDrop.value = drop;
+    uniforms.uFloor.value = floor;
+    uniforms.uRise.value = rise;
     uniforms.uTerrain.value = terrain;
     uniforms.uSunDir.value.copy(sun.dir);
     uniforms.uSunLight.value.fromArray(sun.light);

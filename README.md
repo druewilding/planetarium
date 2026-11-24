@@ -48,7 +48,7 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
   and daylight saving), or typed coordinates. The map zooms and pans (scroll, pinch or drag), and shows the cities as
   dots: the biggest when zoomed out, more as you zoom in. Dots swell as the pointer comes near, and clicking one stands
   you in that city. Changing location glides smoothly.
-- **Rise up:** lift straight off the ground, still looking the way you were. The land sinks away at once, the sky
+- **Rise up:** lift straight off the ground, still looking the way you were. You're a kilometre up in half a second: the hills, with their names, and the lakes and sea fall away below you as the far land comes into view, then the sky
   darkens to black as the air thins, and the view turns slowly down until half the Earth rises into the bottom of it:
   lit by the Sun, with city lights on its night side and your spot marked. The stars, the Moon, the planets and their
   labels stay with you. Up there you float still against the stars, so the sky stops turning and the Earth turns
@@ -152,6 +152,7 @@ planetarium/
 ├── src/
 │   ├── main.js            # app setup, render loop, eye adaptation, picking, labels
 │   ├── astro.js           # astronomy-engine wrapper → horizon (world) frame
+│   ├── climb.js           # how high you are, second by second, rising and landing
 │   ├── clock.js           # simulated time, rates, smooth jumps
 │   ├── timezone.js        # wall-clock time for any location
 │   ├── projection.js      # perspective ↔ stereographic projection (JS side)

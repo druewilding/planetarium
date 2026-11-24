@@ -97,7 +97,7 @@ export function createEarth(shared, glsl) {
         // space, just the layer near the surface, thicker towards the edge).
         float dist = (b - sqrt(disc)) * 6371.0; // km to the ground
         float slant = 8.0 / max(dot(n, -d), 0.03); // km of dense air above that spot, along the line of sight
-        float haze = (1.0 - exp(-min(dist, slant) / 60.0)) * uAirGlow;
+        float haze = (1.0 - exp(-min(dist, slant) / 150.0)) * uAirGlow;
         L = mix(L, skyAt(normalize(vec3(d.x, 0.003, d.z))), haze);
         gl_FragColor = display(L);
       }

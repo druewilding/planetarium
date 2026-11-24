@@ -14,6 +14,7 @@ import {
   R2D,
   refract,
 } from "./astro.js";
+import { climb, GROUND_KM } from "./climb.js";
 import { Clock } from "./clock.js";
 import { DEFAULT_BODY, readLink, writeLink } from "./link.js";
 import { createProjection } from "./projection.js";
@@ -307,7 +308,7 @@ async function main() {
     km: 0,
     frame: null, // Matrix4, J2000 → view, held still against the stars
     dir: null, // Vector3, where above the Earth you are (J2000, from its centre)
-    tween: null, // { from, to, t, duration, rise?, landing? }
+    tween: null, // { to, t (s), duration, and either curve (see climb.js; rise or landing) or from }
     before: null, // the view you had on the ground, to come back to
     startedAt: 0, // when you took off (performance.now())
     takeoff: 0, // the moment you took off (clock time): with the place, it fixes where you are
@@ -589,9 +590,7 @@ async function main() {
   // and blends back into the ground's frame.
   const EARTH_RADIUS_KM = 6371;
   const RISE_TO_KM = 20000;
-  const RISE_SECONDS = 9;
   const MOVE_SECONDS = 3; // gliding round the Earth to float over another place
-  const LAND_SECONDS = 6;
   const MIN_KM = 1;
   const MAX_KM = 250000; // well short of the Moon (384,000 km), which stays beyond the Earth
   const toVector3 = (v) => new THREE.Vector3(v.x, v.y, v.z);
@@ -618,8 +617,8 @@ async function main() {
     aloft.takeoff = clock.ms;
     aloft.turned = false;
     aloft.spin = null;
-    aloft.km = 0.002;
-    aloft.tween = { from: aloft.km, to: RISE_TO_KM, t: 0, duration: RISE_SECONDS, rise: true };
+    aloft.km = GROUND_KM;
+    aloft.tween = climbTo(RISE_TO_KM);
     aloft.before = { alt: view.state.alt, az: view.state.az, fov: Math.min(view.state.fov, 100) };
     aloft.startedAt = performance.now();
     aloft.panned = false;
@@ -631,10 +630,12 @@ async function main() {
     if (!isAloft() || aloft.tween?.landing) return;
     aloft.move = aloft.spin = null; // (landing goes wherever your spot is)
     const landing = { frame: aloft.frame.clone(), dir: aloft.dir.clone() };
-    aloft.tween = { from: aloft.km, to: 0.002, t: 0, duration: LAND_SECONDS, landing };
+    // The climb up to here, run backwards: falling fast, slowing as the ground comes up.
+    const curve = climb(aloft.km);
+    aloft.tween = { curve, t: 0, duration: curve.duration, to: GROUND_KM, landing };
     // Turn back to the view you had before you left, as the ground comes up to meet you.
     const back = aloft.before ?? { alt: 15, az: loc.lat >= 0 ? 180 : 0, fov: DEFAULT_FOV };
-    view.lookTo(back, { duration: LAND_SECONDS });
+    view.lookTo(back, { duration: curve.duration * 0.9 });
   }
   /**
    * Go to a point above the Earth that a link describes: `km` up, above where
@@ -658,9 +659,9 @@ async function main() {
     aloft.move = null;
     if (!wasUp) aloft.before = null;
     if (animate) {
-      if (!wasUp) aloft.km = 0.002;
+      if (!wasUp) aloft.km = GROUND_KM;
       aloft.startedAt = performance.now();
-      aloft.tween = { from: aloft.km, to: km, t: 0, duration: wasUp ? 1.5 : RISE_SECONDS, rise: !wasUp };
+      aloft.tween = wasUp ? { from: aloft.km, to: km, t: 0, duration: 1.5 } : climbTo(km);
     } else {
       aloft.km = km;
       aloft.tween = null;
@@ -809,6 +810,11 @@ async function main() {
   }
 
   /** Go higher (factor > 1) or lower, from wherever the last change was heading. */
+  /** Taking off: up to `km` (see climb.js). */
+  function climbTo(km) {
+    const curve = climb(km);
+    return { curve, t: 0, duration: curve.duration, to: km, rise: true };
+  }
   function changeHeight(factor) {
     if (!isAloft() || aloft.tween?.landing) return;
     const to = Math.min(MAX_KM, Math.max(MIN_KM, (aloft.tween?.to ?? aloft.km) * factor));
@@ -826,10 +832,17 @@ async function main() {
     if (isAloft()) updateSpin(dt);
     const tw = aloft.tween;
     if (!isAloft() || !tw) return;
-    tw.t = Math.min(1, tw.t + dt / tw.duration);
-    // Taking off, the ground falls away at once and the climb slows as you go;
-    // other moves ease in and out.
-    const k = tw.rise ? 1 - (1 - tw.t) ** 3 : tw.t < 0.5 ? 4 * tw.t ** 3 : 1 - (-2 * tw.t + 2) ** 3 / 2;
+    tw.t = Math.min(tw.duration, tw.t + dt);
+    const p = tw.duration > 0 ? tw.t / tw.duration : 1;
+    const ease = (x) => (x < 0.5 ? 4 * x ** 3 : 1 - (-2 * x + 2) ** 3 / 2);
+    if (tw.curve) {
+      // Taking off or landing (see climb.js); landing runs the climb backwards.
+      aloft.km = tw.curve.kmAt(tw.landing ? tw.duration - tw.t : tw.t);
+    } else {
+      // Higher or lower: evenly in scale, so a kilometre near the ground counts as
+      // much as a thousand far out.
+      aloft.km = Math.exp(Math.log(tw.from) + (Math.log(tw.to) - Math.log(tw.from)) * ease(p));
+    }
     // Once the ground has dropped away, turn slowly to look down at the Earth
     // (unless you've already started looking around yourself).
     if (tw.rise && !aloft.panned && performance.now() - aloft.startedAt > 1200) {
@@ -837,16 +850,17 @@ async function main() {
       if (view.touchedAt() < aloft.startedAt && !sensor.active)
         view.lookTo(earthBelowView(view.state.fov), { duration: 7 });
     }
-    // Evenly in scale, so a kilometre near the ground counts as much as a thousand far out.
-    aloft.km = Math.exp(Math.log(tw.from) + (Math.log(tw.to) - Math.log(tw.from)) * k);
     if (tw.landing) {
+      // Swing round to your spot, and back into the ground's own frame, high up,
+      // before the land comes into view.
+      const k = ease(Math.min(1, p / 0.75));
       horizonFrame(clock.ms, loc, liveFrame);
       fromTurn.setFromRotationMatrix(tw.landing.frame);
       toTurn.setFromRotationMatrix(liveFrame);
       aloft.frame.makeRotationFromQuaternion(fromTurn.slerp(toTurn, k));
       const over = toVector3(surfaceDirection(loc.lat, loc.lon, clock.ms));
       aloft.dir.copy(tw.landing.dir).lerp(over, k).normalize();
-      if (tw.t >= 1) {
+      if (p >= 1) {
         // Down: back on the ground, in its own (turning) frame.
         aloft.frame = aloft.dir = aloft.tween = null;
         aloft.km = 0;
@@ -855,7 +869,7 @@ async function main() {
         return;
       }
     }
-    if (tw.t >= 1) aloft.tween = null;
+    if (p >= 1) aloft.tween = null;
   }
 
   /** Where you are above the Earth, for computeSky (null on the ground). */
@@ -1186,7 +1200,8 @@ async function main() {
 
   /** Mountains, towns and landmarks to label, as the layers allow. */
   function shownFeatures() {
-    if (isAloft() || flight || skylineFade <= 0.5 || !skyline?.features) return [];
+    // (Rising, they fall away with their hills, until the land fades below.)
+    if ((isAloft() && aloft.km > 3) || flight || skylineFade <= 0.5 || !skyline?.features) return [];
     return skyline.features.filter((f) => (f.group === "peak" ? layers.peakNames : layers.placeNames));
   }
   const FEATURE_PRIORITY = { city: 37, town: 33, village: 27, lighthouse: 34, observatory: 36, tower: 25, mast: 24 };
@@ -1296,7 +1311,7 @@ async function main() {
     for (const p of sky.planets) consider(p.dir, 18, 6, () => selectPlanet(p));
     // Mountains, towns and landmarks: the label sits centred just above the spot.
     {
-      for (const p of shownFeatures()) {
+      for (const p of isAloft() ? [] : shownFeatures()) {
         const s = p.dir && screenOf(p.dir);
         if (!s) continue;
         const dx = x - s[0];
@@ -1449,11 +1464,13 @@ async function main() {
     {
       for (const p of shownFeatures()) {
         p.dir ??= dirFromAltAz(p.alt, p.az);
+        // Risen up, it has sunk with the land (see sinkLand).
+        const dir = isAloft() ? dirFromAltAz(sinkAngle(p.alt, aloft.km, typicalDistance(skyline)), p.az) : p.dir;
         const chosen = selection?.type === "feature" && selection.feature === p;
         items.push({
           key: `f${p.id}`,
           text: p.name,
-          dir: p.dir,
+          dir,
           cls: `feature ${p.group} ${p.kind}${chosen ? " selected" : ""}`,
           priority: chosen ? 1000 : featurePriority(p),
           always: chosen,
@@ -1585,6 +1602,39 @@ async function main() {
     getSkyline: () => skyline,
     getAloft: () => aloft,
   };
+
+  // ---- The land falling away as you rise ----
+  // From h km higher, land d km away sinks from angle a to atan(tan a − h/d). The
+  // whole skyline sinks together, as if it were all at the skyline's typical
+  // distance, so it keeps its shape as it drops (the real near ridges would drop
+  // faster than the far mountains beside them, tearing the skyline into walls).
+  // With no hills, the land meets the sky about 5 km away (the horizon, standing).
+  const FLAT_KM = 5;
+  const sunk = new Float32Array(SKYLINE_SAMPLES);
+  let landSunk = false;
+  let landDistance = { profile: undefined, km: FLAT_KM };
+  /** The skyline's typical distance (km): its median, within reason. */
+  function typicalDistance(p) {
+    if (landDistance.profile !== p) {
+      const d = p ? Array.from(p.distance).filter((x) => x > 0) : [];
+      d.sort((a, b) => a - b);
+      landDistance = { profile: p, km: d.length ? Math.min(30, Math.max(3, d[d.length >> 1])) : FLAT_KM };
+    }
+    return landDistance.km;
+  }
+  /** The land's angle (degrees) seen from `km` higher than standing. */
+  const sinkAngle = (deg, km, d) => Math.atan(Math.tan(deg * D2R) - km / d) * R2D;
+  function sinkLand(km) {
+    const p = skylineFade > 0.5 ? skyline : null;
+    const d = typicalDistance(p);
+    let top = -90;
+    for (let j = 0; j < SKYLINE_SAMPLES; j++) {
+      sunk[j] = sinkAngle(p ? p.altitude[j] : 0, km, d);
+      top = Math.max(top, sunk[j]);
+    }
+    ground.setSkylineAltitudes(sunk, Math.max(top, 0));
+    landSunk = true;
+  }
 
   // ---- Frame loop ----
   const ZENITH = new THREE.Vector3(0, 1, 0);
@@ -1723,18 +1773,24 @@ async function main() {
     updateSkyline(dt);
     // Light reaching the water for its glitter: through the air, and over the hills.
     const lightOn = (b, e, t) => ({ dir: b.trueDir, light: t.map((c) => c * e * overHills(b)) });
-    // Rising, the land sinks below you and fades, and the Earth's own curve takes over.
-    const fall = smooth(0.02, 2, km);
-    const drop = Math.acos(EARTH_RADIUS_KM / (EARTH_RADIUS_KM + km));
+    // Rising, the hills, lakes and sea fall away below you, and once they're far
+    // below, the land fades into the Earth beneath (and the other way coming down).
+    const fall = smooth(3, 15, km);
     ground.mesh.visible = fall < 1;
+    if (isAloft() && fall < 1) sinkLand(km);
+    else if (landSunk && !isAloft()) {
+      landSunk = false;
+      ground.setSkyline(flight ? null : skyline); // back on the ground: the land as it is
+    }
+    const eyeKm = Math.max(GROUND_KM, ((skyline?.ground ?? 0) + 2) / 1000);
     ground.update(groundE, skylineFade, lightOn(sky.sun, sunE, tSun), lightOn(sky.moon, moonE, tMoon), {
       fall,
-      drop,
+      floor: isAloft() ? -Math.PI / 2 : 0,
+      rise: isAloft() ? eyeKm / (eyeKm + km) : 1,
     });
     // Up above, nothing is hidden by the land: the Earth itself hides what's behind it
     // (and the sky below the level shows the air's glow, not the dark of see-through ground).
     shared.uSeeThrough.value = layers.ground || isAloft() ? 0 : 1;
-    if (isAloft()) shared.uTerrain.value = 0;
 
     sun.update(sky.sun, tSun, sunLevel, exposure, camera, eclipse, bodyScale(), sunThrough, glasses, isAloft());
     moon.update(sky.moon, sky, tMoon, exposure, camera, bodyScale(), moonThrough, isAloft());
