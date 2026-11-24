@@ -744,9 +744,10 @@ input[type="number"]:focus {
   pointer-events: none;
 }
 
+/* On the top edge of the track, so the rest of it is free to click and drag */
 .mark {
   position: absolute;
-  top: 50%;
+  top: 0;
   width: 10px;
   height: 10px;
   margin: -5px 0 0 -5px;
@@ -758,11 +759,11 @@ input[type="number"]:focus {
   transition: transform 0.12s;
 }
 
-/* A bigger target than the dot, for fingers */
+/* A bigger target than the dot for fingers, reaching up and sideways but not into the track */
 .mark::before {
   content: "";
   position: absolute;
-  inset: -7px;
+  inset: -7px -5px 2px;
 }
 
 .mark:hover,
@@ -882,8 +883,17 @@ input[type="number"]:focus {
   min-width: 0;
 }
 
-#night-sky {
+.dimmer-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
   align-self: flex-start;
+}
+
+.dimmer .dimmer-btns svg {
+  width: 14px;
+  height: 14px;
+  stroke: none;
 }
 
 #night-sky[aria-pressed="true"] {
@@ -1152,7 +1162,7 @@ input[type="range"] {
     gap: 10px;
   }
 
-  #night-sky {
+  .dimmer-btns {
     align-self: center;
   }
 

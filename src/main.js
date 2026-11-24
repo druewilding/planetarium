@@ -1171,10 +1171,10 @@ async function main() {
     // The constant stops the eye "turning up the gain" too far on dark nights; without
     // it, faint moonlight scattered near the horizon shows as a grey glowing band.
     exposure = 0.7 / (adapt + 0.5);
-    // A solar eclipse you can see: offer the glasses (and take them off once it's over).
+    // A solar eclipse you can see: offer the glasses. Once on, they stay on until you take them off.
     const eclipseUp = sky.sun.visibleFraction < 1 && sky.sun.alt > -1 && !sunThrough;
-    if (glassesBtn.hidden === eclipseUp) glassesBtn.hidden = !eclipseUp;
-    if (glasses && !eclipseUp) setGlasses(false);
+    const offerGlasses = eclipseUp || glasses;
+    if (glassesBtn.hidden === offerGlasses) glassesBtn.hidden = !offerGlasses;
     // In totality the glasses show nothing at all: it's the one time to take them off.
     const glassesText = !glasses
       ? "Eclipse glasses"
