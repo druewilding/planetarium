@@ -148,6 +148,7 @@ planetarium/
 │   ├── cachedfetch.js     # fetch, keeping a copy in Cache Storage
 │   ├── space.js           # positions in space (Sun-centred, J2000), for distances from wherever you stand
 │   ├── eclipses.js        # the Earth's shadow on the Moon, and finding eclipses
+│   ├── constants.js       # sizes and distances shared by the astronomy and the drawing
 │   ├── scene/
 │   │   ├── atmosphere.js  # scattering model (GLSL + JS twin)
 │   │   ├── bodies.js      # Sun, Moon, ground

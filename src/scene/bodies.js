@@ -1,7 +1,8 @@
 import * as THREE from "three";
 
 import { moonOrientation } from "../astro.js";
-import { MOON_RADIUS_KM, UMBRA_CENTRE, UMBRA_EDGE, UMBRA_TINT } from "../eclipses.js";
+import { MOON_RADIUS_KM } from "../constants.js";
+import { UMBRA_CENTRE, UMBRA_EDGE, UMBRA_TINT } from "../eclipses.js";
 import { SAMPLES as SKYLINE_SAMPLES, WATER_ROWS, WATER_SCALE, WATER_SPAN } from "../terrain.js";
 
 export const SUN_DISTANCE = 990;

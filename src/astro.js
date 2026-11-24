@@ -6,15 +6,15 @@
 import * as A from "astronomy-engine";
 import { Matrix4, Vector3 } from "three";
 
+import { AU_KM, MOON_RADIUS_KM, SUN_RADIUS_KM } from "./constants.js";
 import { earthShadow, moonInShadow } from "./eclipses.js";
 
+export { AU_KM, MOON_RADIUS_KM, SUN_RADIUS_KM };
+
 export const Body = A.Body;
-export const AU_KM = 149597870.7;
 export const D2R = Math.PI / 180;
 export const R2D = 180 / Math.PI;
 
-export const SUN_RADIUS_KM = 695700;
-export const MOON_RADIUS_KM = 1737.4;
 export const SUN_ILLUMINANCE = 127000; // lux at 1 AU, top of atmosphere
 
 export const PLANETS = [

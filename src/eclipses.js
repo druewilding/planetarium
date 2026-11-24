@@ -9,10 +9,9 @@
 
 import * as A from "astronomy-engine";
 
-const KM_PER_AU = 149597870.7;
-const SUN_RADIUS_KM = 695700;
+import { AU_KM, MOON_RADIUS_KM, SUN_RADIUS_KM } from "./constants.js";
+
 const EARTH_SHADOW_RADIUS_KM = 6371 + 88;
-export const MOON_RADIUS_KM = 1737.4;
 
 /** Light reaching the umbra through the atmosphere, as a share of full sunlight: dimmest at the centre. */
 export const UMBRA_CENTRE = 4e-5;
@@ -28,13 +27,13 @@ export const UMBRA_TINT = [1, 0.3, 0.1];
 export function earthShadow(time) {
   const s = A.GeoVector(A.Body.Sun, time, true);
   const m = A.GeoMoon(time);
-  const sunKm = Math.hypot(s.x, s.y, s.z) * KM_PER_AU;
+  const sunKm = Math.hypot(s.x, s.y, s.z) * AU_KM;
   const axis = { x: -s.x, y: -s.y, z: -s.z };
   const len = Math.hypot(axis.x, axis.y, axis.z);
   axis.x /= len;
   axis.y /= len;
   axis.z /= len;
-  const moon = { x: m.x * KM_PER_AU, y: m.y * KM_PER_AU, z: m.z * KM_PER_AU };
+  const moon = { x: m.x * AU_KM, y: m.y * AU_KM, z: m.z * AU_KM };
   const along = moon.x * axis.x + moon.y * axis.y + moon.z * axis.z; // km behind the Earth
   const u = along / sunKm; // as in astronomy-engine's CalcShadow
   return {
@@ -106,13 +105,15 @@ const moonAltitude = (time, observer) => {
  * The next solar eclipses seen from a place, with the Sun up for some of it and
  * enough of it covered to notice:
  * [{ kind, peak, covered, sunAltitude, start, end, totalStart?, totalEnd? }], times in ms.
- * `covered` is the share of the Sun's disc hidden at the peak.
+ * `covered` is the share of the Sun's disc hidden at the peak. The search stops
+ * after `count` eclipses, or at `untilMs`, whichever comes first.
  */
-export function solarEclipsesFrom(startMs, place, count = 1) {
+export function solarEclipsesFrom(startMs, place, count = 1, untilMs = Infinity) {
   const observer = new A.Observer(place.lat, place.lon, 0);
   const list = [];
   let e = A.SearchLocalSolarEclipse(new Date(startMs), observer);
   for (let tries = 0; list.length < count && tries < 60; tries++) {
+    if (ms(e.peak.time) > untilMs) break;
     if (e.obscuration < MIN_COVERED) {
       e = A.NextLocalSolarEclipse(e.peak.time, observer);
       continue;
@@ -135,12 +136,14 @@ export function solarEclipsesFrom(startMs, place, count = 1) {
  * The next lunar eclipses you can see from a place: partial or total (a
  * penumbral one barely dims the Moon), with the Moon up for some of the time
  * it's in the umbra. [{ kind, peak, start, end, totalStart?, totalEnd?, moonAltitude }], ms.
+ * Like solarEclipsesFrom, it stops after `count` eclipses or at `untilMs`.
  */
-export function lunarEclipsesFrom(startMs, place, count = 1) {
+export function lunarEclipsesFrom(startMs, place, count = 1, untilMs = Infinity) {
   const observer = new A.Observer(place.lat, place.lon, 0);
   const list = [];
   let e = A.SearchLunarEclipse(new Date(startMs));
   for (let tries = 0; list.length < count && tries < 60; tries++) {
+    if (ms(e.peak) > untilMs) break;
     if (e.kind !== "penumbral") {
       const peak = ms(e.peak);
       const half = e.sd_partial * 60000;

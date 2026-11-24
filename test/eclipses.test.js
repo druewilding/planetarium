@@ -93,6 +93,12 @@ describe("finding eclipses", () => {
     expect(list[1].kind).toBe("Annular");
   });
 
+  test("stops searching at a given date", () => {
+    const until = Date.parse("2027-12-31T23:59Z");
+    expect(solarEclipsesFrom(NOW, gibraltar, 10, until).map((e) => day(e.peak))).toEqual(["2027-08-02"]);
+    expect(lunarEclipsesFrom(NOW, oslo, 10, until)).toEqual([]);
+  });
+
   test("finds lunar eclipses with the Moon up for some of them", () => {
     expect(day(lunarEclipsesFrom(Date.parse("2026-03-01"), auckland)[0].peak)).toBe("2026-03-03");
     const fromOslo = lunarEclipsesFrom(NOW, oslo, 2);

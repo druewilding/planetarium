@@ -610,6 +610,7 @@ async function main() {
       if (sensor.active) stopSensor(); // a link says where to look
       beforeLookUp = null;
       view.lookTo(l.view);
+      lastSun = null; // the link says where to look, so following the Sun starts from there
       if (!animate) view.update(10);
     }
   }
@@ -707,9 +708,17 @@ async function main() {
 
   /** Jump to an eclipse's peak (moving to `place` first, if given) and look at the Sun or Moon. */
   function goToEclipse(body, ms, place) {
+    // A lunar eclipse happens at night: no use for the glasses.
+    if (glasses && body === "moon") setGlasses(false);
     const dest = place ? location.fromPoint(place.lat, place.lon) : loc;
     if (place) setLocation(dest, true);
     clock.set(ms);
+    if (glasses) {
+      // Already looking at the Sun, and the view follows it through the jump
+      // (see followSun), so turning to it as well would turn twice.
+      select(selectSun());
+      return;
+    }
     // Aim using the sky as it will be there and then, not as it is now.
     sky = computeSky(ms, dest);
     select(body === "moon" ? selectMoon() : selectSun(), { look: true });
@@ -1195,7 +1204,8 @@ async function main() {
         : "Take glasses off";
     if (glassesLabel.textContent !== glassesText) glassesLabel.textContent = glassesText;
     // Through the glasses the eye adapts to the Sun's disc itself; everything else is black.
-    if (glasses) exposure = 1.5 / (SUN_LUMINANCE * Math.max(sunLevel, 2e-9) * mean(tSun));
+    // (Floored, so a Sun that has set, or been dimmed right down, can't send it soaring.)
+    if (glasses) exposure = 1.5 / (SUN_LUMINANCE * Math.max(sunLevel, 1e-3) * Math.max(mean(tSun), 1e-3));
     shared.uExposure.value = exposure;
     shared.uScotopic.value = 0.6 * (1 - smooth(0.005, 1, average));
     // Labels and figures recede in daylight, like a printed overlay on a bright sky.

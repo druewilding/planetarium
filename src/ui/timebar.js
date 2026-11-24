@@ -225,39 +225,44 @@ export function createTimebar({ clock, getLocation, onEclipse }) {
   let events = [];
   let eventsKey = "";
 
-  // Coloured by what the day means here: summer solstice yellow, winter blue. (Near
-  // the equator, where neither applies, June and December keep the northern colours.)
-  const solsticeClass = (i, loc) => {
-    if (i === 0 || i === 2) return "equinox";
-    const north = loc.lat >= 0 || Math.abs(loc.lat) < 10;
-    return (i === 1) === north ? "summer" : "winter";
-  };
+  const SEASON_NAMES = ["March equinox", "June solstice", "September equinox", "December solstice"];
 
+  /**
+   * The year's solstices, equinoxes and the eclipses you can see from here. The
+   * eclipse list reaches a little into the years either side, so one that runs
+   * across midnight on New Year's Eve still shows on both days.
+   */
   function findEvents(loc, year) {
     const list = [];
     try {
       const s = A.Seasons(year);
       [s.mar_equinox, s.jun_solstice, s.sep_equinox, s.dec_solstice].forEach((t, i) => {
         const ms = t.date.getTime();
-        // Named for this hemisphere ("Winter solstice"), with what it means for the day.
+        // Named for this hemisphere ("Winter solstice"), with what it means for the day,
+        // and coloured to match: summer solstice yellow, winter blue. Near the equator,
+        // where neither applies, June and December keep the northern colours.
         const season = seasonAt(ms, loc.lat, startOfLocalDay(ms, loc));
+        const name = season?.event ?? SEASON_NAMES[i];
+        const meaning = season?.eventMeaning ? ` · ${season.eventMeaning}` : "";
+        let cls = "equinox";
+        if (i % 2) cls = season && !season.tropical ? season.name : i === 1 ? "summer" : "winter";
         list.push({
           ms,
-          cls: `season ${solsticeClass(i, loc)}`,
-          title: `${season.event}: ${formatDate(ms, loc)}, ${formatTime(ms, loc)} · ${season.eventMeaning}`,
+          cls: `season ${cls}`,
+          title: `${name}: ${formatDate(ms, loc)}, ${formatTime(ms, loc)}${meaning}`,
           go: () => clock.set(ms),
         });
       });
     } catch {
       /* Seasons() can throw for extreme years */
     }
-    // Eclipses you can see from here. The searches start a little before local
-    // New Year, whatever the time zone, and anything outside the year is dropped.
     try {
-      const from = Date.UTC(year, 0, 1) - 14 * 3600000;
+      // Only as far as the year needs: a fixed number of eclipses can mean searching years ahead.
+      const from = Date.UTC(year, 0, 1) - 2 * DAY_MS;
+      const until = Date.UTC(year + 1, 0, 1) + 2 * DAY_MS;
       const eclipses = [
-        ...solarEclipsesFrom(from, loc, 4).map((e) => ({ ...e, body: "sun", what: "solar" })),
-        ...lunarEclipsesFrom(from, loc, 4).map((e) => ({ ...e, body: "moon", what: "lunar" })),
+        ...solarEclipsesFrom(from, loc, 10, until).map((e) => ({ ...e, body: "sun", what: "solar" })),
+        ...lunarEclipsesFrom(from, loc, 10, until).map((e) => ({ ...e, body: "moon", what: "lunar" })),
       ];
       for (const e of eclipses) {
         const how = e.body === "sun" && e.kind !== "Total" ? `, ${Math.round(e.covered * 100)}% covered` : "";
@@ -273,7 +278,7 @@ export function createTimebar({ clock, getLocation, onEclipse }) {
     } catch {
       /* the searches can fail for extreme years */
     }
-    return list.filter((ev) => shifted(ev.ms, loc).getUTCFullYear() === year);
+    return list;
   }
 
   function markButton(ev, fraction) {
@@ -282,8 +287,10 @@ export function createTimebar({ clock, getLocation, onEclipse }) {
     b.title = ev.title;
     b.setAttribute("aria-label", ev.title);
     b.style.left = `${fraction * 100}%`;
-    // A click on a dot goes to the event, rather than starting a drag along the track.
+    // A click on a dot goes to the event, rather than starting a drag along the
+    // track, and keys pressed on it (Enter, Space) are its own, not the slider's.
     b.addEventListener("pointerdown", (e) => e.stopPropagation());
+    b.addEventListener("keydown", (e) => e.stopPropagation());
     b.addEventListener("click", ev.go);
     return b;
   }
@@ -295,27 +302,27 @@ export function createTimebar({ clock, getLocation, onEclipse }) {
     eventsKey = key;
     events = findEvents(loc, year);
     const n = daysInLocalYear(loc);
-    yearMarks.replaceChildren(...events.map((ev) => markButton(ev, dayOfYear(ev.ms, loc) / n)));
+    const thisYear = events.filter((ev) => shifted(ev.ms, loc).getUTCFullYear() === year);
+    yearMarks.replaceChildren(...thisYear.map((ev) => markButton(ev, dayOfYear(ev.ms, loc) / n)));
     dayKey = ""; // the time track's dots come from the same list
   }
 
   function markDay(loc, start) {
     const end = start + DAY_MS;
     // Only eclipses: a solstice or equinox is about the whole day, not its moment.
-    const today = events.filter((ev) => ev.start != null && ev.ms >= start && ev.ms < end);
+    // Any eclipse happening today gets a band for the part of it that falls today,
+    // and a dot if its peak does too (one can run across midnight).
+    const today = events.filter((ev) => ev.start != null && ev.start < end && ev.end > start);
     const els = [];
     for (const ev of today) {
-      // An eclipse also gets a band for as long as it lasts.
-      if (ev.start != null) {
-        const band = document.createElement("span");
-        band.className = `span ${ev.cls}`;
-        const a = (Math.max(ev.start, start) - start) / DAY_MS;
-        const b = (Math.min(ev.end, end) - start) / DAY_MS;
-        band.style.left = `${a * 100}%`;
-        band.style.width = `${(b - a) * 100}%`;
-        els.push(band);
-      }
-      els.push(markButton(ev, (ev.ms - start) / DAY_MS));
+      const band = document.createElement("span");
+      band.className = `span ${ev.cls}`;
+      const a = (Math.max(ev.start, start) - start) / DAY_MS;
+      const b = (Math.min(ev.end, end) - start) / DAY_MS;
+      band.style.left = `${a * 100}%`;
+      band.style.width = `${(b - a) * 100}%`;
+      els.push(band);
+      if (ev.ms >= start && ev.ms < end) els.push(markButton(ev, (ev.ms - start) / DAY_MS));
     }
     dayMarks.replaceChildren(...els);
   }

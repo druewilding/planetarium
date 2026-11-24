@@ -178,14 +178,25 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, onG
 
   // ---------------------------------------------------------------- Eclipses
   // Searching takes a few milliseconds, so the answers are kept for the day.
+  // The searches look years ahead (tens of milliseconds), but the answer only
+  // changes once an eclipse is over, so it's kept until then: until the day after
+  // the first one listed ends (it stays listed on its own day), or until you move
+  // or go back before the day it was found from.
+  let eclipseMemo = null;
   function eclipses(s) {
     const { loc, ms } = s;
-    const start = startOfLocalDay(ms, loc);
-    return cached(`eclipses|${start}|${loc.lat.toFixed(2)}|${loc.lon.toFixed(2)}`, () => ({
-      solar: solarEclipsesFrom(start, loc, 3),
-      lunar: lunarEclipsesFrom(start, loc, 3),
-      total: nextTotalSolarEclipse(start),
-    }));
+    const place = `${loc.lat.toFixed(2)}|${loc.lon.toFixed(2)}|${loc.tz}`;
+    const m = eclipseMemo;
+    if (m && m.place === place && ms >= m.from && ms < m.until) return m.value;
+    const from = startOfLocalDay(ms, loc);
+    const solar = solarEclipsesFrom(from, loc, 3);
+    const lunar = lunarEclipsesFrom(from, loc, 3);
+    const total = nextTotalSolarEclipse(from);
+    const firstEnd = Math.min(solar[0]?.end ?? Infinity, lunar[0]?.end ?? Infinity, total.peak);
+    const until = Number.isFinite(firstEnd) ? startOfLocalDay(firstEnd, loc) + 86400000 : Infinity;
+    const value = { solar, lunar, total: { ...total, where: placeName(total.lat, total.lon) } };
+    eclipseMemo = { place, from, until, value };
+    return value;
   }
 
   /** A button that jumps to an eclipse's peak: here, or at `place` ({ lat, lon }). */
@@ -209,8 +220,7 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, onG
   function totalAnywhereRow(total, loc, solar) {
     // Already the next one here.
     if (solar.some((e) => e.kind === "Total" && Math.abs(e.peak - total.peak) < 86400000)) return "";
-    const where = placeName(total.lat, total.lon);
-    const title = `Go to ${where}, at the peak of the eclipse`;
+    const title = `Go to ${total.where}, at the peak of the eclipse`;
     return `<dt>${eclipseButton("sun", "Total, anywhere", total.peak, title, total)}</dt><dd>${formatYearDate(total.peak, loc)}</dd>`;
   }
 
@@ -290,7 +300,7 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, onG
     });
     const next = seasons.find(([, tt]) => tt.date.getTime() > ms);
     const ecl = eclipses(s);
-    const where = placeName(ecl.total.lat, ecl.total.lon);
+    const { where } = ecl.total;
     html += `<div class="section"><h4>Solar eclipses here</h4><dl>
       ${ecl.solar.map((e) => solarRow(e, loc)).join("")}
     </dl>
