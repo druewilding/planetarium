@@ -87,7 +87,6 @@ export function createLocation({ cities, land, onChange, getTime }) {
   shade.height = 180;
   const shadeCtx = shade.getContext("2d");
   let current = null;
-  let sub = { lat: 0, lon: 0 }; // where the Sun is overhead
 
   // The map is equirectangular and can zoom and pan. It wraps east–west, so
   // the Pacific can sit in the middle.
@@ -165,7 +164,6 @@ export function createLocation({ cities, land, onChange, getTime }) {
       }
     }
     shadeCtx.putImageData(img, 0, 0);
-    sub = { lat: subLat / D2R, lon: wrapLon(subLon / D2R) };
   }
 
   // City dots: biggest cities first, skipping any that would crowd one
@@ -260,12 +258,6 @@ export function createLocation({ cities, land, onChange, getTime }) {
 
     ctx.imageSmoothingEnabled = true;
     for (const k of copies) ctx.drawImage(shade, toX(-180 + k), toY(90), 360 * s, 180 * s);
-
-    // Sun position
-    ctx.fillStyle = "#ffd27a";
-    ctx.beginPath();
-    ctx.arc(nearX(sub.lon), toY(sub.lat), 7, 0, Math.PI * 2);
-    ctx.fill();
 
     // Cities: small dots that swell as the pointer comes near.
     placeDots();
