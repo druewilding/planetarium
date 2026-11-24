@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/druewilding/planetarium/compare/v1.0.0...v1.1.0) (2026-11-24)
+
+
+### Features
+
+* Say why your location couldn't be found ([#31](https://github.com/druewilding/planetarium/issues/31)) ([a0fdf1c](https://github.com/druewilding/planetarium/commit/a0fdf1c17994651864383efb97cde1fc2c10d5a8))
+
 ## [1.0.0](https://github.com/druewilding/planetarium/compare/v0.1.0...v1.0.0) (2026-11-24)
 
 
