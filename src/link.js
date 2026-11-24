@@ -8,7 +8,9 @@
 // Risen up above the Earth, it also says how high (`up`, km) and when you took
 // off (`from`): that fixes where above the Earth you are, and the frame you float
 // still in against the stars. Up there the view can be turned on its side too
-// (`roll`, degrees), as there's no up or down in space.
+// (`roll`, degrees), as there's no up or down in space. Once you've turned the
+// Earth by hand, you're over somewhere else: `over` (lat,lon, as it was at the
+// take-off moment) and `spin` (degrees the view has turned about straight down).
 //
 // `body` is the world you're standing on, so lat/lon mean the same thing on
 // the Moon or Mars once those exist. Unknown keys are ignored, so links stay
@@ -49,7 +51,14 @@ export function readLink(hash) {
 
   const up = num(p.get("up"));
   const from = Date.parse(p.get("from") ?? "");
-  if (up > 0 && Number.isFinite(from)) link.up = { km: up, from };
+  if (up > 0 && Number.isFinite(from)) {
+    link.up = { km: up, from };
+    const [olat, olon] = (p.get("over") ?? "").split(",").map(num);
+    if (olat != null && olon != null && Math.abs(olat) <= 90 && Math.abs(olon) <= 180) {
+      link.up.over = { lat: olat, lon: olon };
+      link.up.spin = num(p.get("spin")) ?? 0;
+    }
+  }
   const roll = num(p.get("roll"));
   if (roll != null && link.view) link.view.roll = roll;
 
@@ -84,8 +93,12 @@ export function writeLink({ body = DEFAULT_BODY, place, time, view, selection, u
   if (up) {
     p.set("up", String(Math.round(up.km * 10) / 10));
     p.set("from", isoSeconds(up.from));
+    if (up.over) {
+      p.set("over", `${up.over.lat.toFixed(2)},${up.over.lon.toFixed(2)}`);
+      p.set("spin", (up.spin ?? 0).toFixed(1));
+    }
   }
   if (selection) p.set("sel", selection.id != null ? `${selection.type}:${selection.id}` : selection.type);
-  // Slashes and colons read fine in a fragment; keep them unescaped.
-  return p.toString().replace(/%2F/gi, "/").replace(/%3A/gi, ":");
+  // Slashes, colons and commas read fine in a fragment; keep them unescaped.
+  return p.toString().replace(/%2F/gi, "/").replace(/%3A/gi, ":").replace(/%2C/gi, ",");
 }

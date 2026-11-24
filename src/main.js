@@ -312,6 +312,8 @@ async function main() {
     startedAt: 0, // when you took off (performance.now())
     takeoff: 0, // the moment you took off (clock time): with the place, it fixes where you are
     move: null, // gliding round the Earth to a new place: { from, to (frame quaternions), fromDir, toDir, t }
+    turned: false, // moved round the Earth by hand since taking off (see grabEarth)
+    spin: null, // still turning after you let go of the Earth: { axis (J2000), rate (rad/s) }
     panned: false, // turned to look down at the Earth yet?
     earthDir: new THREE.Vector3(0, -1, 0), // from you to the Earth's centre (view frame)
     earthRadius: 0, // the Earth's angular radius as you see it, radians
@@ -406,7 +408,13 @@ async function main() {
   }
 
   const sensor = createSensor();
-  const view = createView(camera, canvas, { onClick: pick, unproject: projection.unproject, sensor });
+  const view = createView(camera, canvas, {
+    onClick: pick,
+    unproject: projection.unproject,
+    sensor,
+    // Up above the Earth, a drag that starts on it turns it like a ball (see grabEarth).
+    grab: { start: (x, y) => grabEarth(x, y), move: (x, y, dt) => dragEarth(x, y, dt), end: (g) => letGoOfEarth(g) },
+  });
   {
     view.lookTo(defaultView(computeSky(clock.ms, loc)));
     view.update(10);
@@ -608,6 +616,8 @@ async function main() {
     aloft.frame = sky.eqjToWorld.clone();
     aloft.dir = toVector3(surfaceDirection(loc.lat, loc.lon, clock.ms));
     aloft.takeoff = clock.ms;
+    aloft.turned = false;
+    aloft.spin = null;
     aloft.km = 0.002;
     aloft.tween = { from: aloft.km, to: RISE_TO_KM, t: 0, duration: RISE_SECONDS, rise: true };
     aloft.before = { alt: view.state.alt, az: view.state.az, fov: Math.min(view.state.fov, 100) };
@@ -619,7 +629,7 @@ async function main() {
   }
   function comeDown() {
     if (!isAloft() || aloft.tween?.landing) return;
-    aloft.move = null; // (landing goes wherever your spot is)
+    aloft.move = aloft.spin = null; // (landing goes wherever your spot is)
     const landing = { frame: aloft.frame.clone(), dir: aloft.dir.clone() };
     aloft.tween = { from: aloft.km, to: 0.002, t: 0, duration: LAND_SECONDS, landing };
     // Turn back to the view you had before you left, as the ground comes up to meet you.
@@ -631,14 +641,19 @@ async function main() {
    * `place` was at the moment `from` (which also fixes the frame you float still
    * in). Animated, you rise (or move) there; otherwise you're simply there.
    */
-  function goAloft({ km, from }, place, animate) {
+  function goAloft({ km, from, over, spin = 0 }, place, animate) {
     if (sensor.active) stopSensor();
     earth.load(loadEarthMaps, renderer);
     const wasUp = isAloft();
     km = Math.min(MAX_KM, Math.max(MIN_KM, km));
-    aloft.frame = horizonFrame(from, place, aloft.frame ?? new THREE.Matrix4());
-    aloft.dir = toVector3(surfaceDirection(place.lat, place.lon, from));
+    // Over your own spot, or (turned round the Earth by hand) over somewhere else.
+    const at = over ?? place;
+    aloft.frame = horizonFrame(from, at, aloft.frame ?? new THREE.Matrix4());
+    if (over) aloft.frame.premultiply(new THREE.Matrix4().makeRotationY(spin * D2R));
+    aloft.dir = toVector3(surfaceDirection(at.lat, at.lon, from));
     aloft.takeoff = from;
+    aloft.turned = !!over;
+    aloft.spin = null;
     aloft.panned = true; // the link says where to look
     aloft.move = null;
     if (!wasUp) aloft.before = null;
@@ -665,6 +680,8 @@ async function main() {
     const frame = horizonFrame(ms, place);
     const dir = toVector3(surfaceDirection(place.lat, place.lon, ms));
     aloft.takeoff = ms;
+    aloft.turned = false;
+    aloft.spin = null;
     if (!animate) {
       aloft.frame.copy(frame);
       aloft.dir.copy(dir);
@@ -701,9 +718,91 @@ async function main() {
     }
   }
 
+  // ---- Turning the Earth like a ball ----
+  // Grab a point on the Earth and drag: you move round the Earth so that point stays
+  // under your finger. The Earth seems to turn where it is, and the sky, seen from
+  // your new place, turns with it.
+  let grabbedAt = null; // the pointer's last position on screen
+  let grabSpin = null; // how fast it was turning as you dragged
+  const toJ2000 = new THREE.Matrix4();
+
+  /**
+   * The point on the Earth's surface under a screen point (J2000, a unit vector from
+   * its centre). Off the edge of the Earth, the nearest point on its edge (or null,
+   * with `edge` false).
+   */
+  function earthPointAt(x, y, edge = true) {
+    const d = view.dirAt(x, y);
+    const k = 1 + aloft.km / EARTH_RADIUS_KM; // you to the Earth's centre, in Earth radii
+    const c = aloft.earthDir.clone().multiplyScalar(k);
+    const b = d.dot(c);
+    const disc = b * b - (k * k - 1);
+    let p;
+    if (disc >= 0 && b > 0) p = d.multiplyScalar(b - Math.sqrt(disc)).sub(c);
+    else if (edge) p = d.multiplyScalar(Math.max(b, 0)).sub(c);
+    else return null;
+    return p.applyMatrix4(toJ2000.copy(aloft.frame).transpose()).normalize();
+  }
+
+  /** Turn the Earth and the sky together by `q` (J2000): you move round the Earth the other way. */
+  function turnWorld(q) {
+    aloft.dir.applyQuaternion(q.clone().invert());
+    aloft.frame.multiply(new THREE.Matrix4().makeRotationFromQuaternion(q));
+    aloft.turned = true;
+  }
+
+  function grabEarth(x, y) {
+    if (!isAloft() || aloft.tween?.landing || aloft.move || !earth.mesh.visible) return false;
+    if (!earthPointAt(x, y, false)) return false; // on empty space: turn the view instead
+    aloft.spin = grabSpin = null;
+    grabbedAt = [x, y];
+    return true;
+  }
+  function dragEarth(x, y, dt) {
+    if (!grabbedAt || !isAloft()) return;
+    const from = earthPointAt(...grabbedAt);
+    const to = earthPointAt(x, y);
+    grabbedAt = [x, y];
+    const q = new THREE.Quaternion().setFromUnitVectors(from, to);
+    turnWorld(q);
+    const angle = 2 * Math.acos(Math.min(1, Math.abs(q.w)));
+    if (angle < 1e-9) return;
+    const axis = new THREE.Vector3(q.x, q.y, q.z).normalize().multiplyScalar(Math.sign(q.w) || 1);
+    grabSpin = { axis, rate: angle / dt };
+  }
+  function letGoOfEarth(gliding) {
+    // Let go while it's turning, and it carries on a little, slowing to a stop.
+    if (gliding && grabSpin && isAloft()) aloft.spin = grabSpin;
+    grabbedAt = grabSpin = null;
+  }
+  function updateSpin(dt) {
+    const sp = aloft.spin;
+    if (!sp) return;
+    turnWorld(new THREE.Quaternion().setFromAxisAngle(sp.axis, sp.rate * dt));
+    sp.rate *= Math.exp(-dt * 3);
+    if (sp.rate < 0.002) aloft.spin = null;
+  }
+
+  /**
+   * Where you are over the Earth, for a link, once you've turned it by hand: the
+   * place below you at the moment you took off, and how the view has turned about
+   * straight down, compared with taking off from there.
+   */
+  function aloftOver() {
+    const { x, y, z } = earthAxes(aloft.takeoff);
+    const d = aloft.dir;
+    const over = {
+      lat: Math.asin(Math.max(-1, Math.min(1, d.x * z.x + d.y * z.y + d.z * z.z))) * R2D,
+      lon: Math.atan2(d.x * y.x + d.y * y.y + d.z * y.z, d.x * x.x + d.y * x.y + d.z * x.z) * R2D,
+    };
+    const turn = aloft.frame.clone().multiply(horizonFrame(aloft.takeoff, over).transpose());
+    const ex = new THREE.Vector3(1, 0, 0).applyMatrix4(turn);
+    return { over, spin: Math.atan2(-ex.z, ex.x) * R2D };
+  }
+
   /** Straight back on the ground, with no flight down (a link to the ground opened while you're up). */
   function landNow() {
-    aloft.frame = aloft.dir = aloft.tween = aloft.move = null;
+    aloft.frame = aloft.dir = aloft.tween = aloft.move = aloft.spin = null;
     aloft.km = 0;
     view.setFree(false);
     setAloftUi(false);
@@ -724,6 +823,7 @@ async function main() {
   const toTurn = new THREE.Quaternion();
   function updateAloft(dt) {
     if (isAloft()) updateMove(dt);
+    if (isAloft()) updateSpin(dt);
     const tw = aloft.tween;
     if (!isAloft() || !tw) return;
     tw.t = Math.min(1, tw.t + dt / tw.duration);
@@ -930,7 +1030,10 @@ async function main() {
       view: view.state,
       selection: selectionToLink(selection),
       // Up above the Earth: how high (where you're heading, if you're on the way) and when you took off.
-      up: isAloft() && !aloft.tween?.landing ? { km: aloft.tween?.to ?? aloft.km, from: aloft.takeoff } : null,
+      up:
+        isAloft() && !aloft.tween?.landing
+          ? { km: aloft.tween?.to ?? aloft.km, from: aloft.takeoff, ...(aloft.turned ? aloftOver() : {}) }
+          : null,
     });
   }
 

@@ -46,6 +46,12 @@ describe("risen up above the Earth", () => {
     expect(readLink(`#${hash}`)).toMatchObject({ up, view: { az: 258.3, alt: -40, fov: 80, roll: 12.3 } });
   });
 
+  test("once you've turned the Earth by hand, says where you are over it", () => {
+    const hash = writeLink({ up: { ...up, over: { lat: -33.926, lon: 18.42 }, spin: -41.27 } });
+    expect(hash).toBe("body=earth&up=60000&from=2027-12-02T15:40:00Z&over=-33.93,18.42&spin=-41.3");
+    expect(readLink(`#${hash}`).up).toEqual({ ...up, over: { lat: -33.93, lon: 18.42 }, spin: -41.3 });
+  });
+
   test("leaves the roll out on the ground, or when the view is upright", () => {
     expect(writeLink({ view: { az: 0, alt: 0, fov: 80, roll: 30 } })).not.toContain("roll");
     expect(writeLink({ view: { az: 0, alt: 0, fov: 80, roll: 0.01 }, up })).not.toContain("roll");

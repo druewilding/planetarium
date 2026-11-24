@@ -13,7 +13,12 @@ import { altAz } from "../astro.js";
 const MIN_FOV = 0.5;
 const MAX_FOV = 180; // wide views switch to a stereographic projection (see projection.js)
 
-export function createView(camera, canvas, { onClick, unproject, sensor } = {}) {
+/**
+ * grab: optional { start(x, y), move(x, y, dt), end(gliding) }: while free (up in
+ * space), a drag that `start` accepts (it returns true, e.g. one that begins on
+ * the Earth) is handed over to it instead of turning the view.
+ */
+export function createView(camera, canvas, { onClick, unproject, sensor, grab } = {}) {
   const state = { az: 180, alt: 20, fov: 70, roll: 0 }; // (roll: only up in space, turned on its side)
   const vel = { az: 0, alt: 0 };
   let tween = null;
@@ -25,6 +30,7 @@ export function createView(camera, canvas, { onClick, unproject, sensor } = {}) 
   const forward = new Vector3();
   let following = false; // camera currently aimed by the sensor
   let touchedAt = -Infinity; // when you last turned or zoomed the view yourself
+  let grabbing = false; // a drag handed over to `grab`
   const sensorOn = () => sensor?.active;
 
   let free = false;
@@ -88,7 +94,14 @@ export function createView(camera, canvas, { onClick, unproject, sensor } = {}) 
     vel.az = vel.alt = 0;
     spin.yaw = spin.pitch = 0;
     canvas.classList.add("dragging");
+    const local = (ev) => {
+      const rect = canvas.getBoundingClientRect();
+      return [ev.clientX - rect.left, ev.clientY - rect.top];
+    };
+    if (pointers.size === 1 && free && grab) grabbing = !!grab.start(...local(e));
     if (pointers.size === 2) {
+      if (grabbing) grab.end(false); // two fingers: pinching to zoom instead
+      grabbing = false;
       const [a, b] = [...pointers.values()];
       pinchStart = { d: Math.hypot(a.x - b.x, a.y - b.y), fov: state.fov };
     }
@@ -110,6 +123,13 @@ export function createView(camera, canvas, { onClick, unproject, sensor } = {}) 
     }
     dragDist += Math.abs(dx) + Math.abs(dy);
     const k = degPerPixel();
+    if (grabbing) {
+      const now = performance.now();
+      const rect = canvas.getBoundingClientRect();
+      grab.move(e.clientX - rect.left, e.clientY - rect.top, Math.max(1, now - lastMove) / 1000);
+      lastMove = now;
+      return;
+    }
     if (free) {
       const yaw = dx * k * MathUtils.DEG2RAD;
       const pitch = dy * k * MathUtils.DEG2RAD;
@@ -144,7 +164,10 @@ export function createView(camera, canvas, { onClick, unproject, sensor } = {}) 
     if (pointers.size < 2) pinchStart = null;
     if (pointers.size === 0) {
       canvas.classList.remove("dragging");
-      if (performance.now() - lastMove > 80) vel.az = vel.alt = spin.yaw = spin.pitch = 0;
+      const recent = performance.now() - lastMove <= 80;
+      if (!recent) vel.az = vel.alt = spin.yaw = spin.pitch = 0;
+      if (grabbing) grab.end(recent); // let go mid-turn: it glides on
+      grabbing = false;
       if (dragDist < 6 && e.type === "pointerup" && onClick) {
         const rect = canvas.getBoundingClientRect();
         onClick(e.clientX - rect.left, e.clientY - rect.top);
