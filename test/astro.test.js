@@ -1,3 +1,4 @@
+import * as THREE from "three";
 import { describe, expect, test } from "vitest";
 
 import { compassPoint, computeSky, horizonFrame, refractionDeg, sunVisibleFraction } from "../src/astro.js";
@@ -95,6 +96,24 @@ describe("compassPoint", () => {
     [720 + 22.5, "NNE"],
   ])("%f° is %s", (az, point) => {
     expect(compassPoint(az)).toBe(point);
+  });
+});
+
+describe("floating over a place", () => {
+  test("over anywhere on Earth, its own frame puts the Earth's centre straight below you", () => {
+    const ms = Date.parse("2026-11-25T12:00:00Z");
+    for (const [lat, lon] of [
+      [59.91, 10.75],
+      [-26.2, 28.05],
+      [78.22, 15.65],
+      [0, -78.5],
+      [-77.8, 166.7],
+    ]) {
+      const d = surfaceDirection(lat, lon, ms);
+      const up = new THREE.Vector3(d.x, d.y, d.z).applyMatrix4(horizonFrame(ms, { lat, lon }));
+      // (Within the small difference between geodetic and geocentric latitude.)
+      expect(up.angleTo(new THREE.Vector3(0, 1, 0)) * (180 / Math.PI)).toBeLessThan(0.25);
+    }
   });
 });
 

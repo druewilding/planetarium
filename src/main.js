@@ -311,6 +311,7 @@ async function main() {
     before: null, // the view you had on the ground, to come back to
     startedAt: 0, // when you took off (performance.now())
     takeoff: 0, // the moment you took off (clock time): with the place, it fixes where you are
+    move: null, // gliding round the Earth to a new place: { from, to (frame quaternions), fromDir, toDir, t }
     panned: false, // turned to look down at the Earth yet?
     earthDir: new THREE.Vector3(0, -1, 0), // from you to the Earth's centre (view frame)
     earthRadius: 0, // the Earth's angular radius as you see it, radians
@@ -328,6 +329,11 @@ async function main() {
     // Mountains belong to where you were standing.
     if (selection?.type === "feature") select(null);
     location.set(next);
+    // Up above the Earth: glide round it to float over the new place instead.
+    if (isAloft() && !aloft.tween?.landing) {
+      moveAloftOver(next, animate && !!loc);
+      duration = MOVE_SECONDS;
+    }
     if (!loc || !animate) {
       loc = { ...next };
       locTween = null;
@@ -337,7 +343,7 @@ async function main() {
     dLon = ((dLon + 540) % 360) - 180;
     // Crossing the equator: turn around, so you keep facing the Sun's side of the sky
     // (south in the north, north in the south) and its daily path still makes sense.
-    if (Math.sign(next.lat || 1) !== Math.sign(loc.lat || 1)) view.lookTo({ az: view.state.az + 180 });
+    if (!isAloft() && Math.sign(next.lat || 1) !== Math.sign(loc.lat || 1)) view.lookTo({ az: view.state.az + 180 });
     locTween = { from: { ...loc }, to: next, dLon, t: 0, k: 0, duration };
   }
 
@@ -576,6 +582,7 @@ async function main() {
   const EARTH_RADIUS_KM = 6371;
   const RISE_TO_KM = 20000;
   const RISE_SECONDS = 9;
+  const MOVE_SECONDS = 3; // gliding round the Earth to float over another place
   const LAND_SECONDS = 6;
   const MIN_KM = 1;
   const MAX_KM = 250000; // well short of the Moon (384,000 km), which stays beyond the Earth
@@ -612,6 +619,7 @@ async function main() {
   }
   function comeDown() {
     if (!isAloft() || aloft.tween?.landing) return;
+    aloft.move = null; // (landing goes wherever your spot is)
     const landing = { frame: aloft.frame.clone(), dir: aloft.dir.clone() };
     aloft.tween = { from: aloft.km, to: 0.002, t: 0, duration: LAND_SECONDS, landing };
     // Turn back to the view you had before you left, as the ground comes up to meet you.
@@ -632,6 +640,7 @@ async function main() {
     aloft.dir = toVector3(surfaceDirection(place.lat, place.lon, from));
     aloft.takeoff = from;
     aloft.panned = true; // the link says where to look
+    aloft.move = null;
     if (!wasUp) aloft.before = null;
     if (animate) {
       if (!wasUp) aloft.km = 0.002;
@@ -646,9 +655,55 @@ async function main() {
     setAloftUi(true);
   }
 
+  /**
+   * Glide round the Earth to float straight over `place`, at the same height. You
+   * end up just as if you'd taken off from there now: the Earth still below you,
+   * and the stars turned to match (you're over another part of the Earth).
+   */
+  function moveAloftOver(place, animate) {
+    const ms = clock.ms;
+    const frame = horizonFrame(ms, place);
+    const dir = toVector3(surfaceDirection(place.lat, place.lon, ms));
+    aloft.takeoff = ms;
+    if (!animate) {
+      aloft.frame.copy(frame);
+      aloft.dir.copy(dir);
+      aloft.move = null;
+      return;
+    }
+    aloft.move = {
+      from: new THREE.Quaternion().setFromRotationMatrix(aloft.frame),
+      to: new THREE.Quaternion().setFromRotationMatrix(frame),
+      fromDir: aloft.dir.clone(),
+      toDir: dir,
+      t: 0,
+    };
+  }
+  const moveTurn = new THREE.Quaternion();
+  function updateMove(dt) {
+    const m = aloft.move;
+    if (!m) return;
+    m.t = Math.min(1, m.t + dt / MOVE_SECONDS);
+    const k = m.t < 0.5 ? 2 * m.t * m.t : 1 - (-2 * m.t + 2) ** 2 / 2;
+    aloft.frame.makeRotationFromQuaternion(moveTurn.slerpQuaternions(m.from, m.to, k));
+    // Along the great circle between the two places, at your height.
+    const angle = m.fromDir.angleTo(m.toDir);
+    if (angle > 1e-9) {
+      const s = Math.sin(angle);
+      aloft.dir
+        .copy(m.fromDir)
+        .multiplyScalar(Math.sin((1 - k) * angle) / s)
+        .addScaledVector(m.toDir, Math.sin(k * angle) / s);
+    }
+    if (m.t >= 1) {
+      aloft.dir.copy(m.toDir);
+      aloft.move = null;
+    }
+  }
+
   /** Straight back on the ground, with no flight down (a link to the ground opened while you're up). */
   function landNow() {
-    aloft.frame = aloft.dir = aloft.tween = null;
+    aloft.frame = aloft.dir = aloft.tween = aloft.move = null;
     aloft.km = 0;
     view.setFree(false);
     setAloftUi(false);
@@ -668,6 +723,7 @@ async function main() {
   const fromTurn = new THREE.Quaternion();
   const toTurn = new THREE.Quaternion();
   function updateAloft(dt) {
+    if (isAloft()) updateMove(dt);
     const tw = aloft.tween;
     if (!isAloft() || !tw) return;
     tw.t = Math.min(1, tw.t + dt / tw.duration);

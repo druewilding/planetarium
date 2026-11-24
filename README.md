@@ -54,7 +54,7 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
   labels stay with you. Up there you float still against the stars, so the sky stops turning and the Earth turns
   beneath you instead, carrying your spot round into the night and back into the day. There's no up or down in
   space, so dragging slides the sky freely under your finger. The Moon, being near, shifts against the stars as you
-  climb. − + set how high you are, from 1 km to 250,000 km, and **Face the Earth** turns back to it. The layers
+  climb. Choosing another place while you're up glides you round the Earth until you're floating straight over it. − + set how high you are, from 1 km to 250,000 km, and **Face the Earth** turns back to it. The layers
   change to suit space: the horizon, the compass and the Sun's path fade out, and the orbits fade in: the Moon's round
   the Earth, the Earth's round the Sun (with where it will be on the first of each month) and the planets', each
   named in its own colour and fading with distance, so the far side of an orbit is a ghost of its near side. **Back
