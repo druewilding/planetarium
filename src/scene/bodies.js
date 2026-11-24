@@ -101,7 +101,8 @@ export function createSun(shared, glsl) {
     uncovered = 1,
     scale = 1,
     throughEarth = false,
-    glasses = false
+    glasses = false,
+    aloft = false
   ) {
     uniforms.uFilter.value.set(...(glasses ? GLASSES_TINT : [1, 1, 1]));
     const angR = sun.angularRadius * scale;
@@ -118,7 +119,8 @@ export function createSun(shared, glsl) {
     uniforms.uDiscExposure.value = Math.min(exposure, 4 / L);
     const E = (sun.illuminance * dim * uncovered * (transmit[0] + transmit[1] + transmit[2])) / 3;
     uniforms.uGlare.value = throughEarth ? 0 : 0.8 * (1 - Math.exp(-E * exposure * 0.02));
-    mesh.visible = throughEarth || sun.alt > -2;
+    // (Up above the Earth there's no horizon to set behind: the Earth itself hides it.)
+    mesh.visible = throughEarth || aloft || sun.alt > -2;
   }
   return { mesh, update };
 }
@@ -264,7 +266,7 @@ export function createMoon(shared, glsl, texture, textureMean) {
   glow.frustumCulled = false;
 
   /** `throughEarth`: seen through see-through ground, with no glow around it. */
-  function update(moon, sky, transmit, exposure, camera, scale = 1, throughEarth = false) {
+  function update(moon, sky, transmit, exposure, camera, scale = 1, throughEarth = false, aloft = false) {
     const r = Math.tan(moon.angularRadius * scale) * MOON_DISTANCE;
     moonOrientation(moon.axis, sky.eqjToWorld, basis);
     mesh.matrix
@@ -285,7 +287,7 @@ export function createMoon(shared, glsl, texture, textureMean) {
     uniforms.uEarthshine.value = FULL_MOON_LUMINANCE * 1.2e-4 * earthPhase * earthPhase;
     // In the Earth's shadow the Moon is far dimmer, and the eye adapts to that instead.
     uniforms.uMoonExposure.value = Math.min(exposure, 0.9 / (FULL_MOON_LUMINANCE * Math.max(moon.shadow.light, 1e-5)));
-    mesh.visible = throughEarth || moon.alt > -3;
+    mesh.visible = throughEarth || aloft || moon.alt > -3;
 
     // Glow: grows with how bright the Moon is compared with what the eye is adapted to,
     // so it's strong on a dark night and gone in daylight.

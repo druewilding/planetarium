@@ -97,29 +97,61 @@ export function observer(loc) {
   return new A.Observer(loc.lat, loc.lon, 0);
 }
 
-function bodyState(body, time, obs, toWorld) {
-  const eq = A.Equator(body, time, obs, false, true);
-  const v = new Vector3(eq.vec.x, eq.vec.y, eq.vec.z).applyMatrix4(toWorld);
+function bodyState(body, time, obs, toWorld, above) {
+  let vec;
+  if (above) {
+    // Seen from a point above the Earth: from its centre, less where you are.
+    const g = A.GeoVector(body, time, true);
+    vec = { x: g.x - above.posAU.x, y: g.y - above.posAU.y, z: g.z - above.posAU.z };
+  } else vec = A.Equator(body, time, obs, false, true).vec;
+  const dist = Math.hypot(vec.x, vec.y, vec.z);
+  const v = new Vector3(vec.x, vec.y, vec.z).applyMatrix4(toWorld);
   const trueDir = v.clone().normalize();
-  const apparent = refract(trueDir.clone());
-  return { vecAU: v, dist: eq.dist, ra: eq.ra, dec: eq.dec, trueDir, dir: apparent, ...altAz(apparent) };
+  // Refraction fades away with the air as you rise.
+  const air = above ? above.air : 1;
+  const apparent = air > 0 ? trueDir.clone().lerp(refract(trueDir.clone()), air).normalize() : trueDir.clone();
+  const ra = ((Math.atan2(vec.y, vec.x) * R2D + 360) % 360) / 15;
+  const dec = Math.asin(vec.z / dist) * R2D;
+  return { vecAU: v, dist, ra, dec, trueDir, dir: apparent, ...altAz(apparent) };
+}
+
+/** The view frame on the ground: J2000 → your horizon (x east, y up, z south), at an instant. */
+export function horizonFrame(ms, loc, out = new Matrix4()) {
+  const time = A.MakeTime(new Date(ms));
+  return rotationToWorld(A.Rotation_EQJ_HOR(time, observer(loc)), out);
+}
+
+/** An astronomy-engine rotation as a Matrix4 (from its frame to the one it rotates into). */
+function rotationMatrix(rotation, time) {
+  const col = (x, y, z) => {
+    const v = A.RotateVector(rotation, new A.Vector(x, y, z, time));
+    return new Vector3(v.x, v.y, v.z);
+  };
+  return new Matrix4().makeBasis(col(1, 0, 0), col(0, 1, 0), col(0, 0, 1));
 }
 
 /**
  * Everything that moves, for one instant and place. Called every frame.
+ *
+ * `above` is for when you've risen off the ground: { posAU, eqjToWorld, air }.
+ * posAU is where you are (J2000, from the Earth's centre); eqjToWorld is the view
+ * frame, held still against the stars while you're up; air (0…1) is how much
+ * of the atmosphere is still above you, for refraction.
  */
-export function computeSky(ms, loc) {
+export function computeSky(ms, loc, above = null) {
   const time = A.MakeTime(new Date(ms));
   const obs = observer(loc);
-  const eqjToWorld = rotationToWorld(A.Rotation_EQJ_HOR(time, obs));
-  const eqdToWorld = rotationToWorld(A.Rotation_EQD_HOR(time, obs));
+  const eqjToWorld = above ? above.eqjToWorld : rotationToWorld(A.Rotation_EQJ_HOR(time, obs));
+  const eqdToWorld = above
+    ? above.eqjToWorld.clone().multiply(rotationMatrix(A.Rotation_EQD_EQJ(time), time))
+    : rotationToWorld(A.Rotation_EQD_HOR(time, obs));
 
-  const sun = bodyState(Body.Sun, time, obs, eqjToWorld);
+  const sun = bodyState(Body.Sun, time, obs, eqjToWorld, above);
   sun.angularRadius = Math.asin(SUN_RADIUS_KM / (sun.dist * AU_KM));
   sun.mag = -26.74 + 5 * Math.log10(sun.dist);
   sun.illuminance = SUN_ILLUMINANCE / (sun.dist * sun.dist);
 
-  const moon = bodyState(Body.Moon, time, obs, eqjToWorld);
+  const moon = bodyState(Body.Moon, time, obs, eqjToWorld, above);
   const moonIllum = A.Illumination(Body.Moon, time);
   moon.angularRadius = Math.asin(MOON_RADIUS_KM / (moon.dist * AU_KM));
   moon.mag = moonIllum.mag;
@@ -142,7 +174,7 @@ export function computeSky(ms, loc) {
   sun.visibleFraction = sunVisibleFraction(sun.angularRadius, moon.angularRadius, sun.trueDir.angleTo(moon.trueDir));
 
   const planets = PLANETS.map((p) => {
-    const s = bodyState(Body[p.id], time, obs, eqjToWorld);
+    const s = bodyState(Body[p.id], time, obs, eqjToWorld, above);
     const ill = A.Illumination(Body[p.id], time);
     s.id = p.id;
     s.name = p.name;

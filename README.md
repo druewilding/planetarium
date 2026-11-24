@@ -48,11 +48,13 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
   and daylight saving), or typed coordinates. The map zooms and pans (scroll, pinch or drag), and shows the cities as
   dots: the biggest when zoomed out, more as you zoom in. Dots swell as the pointer comes near, and clicking one stands
   you in that city. Changing location glides smoothly.
-- **Rise up:** lift straight up from where you're standing until the whole Earth is below you, lit by the Sun, with
-  city lights on the night side and your spot marked. You stay still against the stars while the Earth turns beneath
-  you, so you can watch your spot carried round into the night and back into the day, with the clock running as
-  usual. Drag to fly round the Earth, and scroll, pinch or use − + to go higher or lower. **Back to the ground**
-  brings you down to wherever your spot has turned to.
+- **Rise up:** lift straight off the ground, still looking the way you were. The ground drops away, the sky darkens
+  to black as the air thins, and the stars, the Moon, the planets, the lines and the labels all stay with you. Turn
+  round and look down to see the Earth below, lit by the Sun, with city lights on its night side and your spot marked.
+  Up there you float still against the stars, so the sky stops turning and the Earth turns beneath you instead,
+  carrying your spot round into the night and back into the day. The Moon, being near, shifts against the stars as
+  you climb. − + set how high you are, from 1 km to 250,000 km. **Back to the ground** brings you down over wherever
+  your spot has turned to.
 - **Overlays:** the Sun's path today with hour marks, the solstice and equinox paths, the Moon's path, the ecliptic,
   the celestial equator, and alt/az and RA/Dec grids.
 - **Info panel:** rise, set and transit times, twilight, day length, Moon phases and age, distances, light travel time,
@@ -156,7 +158,7 @@ planetarium/
 │   ├── constants.js       # sizes and distances shared by the astronomy and the drawing
 │   ├── scene/
 │   │   ├── atmosphere.js  # scattering model (GLSL + JS twin)
-│   │   ├── orbit.js       # the view from space: the Earth, the Sun and the stars
+│   │   ├── earth.js       # the Earth seen from above, drawn into the sky
 │   │   ├── bodies.js      # Sun, Moon, ground
 │   │   ├── points.js      # stars and planets as points
 │   │   ├── lines.js       # lines on the sky (refraction-aware)

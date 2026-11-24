@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 
-import { compassPoint, computeSky, refractionDeg, sunVisibleFraction } from "../src/astro.js";
+import { compassPoint, computeSky, horizonFrame, refractionDeg, sunVisibleFraction } from "../src/astro.js";
+import { surfaceDirection } from "../src/space.js";
 
 const oslo = { lat: 59.91, lon: 10.75, tz: "Europe/Oslo" };
 
@@ -94,5 +95,29 @@ describe("compassPoint", () => {
     [720 + 22.5, "NNE"],
   ])("%f° is %s", (az, point) => {
     expect(compassPoint(az)).toBe(point);
+  });
+});
+
+describe("computeSky from above the Earth", () => {
+  const ms = Date.parse("2026-11-24T22:00Z");
+  const above = (km, air = 0) => {
+    const d = surfaceDirection(oslo.lat, oslo.lon, ms);
+    const r = (6371 + km) / 149597870.7;
+    return { posAU: { x: d.x * r, y: d.y * r, z: d.z * r }, eqjToWorld: horizonFrame(ms, oslo), air };
+  };
+
+  test("agrees with the ground just above it", () => {
+    const ground = computeSky(ms, oslo);
+    const up = computeSky(ms, oslo, above(0.01, 1));
+    expect(up.sun.dir.angleTo(ground.sun.dir)).toBeLessThan(1e-4);
+    expect(up.moon.dir.angleTo(ground.moon.dir)).toBeLessThan(1e-3);
+    expect(up.planets[2].dir.angleTo(ground.planets[2].dir)).toBeLessThan(1e-4);
+  });
+
+  test("shifts the nearby Moon against the stars as you rise, and the Sun hardly at all", () => {
+    const low = computeSky(ms, oslo, above(1));
+    const high = computeSky(ms, oslo, above(100000));
+    expect((low.moon.dir.angleTo(high.moon.dir) * 180) / Math.PI).toBeGreaterThan(5);
+    expect((low.sun.dir.angleTo(high.sun.dir) * 180) / Math.PI).toBeLessThan(0.05);
   });
 });

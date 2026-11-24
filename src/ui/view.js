@@ -21,7 +21,6 @@ export function createView(camera, canvas, { onClick, unproject, sensor } = {}) 
   const target = new Quaternion();
   const forward = new Vector3();
   let following = false; // camera currently aimed by the sensor
-  let enabled = true; // off while you're up in space, which has its own controls
   const sensorOn = () => sensor?.active;
 
   function degPerPixel() {
@@ -49,7 +48,6 @@ export function createView(camera, canvas, { onClick, unproject, sensor } = {}) 
 
   canvas.addEventListener("pointerdown", (e) => {
     canvas.setPointerCapture(e.pointerId);
-    if (!enabled) return;
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     dragDist = 0;
     tween = null;
@@ -113,7 +111,6 @@ export function createView(camera, canvas, { onClick, unproject, sensor } = {}) 
   canvas.addEventListener(
     "wheel",
     (e) => {
-      if (!enabled) return;
       e.preventDefault();
       tween = null;
       state.fov *= Math.exp(e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0015));
@@ -122,7 +119,7 @@ export function createView(camera, canvas, { onClick, unproject, sensor } = {}) 
   );
 
   window.addEventListener("keydown", (e) => {
-    if (!enabled || e.target.closest("input, textarea, select, dialog")) return;
+    if (e.target.closest("input, textarea, select, dialog")) return;
     const step = state.fov / 12;
     const keys = {
       ArrowLeft: () => (state.az -= step),
@@ -222,13 +219,5 @@ export function createView(camera, canvas, { onClick, unproject, sensor } = {}) 
     zoom,
     dirAt,
     shift,
-    /** Turn the controls off (and drop any drag in progress) or back on. */
-    setEnabled(on) {
-      enabled = on;
-      pointers.clear();
-      pinchStart = null;
-      vel.az = vel.alt = 0;
-      canvas.classList.remove("dragging");
-    },
   };
 }

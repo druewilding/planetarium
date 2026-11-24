@@ -28,7 +28,6 @@
       aria-label="Sky view. Drag to look around, scroll or pinch to zoom, click an object for details."
     ></canvas>
     <div id="labels" aria-hidden="true"></div>
-    <div id="fade" aria-hidden="true"></div>
     <p id="toast" class="toast" role="status" hidden></p>
 
     <div id="loading" class="loading">
@@ -109,13 +108,18 @@
         id="rise-btn"
         class="chip small rise-btn"
         aria-pressed="false"
-        title="Rise straight up from where you're standing and see the Earth from space"
+        title="Rise straight up from where you're standing, high above the Earth"
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M12 2 7 7h3.5v5h3V7H17zM4 16.5a8 3.5 0 0 0 16 0h-2.2a5.8 2.2 0 0 1-11.6 0z" />
         </svg>
         <span>Rise up</span>
       </button>
+      <div id="altitude" class="altitude" hidden>
+        <button id="alt-down" class="icon-btn" aria-label="Lower" title="Lower">−</button>
+        <span id="alt-label" title="How high you are">0 km</span>
+        <button id="alt-up" class="icon-btn" aria-label="Higher" title="Higher">+</button>
+      </div>
       <button id="look-up" class="chip small look-up" aria-pressed="false" title="See the whole sky at once">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M2 18a10 10 0 0 1 20 0h-2a8 8 0 0 0-16 0zm10-9 4 4h-3v4h-2v-4H8z" />
