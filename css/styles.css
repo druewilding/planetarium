@@ -883,17 +883,8 @@ input[type="number"]:focus {
   min-width: 0;
 }
 
-.dimmer-btns {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+#night-sky {
   align-self: flex-start;
-}
-
-.dimmer .dimmer-btns svg {
-  width: 14px;
-  height: 14px;
-  stroke: none;
 }
 
 #night-sky[aria-pressed="true"] {
@@ -1162,7 +1153,7 @@ input[type="range"] {
     gap: 10px;
   }
 
-  .dimmer-btns {
+  #night-sky {
     align-self: center;
   }
 
