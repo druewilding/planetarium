@@ -109,7 +109,7 @@ function buildCatalog(starData, constellations) {
     return { dir: d.clone(), ...altAz(d) };
   };
 
-  const stars = starData.stars.map(([hip, ra, dec, mag, bv]) => {
+  const stars = starData.stars.map(([hip, ra, dec, mag, bv, plx, ePlx]) => {
     const [proper = "", desig = "", con = ""] = starData.names[hip] || [];
     const designation = desig && con ? `${desig} ${gen[con] || con}` : "";
     const label = proper || designation || `HIP ${hip}`;
@@ -120,6 +120,8 @@ function buildCatalog(starData, constellations) {
       dec,
       mag,
       bv,
+      plx, // parallax and its error (milliarcseconds), for the distance
+      ePlx,
       con,
       proper,
       name: label,
@@ -382,7 +384,14 @@ async function main() {
   info = createInfo({
     container: $("info-content"),
     catalog,
-    getState: () => ({ sky, loc, ms: clock.ms, selection, skyline: !flight && skylineFade > 0.5 ? skyline : null }),
+    getState: () => ({
+      sky,
+      loc,
+      standingOn: DEFAULT_BODY,
+      ms: clock.ms,
+      selection,
+      skyline: !flight && skylineFade > 0.5 ? skyline : null,
+    }),
     onLook: () => lookAtSelection(),
     onClear: () => select(null),
     onGo: () => selection?.type === "feature" && flyTo(selection.feature),
@@ -390,6 +399,10 @@ async function main() {
       if (type === "sun") select(selectSun(), { look: true });
       else if (type === "moon") select(selectMoon(), { look: true });
       else if (type === "planet") select(selectPlanet(PLANETS.find((p) => p.id === id)), { look: true });
+      else if (type === "star") {
+        const star = catalog.stars.find((st) => String(st.hip) === id);
+        if (star) select(selectStar(star), { look: true });
+      }
     },
   });
   $("info-btn").addEventListener("click", () => {
