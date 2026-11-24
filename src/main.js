@@ -548,7 +548,8 @@ async function main() {
     return writeLink({
       body: DEFAULT_BODY,
       place,
-      time: clock.ms,
+      // Following the real clock: leave the time out, so the link opens on "now" for whoever follows it.
+      time: clock.following ? null : clock.ms,
       view: view.state,
       selection: selectionToLink(selection),
     });
@@ -594,7 +595,7 @@ async function main() {
     history.replaceState(null, "", writtenHash);
     const url = window.location.href;
     const what = selection ? `${selection.name} from ${loc.name}` : `The sky from ${loc.name}`;
-    const text = `${what}, ${formatDateTime(clock.ms, loc)}`;
+    const text = clock.following ? `${what}, right now` : `${what}, ${formatDateTime(clock.ms, loc)}`;
     if (navigator.share) {
       try {
         await navigator.share({ title: "Planetarium", text, url });

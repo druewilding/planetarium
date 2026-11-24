@@ -7,7 +7,8 @@
 //
 // `body` is the world you're standing on, so lat/lon mean the same thing on
 // the Moon or Mars once those exist. Unknown keys are ignored, so links stay
-// readable by older and newer versions alike.
+// readable by older and newer versions alike. While the clock follows real
+// time, `t` is left out, so the link opens on the moment it's followed.
 
 export const DEFAULT_BODY = "earth";
 
