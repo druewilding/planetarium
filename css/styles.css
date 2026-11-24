@@ -1290,9 +1290,15 @@ button.info-head:hover {
   color: inherit;
 }
 
-.look-up[aria-pressed="true"] {
+.look-up[aria-pressed="true"],
+.glasses-btn[aria-pressed="true"] {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* Through eclipse glasses only the Sun and the Moon in front of it show, so only their names do. */
+#labels.glasses .label:not(.sun):not(.moon) {
+  display: none;
 }
 
 /* Season badge next to the clock */

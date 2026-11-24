@@ -14,7 +14,7 @@ import {
   skyRadiance,
   transmittance,
 } from "./scene/atmosphere.js";
-import { createGround, createMoon, createSkylineTexture, createSun } from "./scene/bodies.js";
+import { createGround, createMoon, createSkylineTexture, createSun, SUN_LUMINANCE } from "./scene/bodies.js";
 import * as glsl from "./scene/glsl.js";
 import { createMilkyWay } from "./scene/milkyway.js";
 import { createOverlays } from "./scene/overlays.js";
@@ -457,6 +457,22 @@ async function main() {
   });
 
   // ---- Look up: the whole dome of the sky at once ----
+  // Eclipse glasses: offered while the Moon is covering part of the Sun. Like the
+  // real thing, they cut everything but the Sun, so its shape finally shows.
+  let glasses = false;
+  const glassesBtn = $("glasses-btn");
+  const glassesLabel = glassesBtn.querySelector("span");
+  function setGlasses(on) {
+    glasses = on;
+    glassesBtn.setAttribute("aria-pressed", String(on));
+    $("labels").classList.toggle("glasses", on);
+    for (const group of overlays.groups) group.visible = !on;
+    planetPoints.points.visible = !on;
+    // You put them on to look at the Sun.
+    if (on) view.lookAt(sky.sun.dir, Math.min(view.state.fov, 4));
+  }
+  glassesBtn.addEventListener("click", () => setGlasses(!glasses));
+
   const lookUpBtn = $("look-up");
   let beforeLookUp = null;
   const lookingUp = () => view.state.alt > 80 && view.state.fov > 140;
@@ -1155,6 +1171,19 @@ async function main() {
     // The constant stops the eye "turning up the gain" too far on dark nights; without
     // it, faint moonlight scattered near the horizon shows as a grey glowing band.
     exposure = 0.7 / (adapt + 0.5);
+    // A solar eclipse you can see: offer the glasses (and take them off once it's over).
+    const eclipseUp = sky.sun.visibleFraction < 1 && sky.sun.alt > -1 && !sunThrough;
+    if (glassesBtn.hidden === eclipseUp) glassesBtn.hidden = !eclipseUp;
+    if (glasses && !eclipseUp) setGlasses(false);
+    // In totality the glasses show nothing at all: it's the one time to take them off.
+    const glassesText = !glasses
+      ? "Eclipse glasses"
+      : sky.sun.visibleFraction < 1e-4
+        ? "Totality! Take them off"
+        : "Take glasses off";
+    if (glassesLabel.textContent !== glassesText) glassesLabel.textContent = glassesText;
+    // Through the glasses the eye adapts to the Sun's disc itself; everything else is black.
+    if (glasses) exposure = 1.5 / (SUN_LUMINANCE * Math.max(sunLevel, 2e-9) * mean(tSun));
     shared.uExposure.value = exposure;
     shared.uScotopic.value = 0.6 * (1 - smooth(0.005, 1, average));
     // Labels and figures recede in daylight, like a printed overlay on a bright sky.
@@ -1172,7 +1201,7 @@ async function main() {
     ground.update(groundE, skylineFade, lightOn(sky.sun, sunE, tSun), lightOn(sky.moon, moonE, tMoon));
     shared.uSeeThrough.value = layers.ground ? 0 : 1;
 
-    sun.update(sky.sun, tSun, sunLevel, exposure, camera, eclipse, bodyScale(), sunThrough);
+    sun.update(sky.sun, tSun, sunLevel, exposure, camera, eclipse, bodyScale(), sunThrough, glasses);
     moon.update(sky.moon, sky, tMoon, exposure, camera, bodyScale(), moonThrough);
     planetPoints.update(sky.planets);
     overlays.updateFrames(sky);

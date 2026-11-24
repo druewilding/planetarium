@@ -28,7 +28,9 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
   Moon are drawn up to 3½ times larger, because at true size a wide view shrinks them to a few pixels; zoom in and
   they're true to size (or turn off **Enlarge Sun & Moon**). The phase icon in the info panel is turned the way the
   Moon looks in your sky right now, so near the equator a crescent lies on its back.
-- **Eclipses:** in a solar eclipse the Moon covers the Sun and the sky darkens with it. In a lunar eclipse the Earth's
+- **Eclipses:** in a solar eclipse the Moon covers the Sun and the sky darkens with it. Even with most of the Sun
+  covered, what's left still dazzles, so **Eclipse glasses** appear: like the real thing, they black out everything
+  but the Sun, and the Moon's bite finally shows (in totality they show nothing, which is your cue to take them off). In a lunar eclipse the Earth's
   shadow creeps across the Moon, which turns a dim copper red: the only sunlight reaching it has been bent through the
   Earth's air. The shadow's size comes from the same geometry as the eclipse predictions, so the two agree. The info
   panel lists the next solar and lunar eclipses you can see from where you are, and the next total solar eclipse

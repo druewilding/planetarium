@@ -7,7 +7,7 @@ import { SAMPLES as SKYLINE_SAMPLES, WATER_ROWS, WATER_SCALE, WATER_SPAN } from 
 export const SUN_DISTANCE = 990;
 export const MOON_DISTANCE = 980;
 
-const SUN_LUMINANCE = 1.6e9; // cd/m² at the solar surface, seen from outside the atmosphere
+export const SUN_LUMINANCE = 1.6e9; // cd/m² at the solar surface, seen from outside the atmosphere
 const FULL_MOON_LUMINANCE = 2500; // average cd/m² of the full Moon's disc
 const GLOW_RADII = 10; // the Moon's glow reaches this many lunar radii
 
@@ -21,6 +21,9 @@ function faceViewer(mesh, camera) {
   mesh.lookAt(0, 0, 0);
 }
 
+/** The colour of the Sun through eclipse glasses (black polymer film makes it orange). */
+const GLASSES_TINT = [1, 0.55, 0.2];
+
 /** The Sun: a limb-darkened disc plus a glare halo that scales with how dazzling it is. */
 export function createSun(shared, glsl) {
   const uniforms = {
@@ -29,6 +32,7 @@ export function createSun(shared, glsl) {
     uGlare: { value: 0 },
     uDiscFraction: { value: 0.05 },
     uDiscExposure: { value: 1 },
+    uFilter: { value: new THREE.Vector3(1, 1, 1) },
   };
   const material = new THREE.ShaderMaterial({
     uniforms,
@@ -50,6 +54,7 @@ export function createSun(shared, glsl) {
       uniform float uGlare;
       uniform float uDiscFraction;
       uniform float uDiscExposure;
+      uniform vec3 uFilter; // eclipse glasses tint the Sun orange
       varying vec2 vUv;
       varying vec3 vDir;
       void main() {
@@ -59,7 +64,7 @@ export function createSun(shared, glsl) {
           float mu = sqrt(1.0 - r * r);
           vec3 limb = vec3(0.3, 0.2, 0.15) + vec3(0.7, 0.8, 0.85) * mu; // limb darkening (R,G,B)
           // The disc gets its own exposure so a reddened, setting Sun keeps its colour.
-          vec3 c = acesFilm(uSunL * limb * uDiscExposure + sky * uExposure);
+          vec3 c = acesFilm(uSunL * limb * uFilter * uDiscExposure + sky * uExposure);
           float edge = 1.0 - smoothstep(0.9, 1.0, r);
           gl_FragColor = vec4(linearToSrgb(c) * edge, edge);
           return;
@@ -82,8 +87,22 @@ export function createSun(shared, glsl) {
   mesh.frustumCulled = false;
 
   /** sky: computeSky().sun, transmit: RGB, dim: 0..1, exposure: current */
-  /** `throughEarth`: seen through see-through ground, as a plain disc with no glare. */
-  function update(sun, transmit, dim, exposure, camera, uncovered = 1, scale = 1, throughEarth = false) {
+  /**
+   * `throughEarth`: seen through see-through ground, as a plain disc with no glare.
+   * `glasses`: through eclipse glasses, an orange disc.
+   */
+  function update(
+    sun,
+    transmit,
+    dim,
+    exposure,
+    camera,
+    uncovered = 1,
+    scale = 1,
+    throughEarth = false,
+    glasses = false
+  ) {
+    uniforms.uFilter.value.set(...(glasses ? GLASSES_TINT : [1, 1, 1]));
     const angR = sun.angularRadius * scale;
     const discRadius = Math.tan(angR) * SUN_DISTANCE;
     const glareScale = 12; // halo extends this many solar radii
