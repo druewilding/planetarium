@@ -43,6 +43,18 @@ describe("the page", () => {
     }
   });
 
+  test("deploys every folder and file it loads", () => {
+    const [, copied] = read(".github/workflows/deploy-please.yml").match(/cp -R (.+) _site\//);
+    const deployed = copied.split(" ");
+    const loaded = [
+      ...[...html.matchAll(/(?:src|href)="([^"#:]+)"/g)].map(([, path]) => path),
+      ...sources.flatMap((file) =>
+        [...read(file).matchAll(/["'`]((?:data|textures)\/[\w./-]+)["'`]/g)].map(([, p]) => p)
+      ),
+    ];
+    for (const path of loaded) expect(deployed, path).toContain(path.split("/")[0]);
+  });
+
   test.each(Object.entries(importMap(html)))("loads %s from the CDN at the version in package.json", (name, url) => {
     const version = pkg.devDependencies[name];
     expect(version, `${name} should be a dev dependency, so the tests can use it`).toBeDefined();

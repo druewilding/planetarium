@@ -1,0 +1,63 @@
+name: Deploy please
+
+# Deploys a release to GitHub Pages. Release please runs this whenever it
+# publishes a release. You can also run it by hand (Actions → Deploy please →
+# Run workflow): it deploys the latest release unless you name another one,
+# e.g. v1.0.0 to roll back. Unreleased changes on main are never deployed.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        type: string
+        description: Release to deploy (leave empty for the latest)
+        required: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - id: release
+        name: Choose the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          tag="${VERSION:-$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)}"
+          echo "Deploying $tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.release.outputs.tag }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: npm install
+      - run: npm run lint:check
+      - run: npm test
+      # No build step: the site is served as it is, minus the tools and tests.
+      - name: Gather the site
+        run: |
+          mkdir _site
+          cp -R index.html favicon.svg css src data textures _site/
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

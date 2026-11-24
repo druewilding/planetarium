@@ -1,24 +1,41 @@
 name: Release please
 
-# GitHub Pages publishes main as soon as it changes, so this follows main too:
-# every merge updates the release pull request and its changelog, and merging
-# that pull request tags the release.
+# Releases are deliberate, in two steps:
+# 1. Run this by hand (Actions → Release please → Run workflow) to open or
+#    update the release pull request, with the changelog.
+# 2. Merging that pull request runs this again, which tags and publishes the
+#    release, then starts Deploy please to put it on GitHub Pages.
+# Ordinary merges to main don't trigger it.
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
+  pull_request:
+    types: [closed]
+    branches: [main]
 
 permissions:
+  actions: write # to start Deploy please
   contents: write
   pull-requests: write
 
 jobs:
   release-please:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged && startsWith(github.head_ref, 'release-please--'))
     runs-on: ubuntu-latest
     steps:
-      - uses: googleapis/release-please-action@v5
+      - id: release
+        uses: googleapis/release-please-action@v5
         with:
           config-file: .github/release-please-config.json
           manifest-file: .github/.release-please-manifest.json
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+
+      # Started from main, as if run by hand: GitHub Pages only accepts
+      # deployments from main.
+      - name: Deploy the release
+        if: steps.release.outputs.release_created
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag_name }}
+        run: gh workflow run deploy-please.yml --repo "$GITHUB_REPOSITORY" --ref main -f version="$TAG"
