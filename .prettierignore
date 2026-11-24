@@ -1,3 +1,4 @@
+.github/.release-please-manifest.json
 CHANGELOG.md
-dist
 data
+dist
