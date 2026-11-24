@@ -387,20 +387,35 @@ async function main() {
   }
   /** Face the Sun or Moon if up (keeping the horizon in view), else the equator side of the sky. */
   /**
-   * A view with the Earth (straight below you) rising half into view above the
-   * time bar, so it fills the bottom of the sky with your spot still in sight.
+   * Up above the Earth: where its centre goes on screen (and your spot, at first),
+   * just above the time bar so half the Earth rises into view. As a direction
+   * from the camera, in the camera's own frame.
    */
-  function earthBelowView(fov) {
-    fov = Math.max(50, Math.min(fov, 100));
+  function earthSpot(fov) {
     const h = window.innerHeight;
     const barTop = document.querySelector(".timebar").getBoundingClientRect().top;
-    const y = barTop - 40; // the Earth's centre (and your spot, at first) just above the time bar
-    const below = projection.altitudeForHorizonAt(-(y - h / 2) / (h / 2), fov); // how far below the middle that is
-    return { alt: Math.max(-89.9, -90 + below), az: view.state.az, fov };
+    const y = barTop - 40;
+    const below = projection.altitudeForHorizonAt(-(y - h / 2) / (h / 2), fov) * D2R; // below the middle
+    return new THREE.Vector3(0, -Math.sin(below), -Math.cos(below));
+  }
+  const faceFov = () => Math.max(50, Math.min(view.state.fov, 100));
+  /** The Earth's direction in the camera's own frame. */
+  const earthSeen = () => aloft.earthDir.clone().applyQuaternion(camera.quaternion.clone().invert());
+  /**
+   * Turn to put the Earth in its place on screen, as little as possible: the view
+   * stays tilted however it was (north up, say).
+   */
+  const faceEuler = new THREE.Euler();
+  function faceEarth({ duration } = {}) {
+    const fov = faceFov();
+    const turn = new THREE.Quaternion().setFromUnitVectors(earthSpot(fov), earthSeen());
+    faceEuler.setFromQuaternion(camera.quaternion.clone().multiply(turn), "YXZ");
+    view.lookTo(
+      { alt: faceEuler.x * R2D, az: -faceEuler.y * R2D, roll: faceEuler.z * R2D, fov },
+      duration ? { duration } : undefined
+    );
   }
   function defaultView(s, fov = DEFAULT_FOV) {
-    // Up above the Earth: look out with the Earth in the lower third of the view.
-    if (isAloft()) return earthBelowView(view.state.fov);
     const base = horizonAltitude(fov);
     const body = s.sun.alt > 3 ? s.sun : s.moon.alt > 3 ? s.moon : null;
     if (!body) return { alt: base, az: loc.lat >= 0 ? 180 : 0, fov };
@@ -429,14 +444,15 @@ async function main() {
   function resetView() {
     beforeLookUp = null;
     // With the phone doing the aiming, only the zoom can go back.
-    view.lookTo(sensor.active ? { fov: DEFAULT_FOV } : defaultView(sky));
+    if (isAloft()) faceEarth();
+    else view.lookTo(sensor.active ? { fov: DEFAULT_FOV } : defaultView(sky));
   }
   /** Has the view been turned, tilted or zoomed away from where Reset would take it? */
   function awayFromDefault() {
     const fovOff = Math.abs(view.state.fov - DEFAULT_FOV) > 2;
     if (sensor.active) return fovOff;
+    if (isAloft()) return earthSeen().angleTo(earthSpot(faceFov())) > 4 * D2R; // (and any way round)
     const d = defaultView(sky);
-    if (isAloft()) return Math.abs(view.state.alt - d.alt) > 4; // (and any way round)
     const azOff = Math.abs(((view.state.az - d.az + 540) % 360) - 180) > 4;
     return fovOff || azOff || Math.abs(view.state.alt - d.alt) > 4;
   }
@@ -801,6 +817,64 @@ async function main() {
     return { over, spin: Math.atan2(-ex.z, ex.x) * R2D };
   }
 
+  // ---- North up (or south up) ----
+  // Up in space the view can end up any way round. This turns it until the
+  // Earth's north pole (or south, for those used to the southern sky) points to
+  // the top of the screen. It turns about the line to the Earth's centre, so the
+  // Earth stays where it is on screen and turns in place, with the sky turning
+  // round it (or, with the Earth out of view, about the middle of the view).
+  const orientBtn = $("orient-btn");
+  /**
+   * What to turn about (a world direction), and how far (radians) the view must
+   * turn about it to bring the Earth's north to the top, or null looking along the pole.
+   */
+  function northOnScreen() {
+    const q = camera.quaternion;
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(q);
+    const inView = forward.angleTo(aloft.earthDir) < (view.state.fov / 2) * D2R * 1.1;
+    const axis = inView ? aloft.earthDir.clone() : forward;
+    const north = toVector3(earthAxes(clock.ms).z).applyMatrix4(aloft.frame);
+    north.addScaledVector(axis, -north.dot(axis));
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(q);
+    up.addScaledVector(axis, -up.dot(axis));
+    if (north.length() < 0.05 || up.length() < 0.05) return null;
+    // The turn about the axis that takes the camera's up round to north.
+    const angle = Math.atan2(axis.dot(new THREE.Vector3().crossVectors(up, north)), up.dot(north));
+    return { axis, angle };
+  }
+  /** "north" or "south": what the button will do next. */
+  function nextUp() {
+    const a = northOnScreen()?.angle;
+    if (a != null && Math.abs(a) < 5 * D2R) return "south";
+    if (a != null && Math.abs(a) > 175 * D2R) return "north";
+    return loc.lat >= 0 ? "north" : "south";
+  }
+  const orientEuler = new THREE.Euler();
+  orientBtn.addEventListener("click", () => {
+    const n = isAloft() && northOnScreen();
+    if (!n) return;
+    // Turn the camera about the axis until its up lines up with north (or south).
+    const turn = nextUp() === "north" ? n.angle : n.angle + Math.PI;
+    const q = new THREE.Quaternion().setFromAxisAngle(n.axis, turn).multiply(camera.quaternion);
+    orientEuler.setFromQuaternion(q, "YXZ");
+    view.lookTo({
+      alt: orientEuler.x * R2D,
+      az: -orientEuler.y * R2D,
+      roll: orientEuler.z * R2D,
+      fov: view.state.fov,
+    });
+  });
+  function updateOrientButton() {
+    if (!isAloft()) return;
+    const next = nextUp();
+    const text = next === "north" ? "North up" : "South up";
+    if (orientBtn.querySelector("span").textContent !== text) {
+      orientBtn.querySelector("span").textContent = text;
+      orientBtn.classList.toggle("south", next === "south");
+      orientBtn.title = `Turn the view so the Earth's ${next} is at the top`;
+    }
+  }
+
   /** Straight back on the ground, with no flight down (a link to the ground opened while you're up). */
   function landNow() {
     aloft.frame = aloft.dir = aloft.tween = aloft.move = aloft.spin = null;
@@ -847,8 +921,7 @@ async function main() {
     // (unless you've already started looking around yourself).
     if (tw.rise && !aloft.panned && performance.now() - aloft.startedAt > 1200) {
       aloft.panned = true;
-      if (view.touchedAt() < aloft.startedAt && !sensor.active)
-        view.lookTo(earthBelowView(view.state.fov), { duration: 7 });
+      if (view.touchedAt() < aloft.startedAt && !sensor.active) faceEarth({ duration: 7 });
     }
     if (tw.landing) {
       // Swing round to your spot, and back into the ground's own frame, high up,
@@ -1210,7 +1283,7 @@ async function main() {
       } else {
         // A solar eclipse, seen from space, is the Moon's shadow on the Earth: look down at it.
         select(selectSun());
-        view.lookTo(earthBelowView(view.state.fov));
+        faceEarth();
       }
       return;
     }
@@ -1858,6 +1931,7 @@ async function main() {
       moonAlt: sky.moon.alt,
     });
     $("fov-label").textContent = `${view.state.fov < 10 ? view.state.fov.toFixed(1) : view.state.fov.toFixed(0)}°`;
+    updateOrientButton();
     if (isAloft()) $("alt-label").textContent = altitudeText(aloft.km);
 
     if (firstFrame) {

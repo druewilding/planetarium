@@ -931,6 +931,7 @@ input[type="range"] {
 /* Up above the Earth, pointing your phone at the real sky, the compass and
    looking up no longer make sense, and the − + set your height instead of the zoom
    (scroll or pinch still zooms) */
+body:not(.aloft) #orient-btn,
 body.aloft #sensor-btn,
 body.aloft #look-up,
 body.aloft .compass-widget,
@@ -947,6 +948,7 @@ body.aloft .zoom {
 }
 
 body.aloft .altitude,
+body.aloft #orient-btn,
 body:not(.aloft) .zoom,
 body:not(.aloft) .compass-widget,
 body:not(.aloft) #look-up {
@@ -1451,4 +1453,9 @@ button.info-head:hover {
   text-align: center;
   z-index: 7;
   pointer-events: none;
+}
+
+/* South up: the arrow points down */
+.orient-btn.south svg {
+  transform: rotate(180deg);
 }
