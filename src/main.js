@@ -310,6 +310,7 @@ async function main() {
     tween: null, // { from, to, t, duration, rise?, landing? }
     before: null, // the view you had on the ground, to come back to
     startedAt: 0, // when you took off (performance.now())
+    takeoff: 0, // the moment you took off (clock time): with the place, it fixes where you are
     panned: false, // turned to look down at the Earth yet?
     earthDir: new THREE.Vector3(0, -1, 0), // from you to the Earth's centre (view frame)
     earthRadius: 0, // the Earth's angular radius as you see it, radians
@@ -599,6 +600,7 @@ async function main() {
     earth.load(loadEarthMaps, renderer);
     aloft.frame = sky.eqjToWorld.clone();
     aloft.dir = toVector3(surfaceDirection(loc.lat, loc.lon, clock.ms));
+    aloft.takeoff = clock.ms;
     aloft.km = 0.002;
     aloft.tween = { from: aloft.km, to: RISE_TO_KM, t: 0, duration: RISE_SECONDS, rise: true };
     aloft.before = { alt: view.state.alt, az: view.state.az, fov: Math.min(view.state.fov, 100) };
@@ -613,9 +615,45 @@ async function main() {
     const landing = { frame: aloft.frame.clone(), dir: aloft.dir.clone() };
     aloft.tween = { from: aloft.km, to: 0.002, t: 0, duration: LAND_SECONDS, landing };
     // Turn back to the view you had before you left, as the ground comes up to meet you.
-    const back = aloft.before ?? { alt: 10, az: view.state.az, fov: DEFAULT_FOV };
+    const back = aloft.before ?? { alt: 15, az: loc.lat >= 0 ? 180 : 0, fov: DEFAULT_FOV };
     view.lookTo(back, { duration: LAND_SECONDS });
   }
+  /**
+   * Go to a point above the Earth that a link describes: `km` up, above where
+   * `place` was at the moment `from` (which also fixes the frame you float still
+   * in). Animated, you rise (or move) there; otherwise you're simply there.
+   */
+  function goAloft({ km, from }, place, animate) {
+    if (sensor.active) stopSensor();
+    earth.load(loadEarthMaps, renderer);
+    const wasUp = isAloft();
+    km = Math.min(MAX_KM, Math.max(MIN_KM, km));
+    aloft.frame = horizonFrame(from, place, aloft.frame ?? new THREE.Matrix4());
+    aloft.dir = toVector3(surfaceDirection(place.lat, place.lon, from));
+    aloft.takeoff = from;
+    aloft.panned = true; // the link says where to look
+    if (!wasUp) aloft.before = null;
+    if (animate) {
+      if (!wasUp) aloft.km = 0.002;
+      aloft.startedAt = performance.now();
+      aloft.tween = { from: aloft.km, to: km, t: 0, duration: wasUp ? 1.5 : RISE_SECONDS, rise: !wasUp };
+    } else {
+      aloft.km = km;
+      aloft.tween = null;
+    }
+    beforeLookUp = null;
+    view.setFree(true);
+    setAloftUi(true);
+  }
+
+  /** Straight back on the ground, with no flight down (a link to the ground opened while you're up). */
+  function landNow() {
+    aloft.frame = aloft.dir = aloft.tween = null;
+    aloft.km = 0;
+    view.setFree(false);
+    setAloftUi(false);
+  }
+
   /** Go higher (factor > 1) or lower, from wherever the last change was heading. */
   function changeHeight(factor) {
     if (!isAloft() || aloft.tween?.landing) return;
@@ -835,6 +873,8 @@ async function main() {
       time: clock.following ? null : clock.ms,
       view: view.state,
       selection: selectionToLink(selection),
+      // Up above the Earth: how high (where you're heading, if you're on the way) and when you took off.
+      up: isAloft() && !aloft.tween?.landing ? { km: aloft.tween?.to ?? aloft.km, from: aloft.takeoff } : null,
     });
   }
 
@@ -846,6 +886,12 @@ async function main() {
     }
     if (l.place) setLocation(location.fromLink(l.place.lat, l.place.lon, l.place.tz), animate);
     if (l.time != null) clock.set(l.time, { animate });
+    if (l.up) goAloft(l.up, l.place ?? (locTween ? locTween.to : loc), animate);
+    else if (isAloft() && l.place) {
+      // A link to the ground: come down to it.
+      if (animate) comeDown();
+      else landNow();
+    }
     select(selectionFromLink(l.selection));
     if (l.view) {
       if (sensor.active) stopSensor(); // a link says where to look
@@ -878,7 +924,14 @@ async function main() {
     writtenHash = `#${currentLink()}`;
     history.replaceState(null, "", writtenHash);
     const url = window.location.href;
-    const what = selection ? `${selection.name} from ${loc.name}` : `The sky from ${loc.name}`;
+    const from = isAloft()
+      ? `${altitudeText(aloft.tween?.to ?? aloft.km).replace(" up", "")} above ${loc.name}`
+      : loc.name;
+    const what = selection
+      ? `${selection.name} from ${from}`
+      : isAloft()
+        ? `The Earth from ${from}`
+        : `The sky from ${from}`;
     const text = clock.following ? `${what}, right now` : `${what}, ${formatDateTime(clock.ms, loc)}`;
     if (navigator.share) {
       try {

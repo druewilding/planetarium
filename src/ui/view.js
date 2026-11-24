@@ -14,7 +14,7 @@ const MIN_FOV = 0.5;
 const MAX_FOV = 180; // wide views switch to a stereographic projection (see projection.js)
 
 export function createView(camera, canvas, { onClick, unproject, sensor } = {}) {
-  const state = { az: 180, alt: 20, fov: 70 };
+  const state = { az: 180, alt: 20, fov: 70, roll: 0 }; // (roll: only up in space, turned on its side)
   const vel = { az: 0, alt: 0 };
   let tween = null;
   const pointers = new Map();
@@ -35,8 +35,10 @@ export function createView(camera, canvas, { onClick, unproject, sensor } = {}) 
   const AXIS_Y = new Vector3(0, 1, 0);
   const euler = new Euler(0, 0, 0, "YXZ");
   /** The camera's turn to face an altitude and azimuth, upright. */
-  const aimFor = (alt, az) =>
-    new Quaternion().setFromEuler(euler.set(alt * MathUtils.DEG2RAD, -az * MathUtils.DEG2RAD, 0, "YXZ"));
+  const aimFor = (alt, az, roll = 0) =>
+    new Quaternion().setFromEuler(
+      euler.set(alt * MathUtils.DEG2RAD, -az * MathUtils.DEG2RAD, roll * MathUtils.DEG2RAD, "YXZ")
+    );
   /** Turn the free camera about its own axes (radians). */
   function turnBy(yaw, pitch) {
     orient.multiply(turn.setFromAxisAngle(AXIS_Y, yaw));
@@ -55,6 +57,7 @@ export function createView(camera, canvas, { onClick, unproject, sensor } = {}) 
       forward.set(0, 0, -1).applyQuaternion(orient);
       state.alt = Math.asin(MathUtils.clamp(forward.y, -1, 1)) * MathUtils.RAD2DEG;
       state.az = (((Math.atan2(forward.x, -forward.z) * MathUtils.RAD2DEG) % 360) + 360) % 360;
+      state.roll = euler.setFromQuaternion(orient, "YXZ").z * MathUtils.RAD2DEG;
       camera.updateProjectionMatrix();
       camera.updateMatrixWorld();
       return;
@@ -71,6 +74,7 @@ export function createView(camera, canvas, { onClick, unproject, sensor } = {}) 
       camera.rotation.order = "YXZ";
       camera.rotation.set(state.alt * MathUtils.DEG2RAD, -state.az * MathUtils.DEG2RAD, 0);
     }
+    state.roll = 0;
     camera.updateProjectionMatrix();
     camera.updateMatrixWorld();
   }
@@ -203,7 +207,7 @@ export function createView(camera, canvas, { onClick, unproject, sensor } = {}) 
   }
 
   /** Smoothly turn (and zoom) to a view. `duration` in seconds: a slow drift, or a quick turn. */
-  function lookTo({ alt, az, fov = state.fov }, { duration = 0.9 } = {}) {
+  function lookTo({ alt, az, fov = state.fov, roll = 0 }, { duration = 0.9 } = {}) {
     fov = MathUtils.clamp(fov, MIN_FOV, MAX_FOV);
     if (free) {
       // Turning to a direction comes back upright; only zooming keeps the turn as it is.
@@ -211,8 +215,13 @@ export function createView(camera, canvas, { onClick, unproject, sensor } = {}) 
       alt ??= state.alt;
       az ??= state.az;
       spin.yaw = spin.pitch = 0;
-      tween = { free: true, from: orient.clone(), aim: keep ? orient.clone() : aimFor(alt, az), fovFrom: state.fov };
-      Object.assign(tween, { to: { alt, az, fov }, t: 0, duration });
+      tween = {
+        free: true,
+        from: orient.clone(),
+        aim: keep ? orient.clone() : aimFor(alt, az, roll),
+        fovFrom: state.fov,
+      };
+      Object.assign(tween, { to: { alt, az, fov, roll }, t: 0, duration });
       return;
     }
     alt ??= state.alt;

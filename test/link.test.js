@@ -35,6 +35,28 @@ describe("writeLink", () => {
   });
 });
 
+describe("risen up above the Earth", () => {
+  const up = { km: 60000, from: Date.parse("2027-12-02T15:40:00Z") };
+
+  test("says how high, when you took off, and how the view is turned", () => {
+    const hash = writeLink({ place: oslo, view: { az: 258.3, alt: -40, fov: 80, roll: 12.34 }, up });
+    expect(hash).toBe(
+      "body=earth&lat=59.91&lon=10.75&tz=Europe/Oslo&az=258.3&alt=-40.0&fov=80.0&roll=12.3&up=60000&from=2027-12-02T15:40:00Z"
+    );
+    expect(readLink(`#${hash}`)).toMatchObject({ up, view: { az: 258.3, alt: -40, fov: 80, roll: 12.3 } });
+  });
+
+  test("leaves the roll out on the ground, or when the view is upright", () => {
+    expect(writeLink({ view: { az: 0, alt: 0, fov: 80, roll: 30 } })).not.toContain("roll");
+    expect(writeLink({ view: { az: 0, alt: 0, fov: 80, roll: 0.01 }, up })).not.toContain("roll");
+  });
+
+  test("ignores a height without a take-off time, or a height that isn't up", () => {
+    expect(readLink("#body=earth&up=60000").up).toBeUndefined();
+    expect(readLink("#body=earth&up=-5&from=2027-12-02T15:40:00Z").up).toBeUndefined();
+  });
+});
+
 describe("readLink", () => {
   test("reads back what writeLink wrote", () => {
     const time = Date.parse("2026-12-04T19:22:12Z");

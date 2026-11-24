@@ -69,7 +69,8 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
   uses the compass for north (via `deviceorientationabsolute` on Android, `webkitCompassHeading` on iOS). Phone
   compasses are often a few degrees out and point to magnetic north, so dragging sideways turns the sky into line.
 - **Share links:** the address always holds where you're standing, the moment, which way you're looking, the zoom
-  and whatever you've picked out, so a link opens exactly the sky you saw. While the clock is on now (real time), the
+  and whatever you've picked out, so a link opens exactly the sky you saw. Risen up above the Earth, it also holds how
+  high you are and when you took off, so it opens straight onto the same view from space. While the clock is on now (real time), the
   link leaves the time out, so it opens on the sky as it is whenever it's followed. The **Share** button sends it (or
   copies it). Layer toggles stay out of the link, since those are each person's own preferences. Positions are
   rounded to about a kilometre.

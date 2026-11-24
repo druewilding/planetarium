@@ -5,6 +5,11 @@
 //   #body=earth&lat=59.91&lon=10.75&tz=Europe/Oslo&t=2026-12-04T19:22:12Z
 //    &az=180.0&alt=20.0&fov=80.0&sel=star:Sirius
 //
+// Risen up above the Earth, it also says how high (`up`, km) and when you took
+// off (`from`): that fixes where above the Earth you are, and the frame you float
+// still in against the stars. Up there the view can be turned on its side too
+// (`roll`, degrees), as there's no up or down in space.
+//
 // `body` is the world you're standing on, so lat/lon mean the same thing on
 // the Moon or Mars once those exist. Unknown keys are ignored, so links stay
 // readable by older and newer versions alike. While the clock follows real
@@ -42,6 +47,12 @@ export function readLink(hash) {
     if (fov != null) link.view.fov = fov;
   }
 
+  const up = num(p.get("up"));
+  const from = Date.parse(p.get("from") ?? "");
+  if (up > 0 && Number.isFinite(from)) link.up = { km: up, from };
+  const roll = num(p.get("roll"));
+  if (roll != null && link.view) link.view.roll = roll;
+
   const sel = p.get("sel");
   if (sel) {
     const i = sel.indexOf(":");
@@ -51,8 +62,10 @@ export function readLink(hash) {
   return Object.keys(link).length > 1 || link.body ? link : null;
 }
 
+const isoSeconds = (ms) => new Date(Math.round(ms / 1000) * 1000).toISOString().replace(".000Z", "Z");
+
 /** Build the fragment (without '#') for the current state. */
-export function writeLink({ body = DEFAULT_BODY, place, time, view, selection }) {
+export function writeLink({ body = DEFAULT_BODY, place, time, view, selection, up }) {
   const p = new URLSearchParams();
   p.set("body", body);
   if (place) {
@@ -61,11 +74,16 @@ export function writeLink({ body = DEFAULT_BODY, place, time, view, selection })
     p.set("lon", place.lon.toFixed(2));
     if (place.tz) p.set("tz", place.tz);
   }
-  if (time != null) p.set("t", new Date(Math.round(time / 1000) * 1000).toISOString().replace(".000Z", "Z"));
+  if (time != null) p.set("t", isoSeconds(time));
   if (view) {
     p.set("az", view.az.toFixed(1));
     p.set("alt", view.alt.toFixed(1));
     p.set("fov", view.fov < 10 ? view.fov.toFixed(2) : view.fov.toFixed(1));
+    if (up && Math.abs(view.roll ?? 0) >= 0.05) p.set("roll", view.roll.toFixed(1));
+  }
+  if (up) {
+    p.set("up", String(Math.round(up.km * 10) / 10));
+    p.set("from", isoSeconds(up.from));
   }
   if (selection) p.set("sel", selection.id != null ? `${selection.type}:${selection.id}` : selection.type);
   // Slashes and colons read fine in a fragment; keep them unescaped.
