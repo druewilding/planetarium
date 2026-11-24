@@ -98,6 +98,7 @@ is a total solar eclipse over Spain and North Africa).
 ```bash
 npm install
 npm start            # live-server on http://localhost:3000
+npm run dev          # or serve on http://localhost:8076
 # or, with no Node tooling at all:
 python3 -m http.server 3000
 ```

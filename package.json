@@ -6,6 +6,7 @@
   "author": "Drue Wilding",
   "type": "module",
   "scripts": {
+    "dev": "serve -l 8076",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint --fix",
@@ -14,7 +15,8 @@
     "start": "live-server --port=3000 --no-browser"
   },
   "devDependencies": {
-    "eslint-config-plus-prettier": "4.2.4"
+    "eslint-config-plus-prettier": "4.2.4",
+    "serve": "14.2.8"
   },
   "prettier": "eslint-config-plus-prettier/prettier"
 }
