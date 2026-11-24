@@ -49,13 +49,15 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
   dots: the biggest when zoomed out, more as you zoom in. Dots swell as the pointer comes near, and clicking one stands
   you in that city. Changing location glides smoothly.
 - **Rise up:** lift straight off the ground, still looking the way you were. The land sinks away at once, the sky
-  darkens to black as the air thins, and the view turns slowly down to the Earth below: lit by the Sun, with city
-  lights on its night side and your spot marked. The stars, the Moon, the planets and their labels stay with you. Up
+  darkens to black as the air thins, and the view turns slowly down until the Earth sits in the lower third of it: lit
+  by the Sun, with city lights on its night side and your spot marked. The stars, the Moon, the planets and their labels stay with you. Up
   there you float still against the stars, so the sky stops turning and the Earth turns beneath you instead, carrying
   your spot round into the night and back into the day. The Moon, being near, shifts against the stars as you climb.
   − + set how high you are, from 1 km to 250,000 km, and **Face the Earth** turns back to it. The layers change to
   suit space: the horizon, the compass and the Sun's path fade out, and the orbits fade in: the Moon's round the
-  Earth, the Earth's round the Sun (with where it will be on the first of each month) and the planets'. **Back to the
+  Earth, the Earth's round the Sun (with where it will be on the first of each month, and where it's heading) and the
+  planets', each named in its own colour. Lines fade with distance, and beads spaced evenly in time are bigger the
+  nearer they are, to show which way an orbit runs off into the distance. **Back to the
   ground** brings you down over wherever your spot has turned to, turning back to the view you had.
 - **Overlays:** the Sun's path today with hour marks, the solstice and equinox paths, the Moon's path, the ecliptic,
   the celestial equator, and alt/az and RA/Dec grids.

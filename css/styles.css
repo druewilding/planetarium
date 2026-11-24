@@ -1081,6 +1081,40 @@ body:not(.aloft) #look-up {
   color: rgba(255, 255, 255, 0.6);
 }
 
+/* Orbits' names, in the colours of their lines (see ORBIT_COLORS in orbits.js) */
+.label.orbit {
+  font-size: 10px;
+  font-style: italic;
+  opacity: 0.9;
+}
+.label.orbit.earth {
+  color: #6fd3ff;
+}
+.label.orbit.moon {
+  color: #c9d6ff;
+}
+.label.orbit.Mercury {
+  color: #c2b8ad;
+}
+.label.orbit.Venus {
+  color: #f2dc9b;
+}
+.label.orbit.Mars {
+  color: #ff8a65;
+}
+.label.orbit.Jupiter {
+  color: #e6b98c;
+}
+.label.orbit.Saturn {
+  color: #d8c070;
+}
+.label.orbit.Uranus {
+  color: #8fe3e6;
+}
+.label.orbit.Neptune {
+  color: #7d96ff;
+}
+
 /* The first of each month, along the Earth's orbit */
 .label.month {
   font-size: 10px;

@@ -376,9 +376,21 @@ async function main() {
     return projection.altitudeForHorizonAt(-(y - h / 2) / (h / 2), fov);
   }
   /** Face the Sun or Moon if up (keeping the horizon in view), else the equator side of the sky. */
+  /**
+   * A view with the Earth (straight below you) in the lower third of the sky that
+   * shows above the time bar, still facing the same way.
+   */
+  function earthBelowView(fov) {
+    fov = Math.max(50, Math.min(fov, 100));
+    const h = window.innerHeight;
+    const barTop = document.querySelector(".timebar").getBoundingClientRect().top;
+    const y = barTop - Math.min(barTop, h) / 6; // where the Earth's centre goes on screen
+    const below = projection.altitudeForHorizonAt(-(y - h / 2) / (h / 2), fov); // how far below the middle that is
+    return { alt: Math.max(-89.9, -90 + below), az: view.state.az, fov };
+  }
   function defaultView(s, fov = DEFAULT_FOV) {
-    // Up above the Earth: look down at it.
-    if (isAloft()) return { alt: -89.9, az: view.state.az, fov };
+    // Up above the Earth: look out with the Earth in the lower third of the view.
+    if (isAloft()) return earthBelowView(view.state.fov);
     const base = horizonAltitude(fov);
     const body = s.sun.alt > 3 ? s.sun : s.moon.alt > 3 ? s.moon : null;
     if (!body) return { alt: base, az: loc.lat >= 0 ? 180 : 0, fov };
@@ -408,7 +420,7 @@ async function main() {
     const fovOff = Math.abs(view.state.fov - DEFAULT_FOV) > 2;
     if (sensor.active) return fovOff;
     const d = defaultView(sky);
-    if (isAloft()) return fovOff || Math.abs(view.state.alt - d.alt) > 4; // straight down: any way round
+    if (isAloft()) return Math.abs(view.state.alt - d.alt) > 4; // (and any way round)
     const azOff = Math.abs(((view.state.az - d.az + 540) % 360) - 180) > 4;
     return fovOff || azOff || Math.abs(view.state.alt - d.alt) > 4;
   }
@@ -628,7 +640,7 @@ async function main() {
     if (tw.rise && !aloft.panned && performance.now() - aloft.startedAt > 1200) {
       aloft.panned = true;
       if (view.touchedAt() < aloft.startedAt && !sensor.active)
-        view.lookTo({ alt: -89.9, fov: Math.max(50, Math.min(view.state.fov, 90)) }, { duration: 7 });
+        view.lookTo(earthBelowView(view.state.fov), { duration: 7 });
     }
     // Evenly in scale, so a kilometre near the ground counts as much as a thousand far out.
     aloft.km = Math.exp(Math.log(tw.from) + (Math.log(tw.to) - Math.log(tw.from)) * k);
@@ -1243,6 +1255,14 @@ async function main() {
       const spot = yourSpot();
       if (spot)
         items.push({ key: "you", text: loc.name, dir: spot, cls: "you", priority: 300, always: true, offset: [-6, 0] });
+    }
+    // The orbits' names, along them, in their own colours.
+    if (inSpace > 0.5) {
+      for (const o of orbits.names()) {
+        const d = o.dir.clone().applyMatrix4(sky.eqjToWorld);
+        if (hidden(d)) continue;
+        items.push({ key: o.key, text: o.text, dir: d, cls: o.cls, priority: 27, offset: [6, -8] });
+      }
     }
     // Where the Earth will be on the first of each month, along its orbit.
     for (const m of monthMarks) {

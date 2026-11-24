@@ -84,7 +84,10 @@ export function createEarth(shared, glsl) {
         L += ocean * pow(max(dot(r, -d), 0.0), 80.0) * uSunE * 0.004 * lit;
         // City lights where it's dark, without the map's dim blue land behind them.
         vec3 lights = max(texture2D(uNight, uv, blur).rgb - vec3(0.12, 0.12, 0.2), 0.0);
-        L += pow(lights, vec3(1.4)) * vec3(1.0, 0.8, 0.55) * 3.0 * (1.0 - smoothstep(-0.12, 0.04, sun));
+        // (Never dimmer than shows on screen: with a sunlit crescent in view the eye
+        // adapts to that, and the lights, at their true brightness, would vanish.)
+        float glow = max(3.0, 0.5 / max(uExposure, 1e-6));
+        L += pow(lights, vec3(1.4)) * vec3(1.0, 0.8, 0.55) * glow * (1.0 - smoothstep(-0.12, 0.04, sun));
         // The air: blue haze, strongest towards the edge on the day side.
         float rim = pow(1.0 - max(dot(n, -d), 0.0), 4.0);
         L += vec3(0.25, 0.45, 1.0) * uSunE / PI * 0.04 * (0.2 + 1.5 * rim) * smoothstep(-0.2, 0.3, sun);

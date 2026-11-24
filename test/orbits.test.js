@@ -5,7 +5,13 @@ import { createOrbits } from "../src/scene/orbits.js";
 import { surfaceDirection } from "../src/space.js";
 
 // The shaders aren't compiled here: only the lines' geometry is checked.
-const shared = { uRefract: { value: 0 }, uStereo: { value: 0 }, uProjScale: { value: 1 }, uAspect: { value: 1 } };
+const shared = {
+  uRefract: { value: 0 },
+  uStereo: { value: 0 },
+  uProjScale: { value: 1 },
+  uAspect: { value: 1 },
+  uPixelRatio: { value: 1 },
+};
 const glsl = { REFRACTION: "", PROJECTION: "" };
 const MS = Date.parse("2026-11-24T10:30:00Z");
 
@@ -53,6 +59,18 @@ describe("orbits", () => {
     const d = depths(orbits.layers.moonOrbit);
     expect(d.filter((r) => r === 960).length).toBeGreaterThan(0);
     expect(d.filter((r) => r === 870).length).toBeGreaterThan(d.length / 2);
+  });
+
+  test("beads mark equal times along each orbit: 24 round a planet's, one a day along the Moon's", () => {
+    orbits.update(MS, above(20000), { moonOrbit: true, planetOrbits: true });
+    for (const line of orbits.layers.planetOrbits.children) expect(line.children[0].geometry.drawRange.count).toBe(24);
+    expect(orbits.layers.moonOrbit.children[0].geometry.drawRange.count).toBe(28);
+  });
+
+  test("each orbit is named, along the line", () => {
+    const names = orbits.names().map((n) => n.text);
+    expect(names).toContain("Mars’s orbit");
+    expect(names).toContain("Moon’s orbit");
   });
 
   test("the months along the Earth's orbit run round to the far side of the Sun", () => {

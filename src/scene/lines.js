@@ -4,10 +4,6 @@
 
 import * as THREE from "three";
 
-/**
- * `radius`: how far out to draw the line (which sets what it's in front of), or
- * null to take it from each vertex's length (see orbits.js).
- */
 export function createLineMaterial(sharedUniforms, glsl, { color, opacity = 1, refract = true, radius = 960 }) {
   return new THREE.ShaderMaterial({
     uniforms: {
@@ -15,7 +11,7 @@ export function createLineMaterial(sharedUniforms, glsl, { color, opacity = 1, r
       uColor: { value: new THREE.Color().setStyle(color, THREE.LinearSRGBColorSpace) },
       uOpacity: { value: opacity },
       uRefract: refract ? sharedUniforms.uRefract : { value: 0 },
-      uRadius: { value: radius ?? 0 },
+      uRadius: { value: radius },
       uStereo: sharedUniforms.uStereo,
       uProjScale: sharedUniforms.uProjScale,
       uAspect: sharedUniforms.uAspect,
@@ -26,8 +22,7 @@ export function createLineMaterial(sharedUniforms, glsl, { color, opacity = 1, r
       uniform float uRadius;
       void main() {
         vec3 d = refractDir(normalize(mat3(modelMatrix) * position));
-        float r = uRadius > 0.0 ? uRadius : length(position);
-        gl_Position = projectView(viewMatrix * vec4(d * r, 1.0));
+        gl_Position = projectView(viewMatrix * vec4(d * uRadius, 1.0));
       }
     `,
     fragmentShader: /* glsl */ `
