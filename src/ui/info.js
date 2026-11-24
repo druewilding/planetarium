@@ -2,10 +2,18 @@
 // whatever is selected. Expensive searches are cached per local day.
 
 import { A, AU_KM, Body, compassPoint, R2D } from "../astro.js";
+import { lunarEclipsesFrom, nextTotalSolarEclipse, solarEclipsesFrom } from "../eclipses.js";
 import { seasonAt } from "../season.js";
 import { bodyPosition, distanceAU, LIGHT_SPEED_KM_S, LIGHT_YEAR_AU, LIGHT_YEAR_KM, starPosition } from "../space.js";
 import { skylineAt, spansAboveSkyline } from "../terrain.js";
-import { formatDateTime, formatDuration, formatShortDate, formatTime, startOfLocalDay } from "../timezone.js";
+import {
+  formatDateTime,
+  formatDuration,
+  formatShortDate,
+  formatTime,
+  formatYearDate,
+  startOfLocalDay,
+} from "../timezone.js";
 
 const ENTITIES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\u0022": "&quot;" };
 const esc = (s) => String(s).replace(/[&<>\u0022]/g, (c) => ENTITIES[c]);
@@ -104,7 +112,7 @@ export function phaseIcon(angle, southern, litAngle) {
   </svg>`;
 }
 
-export function createInfo({ container, getState, onLook, onClear, onSelect, onGo, catalog }) {
+export function createInfo({ container, getState, onLook, onClear, onSelect, onGo, onEclipse, placeName, catalog }) {
   const cache = new Map();
   let lastHtml = "";
   let lastBuild = 0;
@@ -167,6 +175,62 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, onG
     raOf: (d) => A.Equator(body, d, obs, true, true).ra,
     decOf: (d) => A.Equator(body, d, obs, true, true).dec,
   });
+
+  // ---------------------------------------------------------------- Eclipses
+  // Searching takes a few milliseconds, so the answers are kept for the day.
+  // The searches look years ahead (tens of milliseconds), but the answer only
+  // changes once an eclipse is over, so it's kept until then: until the day after
+  // the first one listed ends (it stays listed on its own day), or until you move
+  // or go back before the day it was found from.
+  let eclipseMemo = null;
+  function eclipses(s) {
+    const { loc, ms } = s;
+    const place = `${loc.lat.toFixed(2)}|${loc.lon.toFixed(2)}|${loc.tz}`;
+    const m = eclipseMemo;
+    if (m && m.place === place && ms >= m.from && ms < m.until) return m.value;
+    const from = startOfLocalDay(ms, loc);
+    const solar = solarEclipsesFrom(from, loc, 3);
+    const lunar = lunarEclipsesFrom(from, loc, 3);
+    const total = nextTotalSolarEclipse(from);
+    const firstEnd = Math.min(solar[0]?.end ?? Infinity, lunar[0]?.end ?? Infinity, total.peak);
+    const until = Number.isFinite(firstEnd) ? startOfLocalDay(firstEnd, loc) + 86400000 : Infinity;
+    const value = { solar, lunar, total: { ...total, where: placeName(total.lat, total.lon) } };
+    eclipseMemo = { place, from, until, value };
+    return value;
+  }
+
+  /** A button that jumps to an eclipse's peak: here, or at `place` ({ lat, lon }). */
+  function eclipseButton(body, text, peak, title, place) {
+    const at = place ? ` data-lat="${place.lat}" data-lon="${place.lon}"` : "";
+    return `<button class="jump" data-eclipse="${body}" data-time="${peak}"${at} title="${esc(title)}">${text}</button>`;
+  }
+
+  function solarRow(e, loc) {
+    const covered = e.kind === "Total" ? "" : ` · ${Math.round(e.covered * 100)}% covered`;
+    const title = `Go to ${formatDateTime(e.peak, loc)}, when it's at its greatest`;
+    return `<dt>${eclipseButton("sun", `${e.kind} solar`, e.peak, title)}</dt><dd>${formatYearDate(e.peak, loc)}${covered}</dd>`;
+  }
+
+  function lunarRow(e, loc) {
+    const low = e.moonAltitude < 0 ? " · Moon rising or setting" : "";
+    const title = `Go to ${formatDateTime(e.peak, loc)}, when it's at its greatest`;
+    return `<dt>${eclipseButton("moon", `${e.kind} lunar`, e.peak, title)}</dt><dd>${formatYearDate(e.peak, loc)}${low}</dd>`;
+  }
+
+  function totalAnywhereRow(total, loc, solar) {
+    // Already the next one here.
+    if (solar.some((e) => e.kind === "Total" && Math.abs(e.peak - total.peak) < 86400000)) return "";
+    const title = `Go to ${total.where}, at the peak of the eclipse`;
+    return `<dt>${eclipseButton("sun", "Total, anywhere", total.peak, title, total)}</dt><dd>${formatYearDate(total.peak, loc)}</dd>`;
+  }
+
+  function moonEclipseRow(moon) {
+    const { umbra, light } = moon.shadow;
+    if (umbra >= 1) return "<dt>Eclipse</dt><dd>Total: in the Earth’s shadow</dd>";
+    if (umbra > 0) return `<dt>Eclipse</dt><dd>Partial: ${Math.round(umbra * 100)}% in the Earth’s shadow</dd>`;
+    if (light < 0.95) return "<dt>Eclipse</dt><dd>Penumbral: a little dimmed</dd>";
+    return "";
+  }
 
   function daylightBar(start, obs, ms) {
     // 24h strip coloured by the Sun's altitude.
@@ -235,6 +299,13 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, onG
       return list;
     });
     const next = seasons.find(([, tt]) => tt.date.getTime() > ms);
+    const ecl = eclipses(s);
+    const { where } = ecl.total;
+    html += `<div class="section"><h4>Solar eclipses here</h4><dl>
+      ${ecl.solar.map((e) => solarRow(e, loc)).join("")}
+    </dl>
+    <p class="note">The next total eclipse anywhere: ${formatYearDate(ecl.total.peak, loc)}, ${esc(where)}.
+      ${eclipseButton("sun", "Go there", ecl.total.peak, `Go to ${where}, at the peak of the eclipse`, ecl.total)}</p></div>`;
     html += `<div class="section"><h4>Facts</h4><dl>
       <dt>Distance</dt><dd>${((sun.dist * AU_KM) / 1e6).toFixed(2)} million km</dd>
       <dt>Light travel time</dt><dd>${formatDuration((sun.dist * AU_KM) / LIGHT_SPEED_KM_S / 60)}</dd>
@@ -258,7 +329,7 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, onG
     const head = full
       ? `<div class="info-head">${headInner}</div>`
       : `<button class="info-head jump" data-select="moon" title="Look at the Moon">${headInner}</button>`;
-    let html = `${head}<dl>${position(moon, s.skyline)}${riseSetRows(rs, loc, bodyRef(Body.Moon, obs))}${skylineRow(Body.Moon, s, start, 0.26)}</dl>`;
+    let html = `${head}<dl>${position(moon, s.skyline)}${moonEclipseRow(moon)}${riseSetRows(rs, loc, bodyRef(Body.Moon, obs))}${skylineRow(Body.Moon, s, start, 0.26)}</dl>`;
     if (!full) return html;
     const phases = cached(`quarters|${Math.floor(ms / 3600000)}`, () => {
       const list = [];
@@ -273,9 +344,12 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, onG
       return { list, age };
     });
     const qn = ["New Moon", "First quarter", "Full Moon", "Last quarter"];
+    const lunar = eclipses(s).lunar;
     html += `<div class="section"><h4>Coming up</h4><dl>
       ${phases.list.map((q) => `<dt>${qn[q.quarter]}</dt><dd>${formatDateTime(q.time.date.getTime(), loc)}</dd>`).join("")}
     </dl></div>
+    <div class="section"><h4>Lunar eclipses here</h4>${lunar.length ? `<dl>${lunar.map((e) => lunarRow(e, loc)).join("")}</dl>` : "<p class=note>None in the next few years.</p>"}
+      <p class="note">The Moon goes dark and red in the Earth’s shadow, lit only by sunlight bent through the Earth’s air.</p></div>
     <div class="section"><h4>Facts</h4><dl>
       ${phases.age !== null ? `<dt>Age</dt><dd>${phases.age.toFixed(1)} days</dd>` : ""}
       <dt>Distance</dt><dd>${Math.round(moon.dist * AU_KM).toLocaleString()} km</dd>
@@ -351,6 +425,17 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, onG
       ${stars.length ? `<div class="section"><h4>Brightest stars</h4><dl>${stars.map((st) => `<dt><button class="jump" data-select="star" data-id="${st.hip}" title="Look at ${esc(st.name)}">${esc(st.label)}</button></dt><dd>${["mag " + st.mag.toFixed(1), starDistance(s, st).short].filter(Boolean).join(" · ")}</dd>`).join("")}</dl></div>` : ""}`;
   }
 
+  function eclipseOverview(s) {
+    const { loc } = s;
+    const { solar, lunar, total } = eclipses(s);
+    const rows = [
+      solar[0] && solarRow(solar[0], loc),
+      lunar[0] && lunarRow(lunar[0], loc),
+      totalAnywhereRow(total, loc, solar.slice(0, 1)),
+    ];
+    return `<div class="section"><h4>Next eclipses</h4><dl>${rows.filter(Boolean).join("")}</dl></div>`;
+  }
+
   function overview(s) {
     const { sky, loc } = s;
     const visible = sky.planets
@@ -374,6 +459,7 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, onG
       <div class="section"><h4><button class="jump" data-select="sun" title="Look at the Sun">Sun</button></h4>${sunDetails(s, false)}</div>
       <div class="section"><h4><button class="jump" data-select="moon" title="Look at the Moon">Moon</button></h4>${moonDetails(s, false)}</div>
       <div class="section"><h4>Planets up now</h4>${visible ? `<dl>${visible}</dl>` : NO_PLANETS}</div>
+      ${eclipseOverview(s)}
       ${sunUp ? DIM_TIP : ""}
       <p class="note">Tap anything to look at it.</p>`;
   }
@@ -420,6 +506,11 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, onG
     if (action === "go") onGo?.();
     const jump = e.target.closest("[data-select]");
     if (jump) onSelect(jump.dataset.select, jump.dataset.id);
+    const eclipse = e.target.closest("[data-eclipse]")?.dataset;
+    if (eclipse) {
+      const place = eclipse.lat != null ? { lat: +eclipse.lat, lon: +eclipse.lon } : null;
+      onEclipse(eclipse.eclipse, +eclipse.time, place);
+    }
   });
 
   function update(force = false) {

@@ -1,12 +1,14 @@
 import * as THREE from "three";
 
 import { moonOrientation } from "../astro.js";
+import { MOON_RADIUS_KM } from "../constants.js";
+import { UMBRA_CENTRE, UMBRA_EDGE, UMBRA_TINT } from "../eclipses.js";
 import { SAMPLES as SKYLINE_SAMPLES, WATER_ROWS, WATER_SCALE, WATER_SPAN } from "../terrain.js";
 
 export const SUN_DISTANCE = 990;
 export const MOON_DISTANCE = 980;
 
-const SUN_LUMINANCE = 1.6e9; // cd/m² at the solar surface, seen from outside the atmosphere
+export const SUN_LUMINANCE = 1.6e9; // cd/m² at the solar surface, seen from outside the atmosphere
 const FULL_MOON_LUMINANCE = 2500; // average cd/m² of the full Moon's disc
 const GLOW_RADII = 10; // the Moon's glow reaches this many lunar radii
 
@@ -20,6 +22,9 @@ function faceViewer(mesh, camera) {
   mesh.lookAt(0, 0, 0);
 }
 
+/** The colour of the Sun through eclipse glasses (black polymer film makes it orange). */
+const GLASSES_TINT = [1, 0.55, 0.2];
+
 /** The Sun: a limb-darkened disc plus a glare halo that scales with how dazzling it is. */
 export function createSun(shared, glsl) {
   const uniforms = {
@@ -28,6 +33,7 @@ export function createSun(shared, glsl) {
     uGlare: { value: 0 },
     uDiscFraction: { value: 0.05 },
     uDiscExposure: { value: 1 },
+    uFilter: { value: new THREE.Vector3(1, 1, 1) },
   };
   const material = new THREE.ShaderMaterial({
     uniforms,
@@ -49,6 +55,7 @@ export function createSun(shared, glsl) {
       uniform float uGlare;
       uniform float uDiscFraction;
       uniform float uDiscExposure;
+      uniform vec3 uFilter; // eclipse glasses tint the Sun orange
       varying vec2 vUv;
       varying vec3 vDir;
       void main() {
@@ -58,7 +65,7 @@ export function createSun(shared, glsl) {
           float mu = sqrt(1.0 - r * r);
           vec3 limb = vec3(0.3, 0.2, 0.15) + vec3(0.7, 0.8, 0.85) * mu; // limb darkening (R,G,B)
           // The disc gets its own exposure so a reddened, setting Sun keeps its colour.
-          vec3 c = acesFilm(uSunL * limb * uDiscExposure + sky * uExposure);
+          vec3 c = acesFilm(uSunL * limb * uFilter * uDiscExposure + sky * uExposure);
           float edge = 1.0 - smoothstep(0.9, 1.0, r);
           gl_FragColor = vec4(linearToSrgb(c) * edge, edge);
           return;
@@ -81,8 +88,22 @@ export function createSun(shared, glsl) {
   mesh.frustumCulled = false;
 
   /** sky: computeSky().sun, transmit: RGB, dim: 0..1, exposure: current */
-  /** `throughEarth`: seen through see-through ground, as a plain disc with no glare. */
-  function update(sun, transmit, dim, exposure, camera, uncovered = 1, scale = 1, throughEarth = false) {
+  /**
+   * `throughEarth`: seen through see-through ground, as a plain disc with no glare.
+   * `glasses`: through eclipse glasses, an orange disc.
+   */
+  function update(
+    sun,
+    transmit,
+    dim,
+    exposure,
+    camera,
+    uncovered = 1,
+    scale = 1,
+    throughEarth = false,
+    glasses = false
+  ) {
+    uniforms.uFilter.value.set(...(glasses ? GLASSES_TINT : [1, 1, 1]));
     const angR = sun.angularRadius * scale;
     const discRadius = Math.tan(angR) * SUN_DISTANCE;
     const glareScale = 12; // halo extends this many solar radii
@@ -102,6 +123,26 @@ export function createSun(shared, glsl) {
   return { mesh, update };
 }
 
+// The Earth's shadow on the Moon (the GLSL twin of shadowLight in eclipses.js):
+// sunlight reaching a point on the Moon, with the normal n pointing out of it.
+const EARTH_SHADOW = /* glsl */ `
+  uniform vec3 uShadowAxis;   // from the Earth, directly away from the Sun
+  uniform vec3 uShadowCentre; // the Moon's centre from the Earth's, km
+  uniform float uUmbraKm;
+  uniform float uPenumbraKm;
+  vec3 earthShadow(vec3 n) {
+    vec3 p = uShadowCentre + n * ${MOON_RADIUS_KM.toFixed(1)};
+    float along = dot(p, uShadowAxis);
+    if (along <= 0.0) return vec3(1.0); // on the Sun's side of the Earth
+    float d = length(p - along * uShadowAxis);
+    float c = 2.0 * clamp((d - uUmbraKm) / (uPenumbraKm - uUmbraKm), 0.0, 1.0) - 1.0;
+    float sun = 0.5 + (c * sqrt(1.0 - c * c) + asin(c)) / 3.14159265;
+    float u = clamp(d / uUmbraKm, 0.0, 1.0);
+    float red = ${UMBRA_CENTRE.toExponential()} + ${(UMBRA_EDGE - UMBRA_CENTRE).toExponential()} * u * u * u * u;
+    return vec3(sun) + red * (1.0 - sun) * vec3(${UMBRA_TINT.map((v) => v.toFixed(2)).join(", ")});
+  }
+`;
+
 /** The Moon: textured sphere lit from the Sun's true direction, plus earthshine. */
 export function createMoon(shared, glsl, texture, textureMean) {
   const uniforms = {
@@ -115,6 +156,10 @@ export function createMoon(shared, glsl, texture, textureMean) {
     uTexScale: { value: 1 / textureMean },
     uGlowLimb: { value: 0 },
     uGlowTint: { value: new THREE.Vector3(1, 1, 1) },
+    uShadowAxis: { value: new THREE.Vector3(0, -1, 0) },
+    uShadowCentre: { value: new THREE.Vector3(0, 1e9, 0) },
+    uUmbraKm: { value: 4600 },
+    uPenumbraKm: { value: 8200 },
   };
   const material = new THREE.ShaderMaterial({
     uniforms,
@@ -143,6 +188,7 @@ export function createMoon(shared, glsl, texture, textureMean) {
       uniform float uTexScale;
       uniform float uGlowLimb;
       uniform vec3 uGlowTint;
+      ${EARTH_SHADOW}
       varying vec2 vUv;
       varying vec3 vNormal;
       varying vec3 vPos;
@@ -156,7 +202,8 @@ export function createMoon(shared, glsl, texture, textureMean) {
         float ls = 2.0 * ci / (ci + ce + 1e-4);        // Lommel–Seeliger: flat-looking full Moon
         float es = ce;                                    // earthshine comes from (roughly) the viewer
         // The eye adapts locally to the bright Moon, so the lit part uses its own exposure.
-        vec3 x = albedo * uTransmit * (uLit * ls * uMoonExposure + uEarthshine * es * uExposure * 0.12);
+        vec3 sunlight = uLit * ls * uMoonExposure * earthShadow(n);
+        vec3 x = albedo * uTransmit * (sunlight + uEarthshine * es * uExposure * 0.12);
         vec3 sky = skyAt(v * -1.0) * uExposure;
         vec3 c = linearToSrgb(acesFilm(x + sky));
         // The glow is in the air in front of the Moon, so it veils the dark side too
@@ -226,13 +273,18 @@ export function createMoon(shared, glsl, texture, textureMean) {
       .setPosition(moon.dir.clone().multiplyScalar(MOON_DISTANCE));
     mesh.matrixWorldNeedsUpdate = true;
     uniforms.uSunDir.value.copy(moon.sunDir);
+    uniforms.uShadowAxis.value.copy(moon.shadow.axis);
+    uniforms.uShadowCentre.value.copy(moon.shadow.centreKm);
+    uniforms.uUmbraKm.value = moon.shadow.umbraKm;
+    uniforms.uPenumbraKm.value = moon.shadow.penumbraKm;
     uniforms.uTransmit.value.fromArray(transmit);
     // Luminance of the lit surface scales with the Sun–Moon distance only (phase comes from geometry).
     uniforms.uLit.value = FULL_MOON_LUMINANCE;
     // Earthshine: the Earth as seen from the Moon is "full" when the Moon is new.
     const earthPhase = 1 - moon.phaseFraction;
     uniforms.uEarthshine.value = FULL_MOON_LUMINANCE * 1.2e-4 * earthPhase * earthPhase;
-    uniforms.uMoonExposure.value = Math.min(exposure, 0.9 / FULL_MOON_LUMINANCE);
+    // In the Earth's shadow the Moon is far dimmer, and the eye adapts to that instead.
+    uniforms.uMoonExposure.value = Math.min(exposure, 0.9 / (FULL_MOON_LUMINANCE * Math.max(moon.shadow.light, 1e-5)));
     mesh.visible = throughEarth || moon.alt > -3;
 
     // Glow: grows with how bright the Moon is compared with what the eye is adapted to,

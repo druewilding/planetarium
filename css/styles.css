@@ -735,26 +735,86 @@ input[type="number"]:focus {
   font-variant-numeric: tabular-nums;
 }
 
-.season {
+/* Solstices, equinoxes and eclipses along the tracks: dots you can hover and click.
+   Above the thumb, so they stay clickable. */
+.marks {
   position: absolute;
-  top: 50%;
-  width: 8px;
-  height: 8px;
-  margin: -4px 0 0 -4px;
-  border-radius: 50%;
-  border: 1.5px solid rgba(0, 0, 0, 0.55);
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
 }
 
-.season.equinox {
+/* On the top edge of the track, so the rest of it is free to click and drag */
+.mark {
+  position: absolute;
+  top: 0;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1.5px solid rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: transform 0.12s;
+}
+
+/* A bigger target than the dot for fingers, reaching up and sideways but not into the track */
+.mark::before {
+  content: "";
+  position: absolute;
+  inset: -7px -5px 2px;
+}
+
+.mark:hover,
+.mark:focus-visible {
+  transform: scale(1.4);
+}
+
+.mark.season.equinox {
   background: #8be08b;
 }
 
-.season.june {
-  background: #ff7a59;
+.mark.season.summer {
+  background: #ffe066;
 }
 
-.season.december {
+.mark.season.winter {
   background: #7ec8ff;
+}
+
+/* A dark Sun in a gold ring, or a copper Moon */
+.mark.eclipse {
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+}
+
+.mark.eclipse.sun {
+  background: #10131c;
+  border: 2px solid #ffd27a;
+  box-shadow: 0 0 5px rgba(255, 210, 122, 0.8);
+}
+
+.mark.eclipse.moon {
+  background: radial-gradient(circle at 40% 40%, #d0743f, #7a2e14);
+}
+
+/* How long an eclipse lasts, along the time track */
+.marks .span {
+  position: absolute;
+  bottom: 2px;
+  height: 4px;
+  border-radius: 2px;
+}
+
+.span.eclipse.sun {
+  background: rgba(16, 19, 28, 0.75);
+  box-shadow: 0 0 0 1px rgba(255, 210, 122, 0.7);
+}
+
+.span.eclipse.moon {
+  background: rgba(208, 116, 63, 0.85);
 }
 
 .time-readout {
@@ -1231,9 +1291,15 @@ button.info-head:hover {
   color: inherit;
 }
 
-.look-up[aria-pressed="true"] {
+.look-up[aria-pressed="true"],
+.glasses-btn[aria-pressed="true"] {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* Through eclipse glasses only the Sun and the Moon in front of it show, so only their names do. */
+#labels.glasses .label:not(.sun):not(.moon) {
+  display: none;
 }
 
 /* Season badge next to the clock */

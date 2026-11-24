@@ -14,7 +14,7 @@ import {
   skyRadiance,
   transmittance,
 } from "./scene/atmosphere.js";
-import { createGround, createMoon, createSkylineTexture, createSun } from "./scene/bodies.js";
+import { createGround, createMoon, createSkylineTexture, createSun, SUN_LUMINANCE } from "./scene/bodies.js";
 import * as glsl from "./scene/glsl.js";
 import { createMilkyWay } from "./scene/milkyway.js";
 import { createOverlays } from "./scene/overlays.js";
@@ -378,7 +378,7 @@ async function main() {
     },
   });
 
-  const timebar = createTimebar({ clock, getLocation: () => loc });
+  const timebar = createTimebar({ clock, getLocation: () => loc, onEclipse: (body, ms) => goToEclipse(body, ms) });
 
   const infoPanel = $("info");
   info = createInfo({
@@ -395,6 +395,8 @@ async function main() {
     onLook: () => lookAtSelection(),
     onClear: () => select(null),
     onGo: () => selection?.type === "feature" && flyTo(selection.feature),
+    onEclipse: (body, ms, place) => goToEclipse(body, ms, place),
+    placeName: (lat, lon) => location.fromPoint(lat, lon).name,
     onSelect: (type, id) => {
       if (type === "sun") select(selectSun(), { look: true });
       else if (type === "moon") select(selectMoon(), { look: true });
@@ -455,6 +457,33 @@ async function main() {
   });
 
   // ---- Look up: the whole dome of the sky at once ----
+  // Eclipse glasses: offered while the Moon is covering part of the Sun. Like the
+  // real thing, they cut everything but the Sun, so its shape finally shows.
+  let glasses = false;
+  const glassesBtn = $("glasses-btn");
+  const glassesLabel = glassesBtn.querySelector("span");
+  function setGlasses(on) {
+    glasses = on;
+    glassesBtn.setAttribute("aria-pressed", String(on));
+    $("labels").classList.toggle("glasses", on);
+    for (const group of overlays.groups) group.visible = !on;
+    planetPoints.points.visible = !on;
+    // You put them on to look at the Sun.
+    if (on) view.lookAt(sky.sun.dir, Math.min(view.state.fov, 4));
+  }
+  glassesBtn.addEventListener("click", () => setGlasses(!glasses));
+
+  // With the glasses on, the view turns with the Sun as time passes, so it stays
+  // where it is on screen (drag to move it somewhere else).
+  let lastSun = null;
+  function followSun() {
+    if (glasses && lastSun) {
+      const dAz = ((sky.sun.az - lastSun.az + 540) % 360) - 180;
+      view.shift(sky.sun.alt - lastSun.alt, dAz);
+    }
+    lastSun = glasses ? { alt: sky.sun.alt, az: sky.sun.az } : null;
+  }
+
   const lookUpBtn = $("look-up");
   let beforeLookUp = null;
   const lookingUp = () => view.state.alt > 80 && view.state.fov > 140;
@@ -581,6 +610,7 @@ async function main() {
       if (sensor.active) stopSensor(); // a link says where to look
       beforeLookUp = null;
       view.lookTo(l.view);
+      lastSun = null; // the link says where to look, so following the Sun starts from there
       if (!animate) view.update(10);
     }
   }
@@ -674,6 +704,24 @@ async function main() {
     if (selection.type !== "feature" && behindLand(d, 0))
       view.lookTo({ alt: Math.max(12, skylineAlt(az) + 8), az, fov: Math.max(fov, 60) });
     else view.lookAt(d, fov);
+  }
+
+  /** Jump to an eclipse's peak (moving to `place` first, if given) and look at the Sun or Moon. */
+  function goToEclipse(body, ms, place) {
+    // A lunar eclipse happens at night: no use for the glasses.
+    if (glasses && body === "moon") setGlasses(false);
+    const dest = place ? location.fromPoint(place.lat, place.lon) : loc;
+    if (place) setLocation(dest, true);
+    clock.set(ms);
+    if (glasses) {
+      // Already looking at the Sun, and the view follows it through the jump
+      // (see followSun), so turning to it as well would turn twice.
+      select(selectSun());
+      return;
+    }
+    // Aim using the sky as it will be there and then, not as it is now.
+    sky = computeSky(ms, dest);
+    select(body === "moon" ? selectMoon() : selectSun(), { look: true });
   }
 
   const selectSun = () => ({ type: "sun", name: "Sun" });
@@ -894,7 +942,11 @@ async function main() {
           always: true,
           offset: edgeOffset(sky.sun),
         });
-      if (!hidden(sky.moon.dir))
+      if (!hidden(sky.moon.dir)) {
+        // Near the Sun (as in a solar eclipse), put the Moon's name below its disc
+        // rather than on top of the Sun's.
+        const [dx, dy] = edgeOffset(sky.moon);
+        const nearSun = sky.moon.dir.angleTo(sky.sun.dir) < 3 * (shownRadius(sky.sun) + shownRadius(sky.moon));
         items.push({
           key: "moon",
           text: "Moon",
@@ -902,8 +954,9 @@ async function main() {
           cls: "body moon",
           priority: 99,
           always: true,
-          offset: edgeOffset(sky.moon),
+          offset: nearSun ? [dx, -dy] : [dx, dy],
         });
+      }
       for (const p of sky.planets) {
         if (hidden(p.dir)) continue;
         items.push({
@@ -1080,6 +1133,7 @@ async function main() {
     projection.update(view.state.fov, camera.aspect);
 
     sky = computeSky(clock.ms, loc);
+    followSun();
     const atm = layers.atmosphere ? ATMOSPHERES.earth : NONE;
     atmosphere.setParams(atm);
     shared.uRefract.value = layers.atmosphere && layers.refraction ? 1 : 0;
@@ -1138,6 +1192,20 @@ async function main() {
     // The constant stops the eye "turning up the gain" too far on dark nights; without
     // it, faint moonlight scattered near the horizon shows as a grey glowing band.
     exposure = 0.7 / (adapt + 0.5);
+    // A solar eclipse you can see: offer the glasses. Once on, they stay on until you take them off.
+    const eclipseUp = sky.sun.visibleFraction < 1 && sky.sun.alt > -1 && !sunThrough;
+    const offerGlasses = eclipseUp || glasses;
+    if (glassesBtn.hidden === offerGlasses) glassesBtn.hidden = !offerGlasses;
+    // In totality the glasses show nothing at all: it's the one time to take them off.
+    const glassesText = !glasses
+      ? "Eclipse glasses"
+      : sky.sun.visibleFraction < 1e-4
+        ? "Totality! Take them off"
+        : "Take glasses off";
+    if (glassesLabel.textContent !== glassesText) glassesLabel.textContent = glassesText;
+    // Through the glasses the eye adapts to the Sun's disc itself; everything else is black.
+    // (Floored, so a Sun that has set, or been dimmed right down, can't send it soaring.)
+    if (glasses) exposure = 1.5 / (SUN_LUMINANCE * Math.max(sunLevel, 1e-3) * Math.max(mean(tSun), 1e-3));
     shared.uExposure.value = exposure;
     shared.uScotopic.value = 0.6 * (1 - smooth(0.005, 1, average));
     // Labels and figures recede in daylight, like a printed overlay on a bright sky.
@@ -1155,7 +1223,7 @@ async function main() {
     ground.update(groundE, skylineFade, lightOn(sky.sun, sunE, tSun), lightOn(sky.moon, moonE, tMoon));
     shared.uSeeThrough.value = layers.ground ? 0 : 1;
 
-    sun.update(sky.sun, tSun, sunLevel, exposure, camera, eclipse, bodyScale(), sunThrough);
+    sun.update(sky.sun, tSun, sunLevel, exposure, camera, eclipse, bodyScale(), sunThrough, glasses);
     moon.update(sky.moon, sky, tMoon, exposure, camera, bodyScale(), moonThrough);
     planetPoints.update(sky.planets);
     overlays.updateFrames(sky);
