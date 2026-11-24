@@ -35,7 +35,7 @@ const year = (y) => (y > 0 ? String(y) : `${1 - y} BCE`);
  * panel and a short form for lists. Parallaxes get less certain with distance,
  * so the wording does too.
  */
-function starDistance(s, star) {
+export function starDistance(s, star) {
   const pos = starPosition(star);
   if (!pos) {
     const why = star.plx == null ? "Not measured" : "Too far to measure";

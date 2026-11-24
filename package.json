@@ -9,14 +9,20 @@
     "dev": "serve -l 8076",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "importmap": "node tools/sync-importmap.mjs",
     "lint": "eslint --fix",
     "lint:check": "eslint",
     "package:lint": "npx npm-package-json-lint .",
-    "start": "live-server --port=3000 --no-browser"
+    "start": "live-server --port=3000 --no-browser",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
+    "astronomy-engine": "2.1.19",
     "eslint-config-plus-prettier": "4.2.4",
-    "serve": "14.2.8"
+    "serve": "14.2.8",
+    "three": "0.180.0",
+    "vitest": "5.0.3"
   },
   "prettier": "eslint-config-plus-prettier/prettier"
 }

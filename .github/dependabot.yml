@@ -1,0 +1,26 @@
+# Keeps the workflows' actions up to date, and opens pull requests for npm
+# packages only when there's a security fix. Ordinary package updates come
+# from Update please once a month, which also moves the CDN import map along
+# with three and astronomy-engine. The pull requests use chore(deps) commits,
+# which release-please doesn't release.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+      include: scope
+
+  # Dev tools: Vitest, ESLint config, serve, and the libraries the tests share
+  # with the page. A limit of 0 turns off version updates but keeps security
+  # updates (Settings → Advanced Security → Dependabot security updates).
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    commit-message:
+      prefix: chore
+      include: scope
