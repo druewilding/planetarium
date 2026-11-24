@@ -5,6 +5,16 @@ import { A, Body, D2R } from "../astro.js";
 
 const fold = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
+// Why the browser couldn't give a location, by GeolocationPositionError code: [button text, tooltip].
+const GEO_ERRORS = {
+  1: ["Location blocked", "Allow location for this site in your browser's settings"],
+  2: [
+    "Can't find you",
+    "Your device can't tell where it is right now. Try again, or turn location services off and on",
+  ],
+  3: ["Timed out", "Finding your location took too long. Try again"],
+};
+
 export function formatLatLon(lat, lon) {
   const f = (v, p, n) => `${Math.abs(v).toFixed(2)}°${v >= 0 ? p : n}`;
   return `${f(lat, "N", "S")} ${f(lon, "E", "W")}`;
@@ -63,6 +73,7 @@ export function createLocation({ cities, land, onChange, getTime }) {
     if (!navigator.geolocation) return;
     const btn = $("geo-btn");
     if (fromButton) btn.textContent = "Locating…";
+    btn.title = "";
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         btn.textContent = "Use my location";
@@ -71,8 +82,14 @@ export function createLocation({ cities, land, onChange, getTime }) {
         onChange(loc, { animate: true });
         if (fromButton) dialog.close();
       },
-      () => {
-        btn.textContent = fromButton ? "Location unavailable" : "Use my location";
+      (err) => {
+        if (!fromButton) {
+          btn.textContent = "Use my location";
+          return;
+        }
+        const [text, hint] = GEO_ERRORS[err.code] ?? GEO_ERRORS[2];
+        btn.textContent = text;
+        btn.title = hint;
       },
       { enableHighAccuracy: false, maximumAge: 10 * 60 * 1000, timeout: 15000 }
     );
