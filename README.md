@@ -34,7 +34,8 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
   panel lists the next solar and lunar eclipses you can see from where you are, and the next total solar eclipse
   anywhere; tap one to go to its peak (or to its centre line).
 - **Time tracks:** drag along a 24-hour track shaded by where the Sun is (night, twilight, day), or along a date track
-  shaded by day length through the year, with the solstices and equinoxes marked. A year stepper sits beside it, and
+  shaded by day length through the year. Dots mark the solstices, the equinoxes and the eclipses you can see from where
+  you are on the date track, and an eclipse's moment on the time track (with a band for how long it lasts). Hover for what each one is, or tap to go there. A year stepper sits beside it, and
   time can play from −12 hours/s to +12 hours/s.
 - **Wide views without distortion:** zoomed in, the view uses ordinary perspective. Zoom out past about 70° and it
   blends into a stereographic ("fisheye") projection, which keeps circles round, so the Sun's daily arc reads

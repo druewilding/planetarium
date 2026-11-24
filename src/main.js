@@ -378,7 +378,7 @@ async function main() {
     },
   });
 
-  const timebar = createTimebar({ clock, getLocation: () => loc });
+  const timebar = createTimebar({ clock, getLocation: () => loc, onEclipse: (body, ms) => goToEclipse(body, ms) });
 
   const infoPanel = $("info");
   info = createInfo({

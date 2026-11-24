@@ -3,6 +3,7 @@
 // stepper, play/speed buttons and a typed date/time entry.
 
 import { A, Body, D2R } from "../astro.js";
+import { lunarEclipsesFrom, solarEclipsesFrom } from "../eclipses.js";
 import { seasonAt } from "../season.js";
 import {
   dayOfYear,
@@ -85,7 +86,7 @@ function makeTrack(track, { onSet, onKey }) {
   });
 }
 
-export function createTimebar({ clock, getLocation }) {
+export function createTimebar({ clock, getLocation, onEclipse }) {
   const $ = (id) => document.getElementById(id);
   const dayTrack = $("day-track");
   const yearTrack = $("year-track");
@@ -192,6 +193,7 @@ export function createTimebar({ clock, getLocation }) {
     const key = `${start}|${loc.lat.toFixed(2)}|${loc.lon.toFixed(2)}`;
     if (key === dayKey) return;
     dayKey = key;
+    markDay(loc, start);
     const obs = new A.Observer(loc.lat, loc.lon, 0);
     const stops = [];
     for (let i = 0; i <= 96; i++) {
@@ -213,26 +215,109 @@ export function createTimebar({ clock, getLocation }) {
     for (let d = 0; d <= 365; d += 5)
       stops.push(`${dayLengthColour(dayLength(loc.lat, d))} ${((d / 365) * 100).toFixed(2)}%`);
     yearTrack.style.background = `linear-gradient(90deg, ${stops.join(",")})`;
-    const marks = $("season-marks");
-    marks.replaceChildren();
+  }
+
+  // ---- Events: solstices, equinoxes and eclipses ----
+  // A dot on their day along the date track (and an eclipse's moment along the
+  // time track). Hover for what it is; click to go there.
+  const yearMarks = $("year-marks");
+  const dayMarks = $("day-marks");
+  let events = [];
+  let eventsKey = "";
+
+  // Coloured by what the day means here: summer solstice yellow, winter blue. (Near
+  // the equator, where neither applies, June and December keep the northern colours.)
+  const solsticeClass = (i, loc) => {
+    if (i === 0 || i === 2) return "equinox";
+    const north = loc.lat >= 0 || Math.abs(loc.lat) < 10;
+    return (i === 1) === north ? "summer" : "winter";
+  };
+
+  function findEvents(loc, year) {
+    const list = [];
     try {
       const s = A.Seasons(year);
-      const n = daysInLocalYear(loc);
-      for (const [t, cls, title] of [
-        [s.mar_equinox, "equinox", "March equinox"],
-        [s.jun_solstice, "june", "June solstice"],
-        [s.sep_equinox, "equinox", "September equinox"],
-        [s.dec_solstice, "december", "December solstice"],
-      ]) {
-        const m = document.createElement("i");
-        m.className = `season ${cls}`;
-        m.title = `${title}: ${formatDate(t.date.getTime(), loc)}`;
-        m.style.left = `${(dayOfYear(t.date.getTime(), loc) / n) * 100}%`;
-        marks.appendChild(m);
-      }
+      [s.mar_equinox, s.jun_solstice, s.sep_equinox, s.dec_solstice].forEach((t, i) => {
+        const ms = t.date.getTime();
+        // Named for this hemisphere ("Winter solstice"), with what it means for the day.
+        const season = seasonAt(ms, loc.lat, startOfLocalDay(ms, loc));
+        list.push({
+          ms,
+          cls: `season ${solsticeClass(i, loc)}`,
+          title: `${season.event}: ${formatDate(ms, loc)}, ${formatTime(ms, loc)} · ${season.eventMeaning}`,
+          go: () => clock.set(ms),
+        });
+      });
     } catch {
       /* Seasons() can throw for extreme years */
     }
+    // Eclipses you can see from here. The searches start a little before local
+    // New Year, whatever the time zone, and anything outside the year is dropped.
+    try {
+      const from = Date.UTC(year, 0, 1) - 14 * 3600000;
+      const eclipses = [
+        ...solarEclipsesFrom(from, loc, 4).map((e) => ({ ...e, body: "sun", what: "solar" })),
+        ...lunarEclipsesFrom(from, loc, 4).map((e) => ({ ...e, body: "moon", what: "lunar" })),
+      ];
+      for (const e of eclipses) {
+        const how = e.body === "sun" && e.kind !== "Total" ? `, ${Math.round(e.covered * 100)}% covered` : "";
+        list.push({
+          ms: e.peak,
+          start: e.start,
+          end: e.end,
+          cls: `eclipse ${e.body}`,
+          title: `${e.kind} ${e.what} eclipse: ${formatDate(e.peak, loc)}, greatest at ${formatTime(e.peak, loc)}${how}`,
+          go: () => onEclipse(e.body, e.peak),
+        });
+      }
+    } catch {
+      /* the searches can fail for extreme years */
+    }
+    return list.filter((ev) => shifted(ev.ms, loc).getUTCFullYear() === year);
+  }
+
+  function markButton(ev, fraction) {
+    const b = document.createElement("button");
+    b.className = `mark ${ev.cls}`;
+    b.title = ev.title;
+    b.setAttribute("aria-label", ev.title);
+    b.style.left = `${fraction * 100}%`;
+    // A click on a dot goes to the event, rather than starting a drag along the track.
+    b.addEventListener("pointerdown", (e) => e.stopPropagation());
+    b.addEventListener("click", ev.go);
+    return b;
+  }
+
+  function markYear(loc) {
+    const year = shifted(clock.ms, loc).getUTCFullYear();
+    const key = `${year}|${loc.lat.toFixed(1)}|${loc.lon.toFixed(1)}|${loc.tz}`;
+    if (key === eventsKey) return;
+    eventsKey = key;
+    events = findEvents(loc, year);
+    const n = daysInLocalYear(loc);
+    yearMarks.replaceChildren(...events.map((ev) => markButton(ev, dayOfYear(ev.ms, loc) / n)));
+    dayKey = ""; // the time track's dots come from the same list
+  }
+
+  function markDay(loc, start) {
+    const end = start + DAY_MS;
+    // Only eclipses: a solstice or equinox is about the whole day, not its moment.
+    const today = events.filter((ev) => ev.start != null && ev.ms >= start && ev.ms < end);
+    const els = [];
+    for (const ev of today) {
+      // An eclipse also gets a band for as long as it lasts.
+      if (ev.start != null) {
+        const band = document.createElement("span");
+        band.className = `span ${ev.cls}`;
+        const a = (Math.max(ev.start, start) - start) / DAY_MS;
+        const b = (Math.min(ev.end, end) - start) / DAY_MS;
+        band.style.left = `${a * 100}%`;
+        band.style.width = `${(b - a) * 100}%`;
+        els.push(band);
+      }
+      els.push(markButton(ev, (ev.ms - start) / DAY_MS));
+    }
+    dayMarks.replaceChildren(...els);
   }
 
   // ---- Season badge ----
@@ -254,6 +339,7 @@ export function createTimebar({ clock, getLocation }) {
   let lastText = "";
   function update() {
     const loc = getLocation();
+    markYear(loc);
     shadeDay(loc);
     shadeYear(loc);
     const m = localMinutesOfDay(clock.ms, loc);
