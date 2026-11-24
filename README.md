@@ -43,7 +43,9 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
 - **Overlays:** the Sun's path today with hour marks, the solstice and equinox paths, the Moon's path, the ecliptic,
   the celestial equator, and alt/az and RA/Dec grids.
 - **Info panel:** rise, set and transit times, twilight, day length, Moon phases and age, distances, light travel time,
-  and the brightest stars in each constellation.
+  and the brightest stars in each constellation. Stars have distances too, from their Hipparcos parallaxes: in
+  kilometres, in years of light travel (light-years), and the year the light you see left them. Distant stars are hard
+  to measure, so those say "about" or give a range.
 - **Point at sky:** on a phone, hold it up and the sky follows it, so you can aim at a star and read its name. It
   uses the compass for north (via `deviceorientationabsolute` on Android, `webkitCompassHeading` on iOS). Phone
   compasses are often a few degrees out and point to magnetic north, so dragging sideways turns the sky into line.
@@ -124,6 +126,7 @@ planetarium/
 │   ├── terrain.js         # elevation tiles → skyline profile, and when bodies clear it
 │   ├── water.js           # map tiles → where the sea, lakes and rivers are
 │   ├── cachedfetch.js     # fetch, keeping a copy in Cache Storage
+│   ├── space.js           # positions in space (Sun-centred, J2000), for distances from wherever you stand
 │   ├── scene/
 │   │   ├── atmosphere.js  # scattering model (GLSL + JS twin)
 │   │   ├── bodies.js      # Sun, Moon, ground
@@ -143,6 +146,8 @@ planetarium/
 - 3D: [three.js](https://threejs.org) (MIT)
 - Stars (Hipparcos, to mag 6), constellation lines and star names:
   [d3-celestial](https://github.com/ofrohn/d3-celestial) by Olaf Frohn (BSD-3-Clause)
+- Star distances: parallaxes from the Hipparcos new reduction (van Leeuwen 2007, ESA), via the
+  [Gaia archive](https://gea.esac.esa.int/archive/)
 - Milky Way: [NASA SVS Deep Star Maps 2020](https://svs.gsfc.nasa.gov/4851) (the star-free Milky Way layer,
   public domain)
 - Moon texture: [NASA SVS CGI Moon Kit](https://svs.gsfc.nasa.gov/4720) (LRO, public domain)

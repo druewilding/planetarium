@@ -3,6 +3,7 @@
 
 import { A, AU_KM, Body, compassPoint, R2D } from "../astro.js";
 import { seasonAt } from "../season.js";
+import { bodyPosition, distanceAU, LIGHT_SPEED_KM_S, LIGHT_YEAR_AU, LIGHT_YEAR_KM, starPosition } from "../space.js";
 import { skylineAt, spansAboveSkyline } from "../terrain.js";
 import { formatDateTime, formatDuration, formatShortDate, formatTime, startOfLocalDay } from "../timezone.js";
 
@@ -23,6 +24,51 @@ const FEATURE_KIND = {
 const NO_PLANETS = "<p class=note>None above the horizon right now.</p>";
 const DIM_TIP =
   "<p class=note>Slide <strong>Sunlight</strong> down to see the stars and planets that are up there right now.</p>";
+
+const YEAR_MS = 365.25 * 86400000;
+/** A number rounded to `digits` significant figures, with English separators like the rest of the panel. */
+const sig = (v, digits) => Number(v.toPrecision(digits)).toLocaleString("en-GB", { maximumFractionDigits: 1 });
+const year = (y) => (y > 0 ? String(y) : `${1 - y} BCE`);
+
+/**
+ * How far away a star is, from where you're standing, as rows for the info
+ * panel and a short form for lists. Parallaxes get less certain with distance,
+ * so the wording does too.
+ */
+function starDistance(s, star) {
+  const pos = starPosition(star);
+  if (!pos) {
+    const why = star.plx == null ? "Not measured" : "Too far to measure";
+    return { rows: `<dt>Distance</dt><dd>${why}</dd>`, short: "" };
+  }
+  const ly = distanceAU(pos, bodyPosition(s.standingOn, s.ms)) / LIGHT_YEAR_AU;
+  const trillionKm = (lightYears, digits) => sig((lightYears * LIGHT_YEAR_KM) / 1e12, digits);
+  const now = 1970 + s.ms / YEAR_MS;
+
+  // Laid out like the Sun's: the distance, then how long its light takes. A
+  // light-year is how far light goes in a year, so the years are light-years.
+  if (pos.relError > 0.25) {
+    // Too uncertain for one number: give the range the parallax allows.
+    const near = (ly * star.plx) / (star.plx + star.ePlx);
+    const far = star.plx > star.ePlx ? (ly * star.plx) / (star.plx - star.ePlx) : Infinity;
+    const range = (f) => (Number.isFinite(far) ? `between ${f(near)} and ${f(far)}` : `more than ${f(near)}`);
+    return {
+      rows: `<dt>Distance</dt><dd>${range((v) => trillionKm(v, 2))} trillion km (hard to measure)</dd>
+        <dt>Light travel time</dt><dd>${range((v) => sig(v, 2))} years</dd>`,
+      short: "",
+    };
+  }
+
+  const about = pos.relError > 0.1 ? "about " : "";
+  const digits = about ? 2 : ly < 10 ? 2 : 3;
+  const left = Math.round(now - ly);
+  return {
+    rows: `<dt>Distance</dt><dd>${about}${trillionKm(ly, digits)} trillion km</dd>
+      <dt>Light travel time</dt><dd>${about}${sig(ly, digits)} years</dd>
+      <dt>Light you see left</dt><dd>${about ? "around" : "in"} ${year(left)}</dd>`,
+    short: `${about ? "~" : ""}${sig(ly, digits)} ly`,
+  };
+}
 
 export function phaseName(angle) {
   const names = [
@@ -191,7 +237,7 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, onG
     const next = seasons.find(([, tt]) => tt.date.getTime() > ms);
     html += `<div class="section"><h4>Facts</h4><dl>
       <dt>Distance</dt><dd>${((sun.dist * AU_KM) / 1e6).toFixed(2)} million km</dd>
-      <dt>Light travel time</dt><dd>${formatDuration((sun.dist * AU_KM) / 299792.458 / 60)}</dd>
+      <dt>Light travel time</dt><dd>${formatDuration((sun.dist * AU_KM) / LIGHT_SPEED_KM_S / 60)}</dd>
       <dt>Apparent size</dt><dd>${(sun.angularRadius * 2 * R2D * 60).toFixed(1)}′</dd>
       ${next ? `<dt>${next[0]}</dt><dd>${formatShortDate(next[1].date.getTime(), loc)}</dd>` : ""}
     </dl></div>`;
@@ -233,6 +279,7 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, onG
     <div class="section"><h4>Facts</h4><dl>
       ${phases.age !== null ? `<dt>Age</dt><dd>${phases.age.toFixed(1)} days</dd>` : ""}
       <dt>Distance</dt><dd>${Math.round(moon.dist * AU_KM).toLocaleString()} km</dd>
+      <dt>Light travel time</dt><dd>${((moon.dist * AU_KM) / LIGHT_SPEED_KM_S).toFixed(2)} s</dd>
       <dt>Apparent size</dt><dd>${(moon.angularRadius * 2 * R2D * 60).toFixed(1)}′</dd>
       <dt>Brightness</dt><dd>mag ${moon.mag.toFixed(1)}</dd>
     </dl>
@@ -249,7 +296,7 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, onG
     const elong = A.AngleFromSun(body, new Date(ms));
     const con = A.Constellation(p.ra, p.dec);
     const visible = p.mag < 6;
-    const lightMin = (p.dist * AU_KM) / 299792.458 / 60;
+    const lightMin = (p.dist * AU_KM) / LIGHT_SPEED_KM_S / 60;
     return `<dl>${position(p, s.skyline)}${riseSetRows(rs, loc, bodyRef(body, obs))}${skylineRow(body, s, start, 0)}</dl>
       <div class="section"><h4>Facts</h4><dl>
         <dt>Brightness</dt><dd>mag ${p.mag.toFixed(1)}${visible ? "" : " (needs a telescope)"}</dd>
@@ -278,6 +325,7 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, onG
     return `<dl>${position(pos, s.skyline)}${always ? `<dt>Rise / set</dt><dd>${rs.transit.hor.altitude > 0 ? "Never sets here" : "Never rises here"}</dd>` : riseSetRows(rs, loc, ref)}</dl>
       <div class="section"><h4>Facts</h4><dl>
         <dt>Brightness</dt><dd>mag ${star.mag.toFixed(2)}</dd>
+        ${starDistance(s, star).rows}
         <dt>Colour (B−V)</dt><dd>${star.bv.toFixed(2)}</dd>
         <dt>RA / Dec</dt><dd>${(star.ra / 15).toFixed(2)}h / ${star.dec.toFixed(1)}°</dd>
         <dt>Catalogue</dt><dd>HIP ${star.hip}</dd>
@@ -300,7 +348,7 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, onG
     const pos = c.position(s.sky);
     const stars = catalog.starsIn(c.id).slice(0, 5);
     return `<dl>${position(pos, s.skyline)}</dl>
-      ${stars.length ? `<div class="section"><h4>Brightest stars</h4><dl>${stars.map((st) => `<dt>${esc(st.label)}</dt><dd>mag ${st.mag.toFixed(1)}</dd>`).join("")}</dl></div>` : ""}`;
+      ${stars.length ? `<div class="section"><h4>Brightest stars</h4><dl>${stars.map((st) => `<dt><button class="jump" data-select="star" data-id="${st.hip}" title="Look at ${esc(st.name)}">${esc(st.label)}</button></dt><dd>${["mag " + st.mag.toFixed(1), starDistance(s, st).short].filter(Boolean).join(" · ")}</dd>`).join("")}</dl></div>` : ""}`;
   }
 
   function overview(s) {
