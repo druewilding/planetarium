@@ -473,6 +473,17 @@ async function main() {
   }
   glassesBtn.addEventListener("click", () => setGlasses(!glasses));
 
+  // With the glasses on, the view turns with the Sun as time passes, so it stays
+  // where it is on screen (drag to move it somewhere else).
+  let lastSun = null;
+  function followSun() {
+    if (glasses && lastSun) {
+      const dAz = ((sky.sun.az - lastSun.az + 540) % 360) - 180;
+      view.shift(sky.sun.alt - lastSun.alt, dAz);
+    }
+    lastSun = glasses ? { alt: sky.sun.alt, az: sky.sun.az } : null;
+  }
+
   const lookUpBtn = $("look-up");
   let beforeLookUp = null;
   const lookingUp = () => view.state.alt > 80 && view.state.fov > 140;
@@ -1113,6 +1124,7 @@ async function main() {
     projection.update(view.state.fov, camera.aspect);
 
     sky = computeSky(clock.ms, loc);
+    followSun();
     const atm = layers.atmosphere ? ATMOSPHERES.earth : NONE;
     atmosphere.setParams(atm);
     shared.uRefract.value = layers.atmosphere && layers.refraction ? 1 : 0;

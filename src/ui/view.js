@@ -163,6 +163,20 @@ export function createView(camera, canvas, { onClick, unproject, sensor } = {}) 
     };
   }
 
+  /** Turn the view by this much, including any turn in progress (to follow something that moves). */
+  function shift(dAlt, dAz) {
+    if (sensorOn()) return; // the phone does the aiming
+    state.alt += dAlt;
+    state.az += dAz;
+    if (tween) {
+      tween.from.alt += dAlt;
+      tween.to.alt += dAlt;
+      tween.from.az += dAz;
+      tween.to.az += dAz;
+    }
+    apply();
+  }
+
   function update(dt) {
     const aimed = sensorOn() && sensor.orientation(target);
     if (aimed) {
@@ -197,5 +211,5 @@ export function createView(camera, canvas, { onClick, unproject, sensor } = {}) 
   }
 
   apply();
-  return { state, update, lookAt, lookTo, zoom, dirAt };
+  return { state, update, lookAt, lookTo, zoom, dirAt, shift };
 }
