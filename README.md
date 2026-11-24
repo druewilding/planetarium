@@ -37,7 +37,9 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
 - **Compass:** shows where you're facing, your field of view, and the Sun and Moon on its rim. Drag it to turn, or
   tap a direction, the Sun or the Moon to face it.
 - **Location:** a world map showing live day/night shading, a search over 1,250 cities (with correct local time zones
-  and daylight saving), or typed coordinates. Changing location glides smoothly.
+  and daylight saving), or typed coordinates. The map zooms and pans (scroll, pinch or drag), and shows the cities as
+  dots: the biggest when zoomed out, more as you zoom in. Dots swell as the pointer comes near, and clicking one stands
+  you in that city. Changing location glides smoothly.
 - **Overlays:** the Sun's path today with hour marks, the solstice and equinox paths, the Moon's path, the ecliptic,
   the celestial equator, and alt/az and RA/Dec grids.
 - **Info panel:** rise, set and transit times, twilight, day length, Moon phases and age, distances, light travel time,

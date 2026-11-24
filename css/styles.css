@@ -1005,6 +1005,7 @@ input[type="range"] {
 }
 
 #map {
+  display: block;
   width: 100%;
   height: auto;
   aspect-ratio: 2 / 1;
@@ -1012,6 +1013,28 @@ input[type="range"] {
   cursor: crosshair;
   background: #0b2440;
   touch-action: none;
+}
+
+#map.panning {
+  cursor: grabbing;
+}
+
+.map-wrap {
+  position: relative;
+}
+
+.map-zoom {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.map-zoom .icon-btn {
+  background: var(--panel);
+  border-color: var(--panel-border);
 }
 
 .hint {

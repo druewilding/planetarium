@@ -88,8 +88,58 @@ export function createLocation({ cities, land, onChange, getTime }) {
   const shadeCtx = shade.getContext("2d");
   let current = null;
 
-  const toX = (lon) => ((lon + 180) / 360) * canvas.width;
-  const toY = (lat) => ((90 - lat) / 180) * canvas.height;
+  // The map is equirectangular and can zoom and pan. It wraps east–west, so
+  // the Pacific can sit in the middle.
+  const MAX_ZOOM = 16;
+  const map = { lon: 0, lat: 0, zoom: 1 };
+  let W = 0; // map size in CSS pixels
+  let H = 0;
+  let dpr = 1;
+  const scale = () => (map.zoom * W) / 360; // CSS pixels per degree
+  const wrapLon = (lon) => ((((lon + 180) % 360) + 360) % 360) - 180;
+  const toX = (lon) => W / 2 + (lon - map.lon) * scale();
+  const toY = (lat) => H / 2 - (lat - map.lat) * scale();
+  // The copy of a longitude nearest the middle of the view.
+  const nearX = (lon) => toX(map.lon + wrapLon(lon - map.lon));
+  const lonAt = (x) => wrapLon(map.lon + (x - W / 2) / scale());
+  const latAt = (y) => map.lat - (y - H / 2) / scale();
+
+  function clampMap() {
+    map.zoom = Math.max(1, Math.min(MAX_ZOOM, map.zoom));
+    const half = 90 / map.zoom;
+    map.lat = Math.max(-90 + half, Math.min(90 - half, map.lat));
+    map.lon = wrapLon(map.lon);
+  }
+
+  /** Zoom by a factor, keeping the point under (x, y) where it is. */
+  function zoomAt(factor, x = W / 2, y = H / 2) {
+    const lon = map.lon + (x - W / 2) / scale();
+    const lat = latAt(y);
+    map.zoom *= factor;
+    map.zoom = Math.max(1, Math.min(MAX_ZOOM, map.zoom));
+    map.lon = lon - (x - W / 2) / scale();
+    map.lat = lat + (y - H / 2) / scale();
+    clampMap();
+    redraw();
+  }
+
+  function panBy(dx, dy) {
+    map.lon -= dx / scale();
+    map.lat += dy / scale();
+    clampMap();
+    redraw();
+  }
+
+  function resize() {
+    dpr = window.devicePixelRatio || 1;
+    W = canvas.clientWidth;
+    H = W / 2;
+    if (!W) return;
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+    drawMap();
+  }
+  new ResizeObserver(resize).observe(canvas);
 
   function drawNightShade(ms) {
     const t = A.MakeTime(new Date(ms));
@@ -114,49 +164,117 @@ export function createLocation({ cities, land, onChange, getTime }) {
       }
     }
     shadeCtx.putImageData(img, 0, 0);
-    // Subsolar point
-    return { lat: subLat / D2R, lon: ((((subLon / D2R + 180) % 360) + 360) % 360) - 180 };
+  }
+
+  // City dots: biggest cities first, skipping any that would crowd one
+  // already placed, so zooming in brings in smaller places.
+  const DOT_SPACING = 11;
+  let dots = [];
+  let pointer = null; // mouse position over the map, for hover
+  let hovered = null;
+
+  function placeDots() {
+    dots = [];
+    const cell = DOT_SPACING;
+    const grid = new Map();
+    for (const c of cityRecords) {
+      const x = nearX(c.lon);
+      const y = toY(c.lat);
+      if (x < -cell || x > W + cell || y < -cell || y > H + cell) continue;
+      const gx = Math.floor(x / cell);
+      const gy = Math.floor(y / cell);
+      let crowded = false;
+      for (let i = -1; i <= 1 && !crowded; i++) {
+        for (let j = -1; j <= 1 && !crowded; j++) {
+          for (const d of grid.get(`${gx + i},${gy + j}`) ?? []) {
+            if ((d.x - x) ** 2 + (d.y - y) ** 2 < cell * cell) {
+              crowded = true;
+              break;
+            }
+          }
+        }
+      }
+      if (crowded) continue;
+      const dot = { city: c, x, y };
+      dots.push(dot);
+      const key = `${gx},${gy}`;
+      if (!grid.has(key)) grid.set(key, []);
+      grid.get(key).push(dot);
+    }
+  }
+
+  /** The dot within reach of (x, y), nearest first. */
+  function dotNear(x, y, reach) {
+    let best = null;
+    let bd = reach * reach;
+    for (const d of dots) {
+      const dd = (d.x - x) ** 2 + (d.y - y) ** 2;
+      if (dd < bd) [bd, best] = [dd, d];
+    }
+    return best;
   }
 
   function drawMap() {
-    const w = canvas.width;
-    const h = canvas.height;
+    if (!W) return;
+    const s = scale();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = "#0d2a4a";
-    ctx.fillRect(0, 0, w, h);
+    ctx.fillRect(0, 0, W, H);
+
+    // Every copy of the world that shows, east–west.
+    const copies = [];
+    for (let k = -2; k <= 2; k++) {
+      const x0 = toX(-180 + 360 * k);
+      if (x0 < W && x0 + 360 * s > 0) copies.push(360 * k);
+    }
+
+    const step = map.zoom < 3 ? 30 : map.zoom < 9 ? 10 : 5;
     ctx.strokeStyle = "rgba(255,255,255,0.07)";
     ctx.lineWidth = 1;
-    for (let lon = -180; lon <= 180; lon += 30) {
-      ctx.beginPath();
-      ctx.moveTo(toX(lon), 0);
-      ctx.lineTo(toX(lon), h);
-      ctx.stroke();
+    ctx.beginPath();
+    for (const k of copies) {
+      for (let lon = -180; lon < 180; lon += step) {
+        ctx.moveTo(toX(lon + k), 0);
+        ctx.lineTo(toX(lon + k), H);
+      }
     }
-    for (let lat = -60; lat <= 60; lat += 30) {
-      ctx.beginPath();
+    for (let lat = -90 + step; lat < 90; lat += step) {
       ctx.moveTo(0, toY(lat));
-      ctx.lineTo(w, toY(lat));
-      ctx.stroke();
+      ctx.lineTo(W, toY(lat));
     }
+    ctx.stroke();
+
     ctx.fillStyle = "#3f6b4a";
     ctx.strokeStyle = "#5d8c66";
-    for (const poly of land) {
-      ctx.beginPath();
-      poly.forEach(([lon, lat], i) => (i ? ctx.lineTo(toX(lon), toY(lat)) : ctx.moveTo(toX(lon), toY(lat))));
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
+    for (const k of copies) {
+      for (const poly of land) {
+        ctx.beginPath();
+        poly.forEach(([lon, lat], i) => (i ? ctx.lineTo(toX(lon + k), toY(lat)) : ctx.moveTo(toX(lon + k), toY(lat))));
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
     }
-    const sub = drawNightShade(getTime());
+
     ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(shade, 0, 0, w, h);
-    // Sun position
-    ctx.fillStyle = "#ffd27a";
+    for (const k of copies) ctx.drawImage(shade, toX(-180 + k), toY(90), 360 * s, 180 * s);
+
+    // Cities: small dots that swell as the pointer comes near.
+    placeDots();
+    hovered = pointer ? dotNear(pointer.x, pointer.y, 14) : null;
+    ctx.fillStyle = "rgba(255, 236, 200, 0.85)";
     ctx.beginPath();
-    ctx.arc(toX(sub.lon), toY(sub.lat), 7, 0, Math.PI * 2);
+    for (const d of dots) {
+      const near = pointer ? Math.max(0, 1 - Math.hypot(d.x - pointer.x, d.y - pointer.y) / 60) : 0;
+      const r = d === hovered ? 4.5 : 1.6 + 1.8 * near;
+      ctx.moveTo(d.x + r, d.y);
+      ctx.arc(d.x, d.y, r, 0, Math.PI * 2);
+    }
     ctx.fill();
+
     // Current location
     if (current) {
-      const x = toX(current.lon);
+      const x = nearX(current.lon);
       const y = toY(current.lat);
       ctx.strokeStyle = "#fff";
       ctx.lineWidth = 2;
@@ -167,6 +285,35 @@ export function createLocation({ cities, land, onChange, getTime }) {
       ctx.beginPath();
       ctx.arc(x, y, 5, 0, Math.PI * 2);
       ctx.fill();
+    }
+
+    if (hovered) drawLabel(hovered);
+  }
+
+  function drawLabel({ city, x, y }) {
+    ctx.font = "12px system-ui, sans-serif";
+    const text = city.name;
+    const tw = ctx.measureText(text).width;
+    const pad = 5;
+    let lx = x + 9;
+    if (lx + tw + 2 * pad > W) lx = x - 9 - tw - 2 * pad;
+    const ly = Math.max(2, Math.min(H - 22, y - 11));
+    ctx.fillStyle = "rgba(8, 14, 30, 0.85)";
+    ctx.beginPath();
+    ctx.roundRect(lx, ly, tw + 2 * pad, 20, 5);
+    ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, lx + pad, ly + 10);
+  }
+
+  let frame = 0;
+  function redraw() {
+    if (!frame) {
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        drawMap();
+      });
     }
   }
 
@@ -182,31 +329,113 @@ export function createLocation({ cities, land, onChange, getTime }) {
     onChange(loc, { animate: true });
   }
 
+  const cityLocation = (c) => ({ lat: c.lat, lon: c.lon, name: `${c.name}, ${c.country}`, tz: c.tz });
+
+  // Typing straight away suits a keyboard; on a phone it would pop up the
+  // keyboard over the map.
+  const canHover = window.matchMedia("(hover: hover) and (pointer: fine)");
+
   $("location-btn").addEventListener("click", () => {
     setInputs(current);
-    drawMap();
+    drawNightShade(getTime());
     dialog.showModal();
+    resize();
     $("city-search").value = "";
     $("city-results").hidden = true;
-    $("city-search").focus(); // ready to type a city straight away
+    if (canHover.matches) $("city-search").focus(); // ready to type a city straight away
   });
 
-  let dragging = false;
-  const pickFromEvent = (e) => {
+  // Map gestures: tap or click to choose, drag to pan, wheel or pinch to zoom.
+  const pointers = new Map();
+  let moved = false;
+  let pinch = null;
+  const local = (e) => {
     const r = canvas.getBoundingClientRect();
-    const lon = ((e.clientX - r.left) / r.width) * 360 - 180;
-    const lat = 90 - ((e.clientY - r.top) / r.height) * 180;
-    return fromPoint(Math.max(-89.9, Math.min(89.9, lat)), Math.max(-180, Math.min(180, lon)));
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
   };
+  const pinchState = () => {
+    const [a, b] = [...pointers.values()];
+    return { d: Math.hypot(a.x - b.x, a.y - b.y), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  };
+
   canvas.addEventListener("pointerdown", (e) => {
-    dragging = true;
     canvas.setPointerCapture(e.pointerId);
-    choose(pickFromEvent(e));
+    pointers.set(e.pointerId, local(e));
+    if (pointers.size === 1) moved = false;
+    if (pointers.size === 2) {
+      pinch = pinchState();
+      moved = true; // a pinch never chooses a place
+    }
   });
+
   canvas.addEventListener("pointermove", (e) => {
-    if (dragging) choose(pickFromEvent(e));
+    const p = local(e);
+    const prev = pointers.get(e.pointerId);
+    if (!prev) {
+      if (e.pointerType === "mouse") {
+        pointer = p;
+        redraw();
+      }
+      return;
+    }
+    pointers.set(e.pointerId, p);
+    if (pointers.size === 2 && pinch) {
+      const next = pinchState();
+      panBy(next.x - pinch.x, next.y - pinch.y);
+      if (pinch.d > 0) zoomAt(next.d / pinch.d, next.x, next.y);
+      pinch = next;
+      return;
+    }
+    if (pointers.size !== 1) return;
+    if (!moved && Math.hypot(p.x - prev.x, p.y - prev.y) < 4) {
+      pointers.set(e.pointerId, prev); // not a drag yet: measure from where it started
+      return;
+    }
+    moved = true;
+    canvas.classList.add("panning");
+    if (e.pointerType === "mouse") pointer = p;
+    panBy(p.x - prev.x, p.y - prev.y);
   });
-  canvas.addEventListener("pointerup", () => (dragging = false));
+
+  const release = (e) => {
+    const p = pointers.get(e.pointerId);
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) pinch = null;
+    if (pointers.size) return;
+    canvas.classList.remove("panning");
+    if (e.type !== "pointerup" || moved || !p) return;
+    // A tap near a city takes the city itself; anywhere else is just that spot.
+    const dot = dotNear(p.x, p.y, e.pointerType === "mouse" ? 14 : 22);
+    if (dot) choose(cityLocation(dot.city));
+    else choose(fromPoint(Math.max(-89.9, Math.min(89.9, latAt(p.y))), lonAt(p.x)));
+  };
+  canvas.addEventListener("pointerup", release);
+  canvas.addEventListener("pointercancel", release);
+  canvas.addEventListener("pointerleave", (e) => {
+    if (e.pointerType !== "mouse" || pointers.size) return;
+    pointer = null;
+    redraw();
+  });
+
+  canvas.addEventListener(
+    "wheel",
+    (e) => {
+      e.preventDefault();
+      const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+      const p = local(e);
+      zoomAt(Math.exp(-dy * 0.002), p.x, p.y);
+    },
+    { passive: false }
+  );
+
+  $("map-zoom-in").addEventListener("click", () => zoomAt(2));
+  $("map-zoom-out").addEventListener("click", () => zoomAt(0.5));
+  $("map-zoom-reset").addEventListener("click", () => {
+    map.zoom = 1;
+    map.lat = 0;
+    map.lon = 0;
+    redraw();
+  });
 
   for (const id of ["lat-input", "lon-input"]) {
     $(id).addEventListener("change", () => {
@@ -242,7 +471,7 @@ export function createLocation({ cities, land, onChange, getTime }) {
     results.hidden = matches.length === 0;
   }
   function pickCity(c) {
-    choose({ lat: c.lat, lon: c.lon, name: `${c.name}, ${c.country}`, tz: c.tz });
+    choose(cityLocation(c));
     $("city-search").value = "";
     results.hidden = true;
     dialog.close();
