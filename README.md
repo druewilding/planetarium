@@ -111,6 +111,19 @@ python3 -m http.server 3000
 Location access and the motion sensors (Point at sky) need `https://` or `localhost`. To try Point at sky on a
 phone before deploying, serve it over HTTPS, for example with a tunnel such as `npx localtunnel --port 3000`.
 
+### Checks
+
+```bash
+npm test             # Vitest, once (npm run test:watch to keep watching)
+npm run lint:check   # ESLint
+npm run format:check # Prettier
+```
+
+The same checks run on every pull request. There's no build step, so the tests also check that every file and module
+the page loads exists. `three` and `astronomy-engine` are dev dependencies so the tests can use them; the page itself
+loads them from a CDN through the import map in `index.html`, and `npm run importmap` keeps that at the versions in
+`package.json`.
+
 ## Project structure
 
 ```
@@ -137,7 +150,8 @@ planetarium/
 │   └── ui/                # time bar, compass, location dialog, info panel, layers, search, labels, camera
 ├── data/                  # stars, constellations, cities, land outlines (compact JSON)
 ├── textures/moon.jpg
-└── tools/                 # scripts that produced data/
+├── test/                  # Vitest tests
+└── tools/                 # scripts that produced data/, and the import map updater
 ```
 
 ## Data & credits

@@ -116,6 +116,8 @@ export function toInputValue(ms, loc) {
 }
 
 export function fromInputValue(value, loc, refMs) {
+  // Browsers parse almost anything (an empty field reads as 1 January 2000), so check the shape first.
+  if (!/^-?\d{4,6}-\d\d-\d\dT\d\d:\d\d$/.test(value)) return null;
   const asUtc = Date.parse(`${value}:00Z`);
   if (Number.isNaN(asUtc)) return null;
   return asUtc - offsetMinutes(refMs, loc) * 60000;
