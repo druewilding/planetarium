@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.4.0](https://github.com/druewilding/planetarium/compare/v1.3.0...v1.4.0) (2026-11-25)
+
+
+### Features
+
+* Keep the place in share links to about a metre ([#49](https://github.com/druewilding/planetarium/issues/49)) ([f12f88a](https://github.com/druewilding/planetarium/commit/f12f88ad2a634bb4201025082cbd9f5362786b60))
+* Link a star to its constellation in the info panel ([#47](https://github.com/druewilding/planetarium/issues/47)) ([889dcb5](https://github.com/druewilding/planetarium/commit/889dcb546bc3425c2b3e149afcf5d3e5a53f02c4))
+* Name the land everywhere from planetarium-labels, without Overpass ([#50](https://github.com/druewilding/planetarium/issues/50)) ([21a6a15](https://github.com/druewilding/planetarium/commit/21a6a15e6a3a640d38c5936425e7fb1fe1168e39))
+* Show the app logo while the sky loads ([#46](https://github.com/druewilding/planetarium/issues/46)) ([9b54dc7](https://github.com/druewilding/planetarium/commit/9b54dc732ea73c6c2d7e52f385b3d1c80e3410e1))
+
+
+### Bug Fixes
+
+* Choose only the names you can see when you tap a label ([#48](https://github.com/druewilding/planetarium/issues/48)) ([10b3ec5](https://github.com/druewilding/planetarium/commit/10b3ec584a39ade113ca46b309eae93a386cdbd7))
+
 ## [1.3.0](https://github.com/druewilding/planetarium/compare/v1.2.0...v1.3.0) (2026-11-25)
 
 
