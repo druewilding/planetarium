@@ -86,12 +86,9 @@ svg {
   pointer-events: none;
 }
 
-.loading-dot {
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #fff3d0, #c9a86a 60%, #6b5530);
-  box-shadow: 0 0 40px rgba(255, 210, 140, 0.4);
+.loading-logo {
+  width: 64px;
+  height: 64px;
   animation: pulse 1.6s ease-in-out infinite;
 }
 
