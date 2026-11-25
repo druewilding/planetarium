@@ -2,6 +2,7 @@
 
 import { ORBIT_COLORS } from "../scene/orbits.js";
 import { OVERLAY_COLORS } from "../scene/overlays.js";
+import { VERSION } from "../version.js";
 
 // Some layers only make sense standing on the ground, and some only up in space
 // (`where`); the panel shows the ones for where you are.
@@ -152,6 +153,18 @@ export function createLayersPanel({ onChange }) {
       content.appendChild(label);
     }
   }
+
+  // Which version this is, linking to what's new in it.
+  const version = document.createElement("p");
+  version.className = "version";
+  const notes = document.createElement("a");
+  notes.href = `https://github.com/druewilding/planetarium/releases/tag/v${VERSION}`;
+  notes.target = "_blank";
+  notes.rel = "noopener";
+  notes.title = "What's new in this version";
+  notes.textContent = `Planetarium ${VERSION}`;
+  version.appendChild(notes);
+  content.appendChild(version);
 
   const btn = document.getElementById("layers-btn");
   const toggle = (open = panel.hidden) => {

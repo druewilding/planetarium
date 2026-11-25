@@ -4,14 +4,36 @@
       "release-type": "node",
       "include-component-in-tag": false,
       "changelog-sections": [
-        { "type": "feat", "section": "Features" },
-        { "type": "fix", "section": "Bug Fixes" },
-        { "type": "test", "section": "Testing" },
-        { "type": "docs", "section": "Documentation" },
-        { "type": "chore", "section": "Chores" },
-        { "type": "deps", "section": "Dependencies" },
-        { "type": "ci", "section": "Continuous Integration" }
-      ]
+        {
+          "type": "feat",
+          "section": "Features"
+        },
+        {
+          "type": "fix",
+          "section": "Bug Fixes"
+        },
+        {
+          "type": "test",
+          "section": "Testing"
+        },
+        {
+          "type": "docs",
+          "section": "Documentation"
+        },
+        {
+          "type": "chore",
+          "section": "Chores"
+        },
+        {
+          "type": "deps",
+          "section": "Dependencies"
+        },
+        {
+          "type": "ci",
+          "section": "Continuous Integration"
+        }
+      ],
+      "extra-files": ["src/version.js"]
     }
   }
 }
