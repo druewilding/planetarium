@@ -30,6 +30,7 @@ const APP_SHELL = [
   "./src/clock.js",
   "./src/constants.js",
   "./src/eclipses.js",
+  "./src/landnames.js",
   "./src/link.js",
   "./src/main.js",
   "./src/projection.js",
