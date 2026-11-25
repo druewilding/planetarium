@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/druewilding/planetarium/compare/v1.1.0...v1.2.0) (2026-11-25)
+
+
+### Features
+
+* Install the planetarium as an app that works offline ([#41](https://github.com/druewilding/planetarium/issues/41)) ([df2ff30](https://github.com/druewilding/planetarium/commit/df2ff3060540568d126f554f802b2921a693a636))
+
 ## [1.1.0](https://github.com/druewilding/planetarium/compare/v1.0.0...v1.1.0) (2026-11-25)
 
 
