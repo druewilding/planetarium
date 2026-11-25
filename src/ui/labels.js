@@ -6,6 +6,9 @@
 // neighbours), so panning, which moves labels together, doesn't change which
 // ones fit. Labels already showing get a small head start, so near-ties don't
 // flicker as you turn.
+//
+// A label can carry `pick`, what tapping it chooses: `at()` finds the label under
+// a point on its real box, so you can only tap the names you can see.
 
 const CELL_W = 40;
 const CELL_H = 16;
@@ -23,7 +26,7 @@ export function createLabels(container) {
   }
 
   /**
-   * items: [{ key, text, dir (world Vector3 unit), cls, priority, offset: [dx, dy], always }]
+   * items: [{ key, text, dir (world Vector3 unit), cls, priority, offset: [dx, dy], always, pick }]
    */
   /** project(dir) → normalised device coords {x, y}, or null when not drawn. */
   let shown = new Set();
@@ -58,7 +61,7 @@ export function createLabels(container) {
       if (!rec) {
         const el = document.createElement("div");
         container.appendChild(el);
-        rec = { el, text: null, cls: null };
+        rec = { el, text: null, cls: null, pick: null };
         elements.set(it.key, rec);
       }
       if (rec.text !== it.text) {
@@ -72,6 +75,7 @@ export function createLabels(container) {
       }
       rec.el.style.transform = `translate(${x.toFixed(1)}px, ${(y - 7).toFixed(1)}px)`;
       rec.el.style.display = "";
+      rec.pick = it.pick ?? null;
       used.add(it.key);
     }
     for (const [key, rec] of elements) {
@@ -80,5 +84,26 @@ export function createLabels(container) {
     shown = used;
   }
 
-  return { render, resize };
+  /**
+   * What tapping (x, y) on the canvas chooses: the `pick` of the shown label whose
+   * box (with `pad` px to spare, for fingers) holds that point, the nearest if
+   * several do. Null if none.
+   */
+  function at(x, y, pad = 4) {
+    const origin = container.getBoundingClientRect();
+    let best = null;
+    let bestD = Infinity;
+    for (const key of shown) {
+      const rec = elements.get(key);
+      if (!rec?.pick) continue;
+      const r = rec.el.getBoundingClientRect();
+      const [l, t] = [r.left - origin.left, r.top - origin.top];
+      if (x < l - pad || x > l + r.width + pad || y < t - pad || y > t + r.height + pad) continue;
+      const d = Math.hypot(x - (l + r.width / 2), y - (t + r.height / 2));
+      if (d < bestD) [bestD, best] = [d, rec.pick];
+    }
+    return best;
+  }
+
+  return { render, resize, at };
 }
