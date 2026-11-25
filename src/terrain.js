@@ -18,10 +18,12 @@
 import { A } from "./astro.js";
 import { cachedFetch } from "./cachedfetch.js";
 import { EARTH_RADIUS_KM } from "./constants.js";
+import { landNamesNear } from "./landnames.js";
 import { LAND, loadWater, OCEAN, OPEN_OCEAN } from "./water.js";
 
 const TILE_URL = (z, x, y) => `https://elevation-tiles-prod.s3.amazonaws.com/terrarium/${z}/${x}/${y}.png`;
 // Public Overpass servers for OpenStreetMap queries, tried in turn: they're often busy.
+// Only asked where planetarium-labels doesn't reach yet (see landnames.js).
 const OVERPASS = [
   "https://overpass-api.de/api/interpreter",
   "https://overpass.private.coffee/api/interpreter",
@@ -460,6 +462,24 @@ function classify(tags) {
   return null;
 }
 
+/** The things worth naming within FEATURE_RADIUS_KM, from the public Overpass servers. */
+async function askOverpass(profile) {
+  // Rounded to about a kilometre: plenty for a 50 km search, and kinder to caches.
+  const query = featuresQuery(profile.lat.toFixed(2), profile.lon.toFixed(2), FEATURE_RADIUS_KM * 1000);
+  // Overpass answers "200 OK" even when a query timed out or was cut short, with
+  // a remark saying so: treat that as a failure, or the gap would be cached for good.
+  const check = async (res, src) => {
+    const json = await res.json();
+    if (!Array.isArray(json.elements) || /error|timed out|rate/i.test(json.remark ?? "")) {
+      throw new Error(`${new URL(src).host}: ${json.remark || "no results"}`);
+    }
+  };
+  // One try per server, to go easy on them: they limit how often each visitor asks.
+  const servers = OVERPASS.map((server) => server + query);
+  const res = await cachedFetch(OVERPASS[0] + query, servers, { tries: 1, check });
+  return (await res.json()).elements;
+}
+
 const UNNAMED = { lighthouse: "Lighthouse", observatory: "Observatory", tower: "Tower", mast: "Mast" };
 
 /**
@@ -468,22 +488,10 @@ const UNNAMED = { lighthouse: "Lighthouse", observatory: "Observatory", tower: "
  * where it appears in the sky. Empty if none or offline.
  */
 export async function visibleFeatures(profile) {
-  let elements = [];
+  let elements;
   try {
-    // Rounded to about a kilometre: plenty for a 50 km search, and kinder to caches.
-    const query = featuresQuery(profile.lat.toFixed(2), profile.lon.toFixed(2), FEATURE_RADIUS_KM * 1000);
-    // Overpass answers "200 OK" even when a query timed out or was cut short, with
-    // a remark saying so: treat that as a failure, or the gap would be cached for good.
-    const check = async (res, src) => {
-      const json = await res.json();
-      if (!Array.isArray(json.elements) || /error|timed out|rate/i.test(json.remark ?? "")) {
-        throw new Error(`${new URL(src).host}: ${json.remark || "no results"}`);
-      }
-    };
-    // One try per server, to go easy on them: they limit how often each visitor asks.
-    const servers = OVERPASS.map((server) => server + query);
-    const res = await cachedFetch(OVERPASS[0] + query, servers, { tries: 1, check });
-    elements = (await res.json()).elements;
+    // From planetarium-labels where it covers, else asking Overpass.
+    elements = (await landNamesNear(profile.lat, profile.lon, FEATURE_RADIUS_KM)) ?? (await askOverpass(profile));
   } catch (err) {
     console.warn("Couldn't load names for the land", err);
     return null;
