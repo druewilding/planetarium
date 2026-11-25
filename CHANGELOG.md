@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.1.0](https://github.com/druewilding/planetarium/compare/v1.0.0...v1.1.0) (2026-11-25)
+
+
+### Features
+
+* Find eclipses, see them from the ground, and mark them on the time tracks ([#34](https://github.com/druewilding/planetarium/issues/34)) ([ce45e17](https://github.com/druewilding/planetarium/commit/ce45e175115b410ef361b5c6cba4bf55c35ac189))
+* Lift off from where you stand and see the Earth from space ([#38](https://github.com/druewilding/planetarium/issues/38)) ([c68b398](https://github.com/druewilding/planetarium/commit/c68b39831bd27e8bc941635ffc26bbe016deec5b)), closes [#1](https://github.com/druewilding/planetarium/issues/1) [#37](https://github.com/druewilding/planetarium/issues/37)
+* Say why your location couldn't be found ([#31](https://github.com/druewilding/planetarium/issues/31)) ([a0fdf1c](https://github.com/druewilding/planetarium/commit/a0fdf1c17994651864383efb97cde1fc2c10d5a8))
+
+
+### Continuous Integration
+
+* Release and deploy only when chosen ([#33](https://github.com/druewilding/planetarium/issues/33)) ([370ae5f](https://github.com/druewilding/planetarium/commit/370ae5faeeba39e4e4957ddb516e334ce4b8d813))
+
 ## [1.0.0](https://github.com/druewilding/planetarium/compare/v0.1.0...v1.0.0) (2026-11-24)
 
 
