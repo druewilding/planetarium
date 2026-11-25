@@ -217,8 +217,9 @@ export function createSearch(items) {
     const q = fold(input.value.trim());
     if (!q) matches = [];
     else {
-      const starts = records.filter((r) => r.key.startsWith(q) || r.key.split(/\s+/).some((w) => w.startsWith(q)));
-      const contains = records.filter((r) => !starts.includes(r) && r.key.includes(q));
+      const here = records.filter((r) => !r.shown || r.shown());
+      const starts = here.filter((r) => r.key.startsWith(q) || r.key.split(/\s+/).some((w) => w.startsWith(q)));
+      const contains = here.filter((r) => !starts.includes(r) && r.key.includes(q));
       matches = [...starts, ...contains].slice(0, 8);
     }
     active = 0;

@@ -387,9 +387,9 @@ async function main() {
   }
   /** Face the Sun or Moon if up (keeping the horizon in view), else the equator side of the sky. */
   /**
-   * Up above the Earth: where its centre goes on screen (and your spot, at first),
-   * just above the time bar so half the Earth rises into view. As a direction
-   * from the camera, in the camera's own frame.
+   * Taking off: where the Earth's centre goes on screen (and your spot, at first),
+   * just above the time bar so half the Earth rises into view as you leave it. As
+   * a direction from the camera, in the camera's own frame.
    */
   function earthSpot(fov) {
     const h = window.innerHeight;
@@ -401,14 +401,15 @@ async function main() {
   const faceFov = () => Math.max(50, Math.min(view.state.fov, 100));
   /** The Earth's direction in the camera's own frame. */
   const earthSeen = () => aloft.earthDir.clone().applyQuaternion(camera.quaternion.clone().invert());
+  const MIDDLE = new THREE.Vector3(0, 0, -1); // straight ahead
   /**
-   * Turn to put the Earth in its place on screen, as little as possible: the view
-   * stays tilted however it was (north up, say).
+   * Turn to put the Earth in the middle of the view (or at `spot`), as little as
+   * possible: the view stays tilted however it was (north up, say).
    */
   const faceEuler = new THREE.Euler();
-  function faceEarth({ duration } = {}) {
+  function faceEarth({ duration, spot = MIDDLE } = {}) {
     const fov = faceFov();
-    const turn = new THREE.Quaternion().setFromUnitVectors(earthSpot(fov), earthSeen());
+    const turn = new THREE.Quaternion().setFromUnitVectors(spot, earthSeen());
     faceEuler.setFromQuaternion(camera.quaternion.clone().multiply(turn), "YXZ");
     view.lookTo(
       { alt: faceEuler.x * R2D, az: -faceEuler.y * R2D, roll: faceEuler.z * R2D, fov },
@@ -451,7 +452,7 @@ async function main() {
   function awayFromDefault() {
     const fovOff = Math.abs(view.state.fov - DEFAULT_FOV) > 2;
     if (sensor.active) return fovOff;
-    if (isAloft()) return earthSeen().angleTo(earthSpot(faceFov())) > 4 * D2R; // (and any way round)
+    if (isAloft()) return earthSeen().angleTo(MIDDLE) > 4 * D2R; // (and any way round)
     const d = defaultView(sky);
     const azOff = Math.abs(((view.state.az - d.az + 540) % 360) - 180) > 4;
     return fovOff || azOff || Math.abs(view.state.alt - d.alt) > 4;
@@ -490,6 +491,7 @@ async function main() {
       standingOn: DEFAULT_BODY,
       ms: clock.ms,
       selection,
+      earth: selection?.type === "earth" && isAloft() ? earthFacts() : null,
       skyline: !flight && skylineFade > 0.5 ? skyline : null,
     }),
     onLook: () => lookAtSelection(),
@@ -622,7 +624,11 @@ async function main() {
       : "Rise straight up from where you're standing, high above the Earth";
     layersPanel.setPlace(up ? "space" : "ground");
     resetBtn.querySelector("span").textContent = up ? "Face the Earth" : "Reset view";
-    resetBtn.title = up ? "Look down at the Earth (0)" : "Back to the starting view, facing the Sun or Moon (0)";
+    resetBtn.title = up
+      ? "Turn to the Earth, in the middle of the view (0)"
+      : "Back to the starting view, facing the Sun or Moon (0)";
+    // (Back on the ground there's no Earth to look at.)
+    if (!up && selection?.type === "earth") select(null);
   }
   function riseUp() {
     if (isAloft()) return;
@@ -921,7 +927,7 @@ async function main() {
     // (unless you've already started looking around yourself).
     if (tw.rise && !aloft.panned && performance.now() - aloft.startedAt > 1200) {
       aloft.panned = true;
-      if (view.touchedAt() < aloft.startedAt && !sensor.active) faceEarth({ duration: 7 });
+      if (view.touchedAt() < aloft.startedAt && !sensor.active) faceEarth({ duration: 7, spot: earthSpot(faceFov()) });
     }
     if (tw.landing) {
       // Swing round to your spot, and back into the ground's own frame, high up,
@@ -989,6 +995,33 @@ async function main() {
       sunE,
       airGlow,
     });
+  }
+
+  /** For the info panel, with the Earth chosen: what's below you, how much is lit, how far things are. */
+  let belowName = { key: "", name: "" };
+  function earthFacts() {
+    const time = A.MakeTime(new Date(clock.ms));
+    const d = aloft.dir;
+    // Right under you now (the Earth keeps turning beneath you as you float).
+    const { x, y, z } = earthAxes(clock.ms);
+    const lat = Math.asin(Math.max(-1, Math.min(1, d.x * z.x + d.y * z.y + d.z * z.z))) * R2D;
+    const lon = Math.atan2(d.x * y.x + d.y * y.y + d.z * y.z, d.x * x.x + d.y * x.y + d.z * x.z) * R2D;
+    const key = `${lat.toFixed(1)},${lon.toFixed(1)}`;
+    if (belowName.key !== key) belowName = { key, name: location.fromPoint(lat, lon).name };
+    const sun = toVector3(A.GeoVector(Body.Sun, time, true));
+    const sunDist = sun.length();
+    const sunUp = Math.asin(Math.max(-1, Math.min(1, sun.normalize().dot(d)))) * R2D; // the Sun's height there
+    const r = (EARTH_RADIUS_KM + aloft.km) / AU_KM;
+    const moon = toVector3(A.GeoMoon(time)).sub(d.clone().multiplyScalar(r));
+    return {
+      km: aloft.km,
+      below: belowName.name,
+      daylight: sunUp > 0 ? "day" : sunUp > -6 ? "twilight" : "night",
+      across: 2 * aloft.earthRadius * R2D,
+      lit: (1 + sun.dot(d)) / 2, // how much of the side facing you is sunlit
+      sunKm: sunDist * AU_KM,
+      moonKm: moon.length() * AU_KM,
+    };
   }
 
   /** Your spot on the Earth, while you're up: where it is now, if it's on the side facing you. */
@@ -1086,6 +1119,7 @@ async function main() {
     switch (sel?.type) {
       case "sun":
       case "moon":
+      case "earth":
         return { type: sel.type };
       case "planet":
         return { type: "planet", id: sel.id };
@@ -1105,6 +1139,8 @@ async function main() {
         return selectSun();
       case "moon":
         return selectMoon();
+      case "earth":
+        return isAloft() ? selectEarth() : null;
       case "planet": {
         const p = PLANETS.find((pp) => pp.id.toLowerCase() === id);
         return p ? selectPlanet(p) : null;
@@ -1232,6 +1268,8 @@ async function main() {
         return selection.constellation.position(sky).dir;
       case "feature":
         return (selection.feature.dir ??= dirFromAltAz(selection.feature.alt, selection.feature.az));
+      case "earth":
+        return isAloft() ? aloft.earthDir : null;
       default:
         return null;
     }
@@ -1249,6 +1287,7 @@ async function main() {
   }
 
   function lookAtSelection() {
+    if (selection?.type === "earth") return faceEarth();
     const d = selectionDir();
     if (!d) return;
     let fov = view.state.fov;
@@ -1299,6 +1338,7 @@ async function main() {
   }
 
   const selectSun = () => ({ type: "sun", name: "Sun" });
+  const selectEarth = () => ({ type: "earth", name: "Earth" });
   const selectMoon = () => ({ type: "moon", name: "Moon" });
   const selectPlanet = (p) => ({ type: "planet", id: p.id, name: p.name });
   const selectStar = (s) => ({ type: "star", name: s.name, star: s });
@@ -1376,6 +1416,8 @@ async function main() {
   }
 
   createSearch([
+    // (Only up above it: on the ground it's under your feet.)
+    { name: "Earth", kind: "Planet · home", shown: isAloft, select: () => select(selectEarth(), { look: true }) },
     { name: "Sun", kind: "Star", select: () => select(selectSun(), { look: true }) },
     { name: "Moon", kind: "Moon", select: () => select(selectMoon(), { look: true }) },
     ...PLANETS.map((p) => ({ name: p.name, kind: "Planet", select: () => select(selectPlanet(p), { look: true }) })),
@@ -1434,8 +1476,10 @@ async function main() {
       consider(s.position(sky).dir, 14, Math.max(0, 4 - s.mag) * 1.5, () => selectStar(s));
     }
     if (best) return select(best());
-    // Otherwise: which constellation is that patch of sky in?
+    // Up above it: the Earth itself.
     const dir = view.dirAt(x, y);
+    if (isAloft() && earth.mesh.visible && behindLand(dir, 0)) return select(selectEarth());
+    // Otherwise: which constellation is that patch of sky in?
     if (below(dir)) return select(null);
     const eqj = dir.clone().applyMatrix4(sky.eqjToWorld.clone().transpose());
     const ra = (Math.atan2(eqj.y, eqj.x) * R2D + 360) % 360;
@@ -1629,7 +1673,7 @@ async function main() {
     }
     const sd = selectionDir();
     // (A chosen mountain's name is highlighted instead of ringed.)
-    if (sd && selection.type !== "constellation" && selection.type !== "feature") {
+    if (sd && !["constellation", "feature", "earth"].includes(selection.type)) {
       const angR =
         selection.type === "moon" ? shownRadius(sky.moon) : selection.type === "sun" ? shownRadius(sky.sun) : 0;
       const px = angR * (canvas.clientHeight / (view.state.fov * (Math.PI / 180)));
