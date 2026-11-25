@@ -76,8 +76,8 @@ sky with no connection (the hills and place names need one the first time you vi
   and whatever you've picked out, so a link opens exactly the sky you saw. Risen up above the Earth, it also holds how
   high you are and when you took off, so it opens straight onto the same view from space. While the clock is on now (real time), the
   link leaves the time out, so it opens on the sky as it is whenever it's followed. The **Share** button sends it (or
-  copies it). Layer toggles stay out of the link, since those are each person's own preferences. Positions are
-  rounded to about a kilometre.
+  copies it). Layer toggles stay out of the link, since those are each person's own preferences. Places are kept to
+  about a metre, so the link shows exactly what you saw: the same hills and names, even standing on a summit.
 - **Hills and mountains:** the real skyline around you, from free elevation maps. The Sun can be up and still hidden:
   from Tromsø in late November it never clears the mountains, and the info panel shows when the Sun, Moon and
   planets are actually **over the mountains** (in Tromsø the Sun first shows again on 21 January, Soldagen). The
@@ -85,7 +85,7 @@ sky with no connection (the hills and place names need one the first time you vi
   (with no nearer land in the way) are labelled in green. Tap one for its height and distance, or fly to its summit and
   watch the land drop away as you climb. Towns and villages, lighthouses, observatories, and tall towers and
   masts are labelled too, when you can see them.
-  Buildings and trees aren't included, and a 1 km share-link position can move the nearest hills a little.
+  Buildings and trees aren't included.
 - **Sea, lakes and rivers:** wherever you are, the water you can see mirrors the sky and the hills across it, more
   strongly at a low angle, with a glittering path under the Sun or the Moon. The water comes from OpenStreetMap
   (through OpenFreeMap's map tiles), so it follows the real coast; it's drawn where the land would let you see it, so

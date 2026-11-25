@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import { DEFAULT_BODY, readLink, writeLink } from "../src/link.js";
 
-const oslo = { lat: 59.9139, lon: 10.7522, tz: "Europe/Oslo" };
+const oslo = { lat: 59.91, lon: 10.75, tz: "Europe/Oslo" };
 
 describe("writeLink", () => {
   test("holds the place, moment, view and selection", () => {
@@ -15,6 +15,12 @@ describe("writeLink", () => {
     expect(hash).toBe(
       "body=earth&lat=59.91&lon=10.75&tz=Europe/Oslo&t=2026-12-04T19:22:12Z&az=182.3&alt=21.2&fov=80.0&sel=star:Sirius"
     );
+  });
+
+  test("gives the place to about a metre, so it shows the same hills", () => {
+    const summit = { lat: 69.836417, lon: 19.2049123 };
+    expect(writeLink({ place: summit })).toBe("body=earth&lat=69.83642&lon=19.20491");
+    expect(readLink("#lat=69.83642&lon=19.20491").place).toMatchObject({ lat: 69.83642, lon: 19.20491 });
   });
 
   test("leaves the time out when there isn't one (the clock is on now)", () => {
