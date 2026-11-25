@@ -10,11 +10,13 @@
     />
     <title>Planetarium</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="stylesheet" href="css/styles.css" />
     <script>
       if ("serviceWorker" in navigator) {
-        navigator.serviceWorker.register("./sw.js").catch(() => {});
+        // After the page has loaded, so saving the app for offline doesn't slow down the first visit.
+        addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
       }
     </script>
     <script type="importmap">

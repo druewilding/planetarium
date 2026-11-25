@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 
 import { isValidZone } from "../src/timezone.js";
-import { syncImportMap } from "../tools/sync-importmap.mjs";
+import { syncImportMap, syncVersions } from "../tools/sync-importmap.mjs";
 
 const load = (name) => JSON.parse(readFileSync(new URL(`../data/${name}.json`, import.meta.url), "utf8"));
 
@@ -88,5 +88,23 @@ describe("syncImportMap", () => {
 
   test("leaves libraries that aren't dependencies alone", () => {
     expect(syncImportMap(page, {})).toBe(page);
+  });
+});
+
+describe("syncVersions", () => {
+  const sw = `[
+    "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+    "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.core.js",
+  ]`;
+
+  test("points every file of a library at the version in package.json", () => {
+    const synced = syncVersions(sw, ["three"], { three: "0.181.2" });
+    expect(synced).toContain("/npm/three@0.181.2/build/three.module.js");
+    expect(synced).toContain("/npm/three@0.181.2/build/three.core.js");
+    expect(synced).not.toContain("0.180.0");
+  });
+
+  test("leaves libraries that aren't dependencies alone", () => {
+    expect(syncVersions(sw, ["three"], {})).toBe(sw);
   });
 });

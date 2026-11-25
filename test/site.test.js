@@ -16,6 +16,11 @@ const html = read("index.html");
 const pkg = JSON.parse(read("package.json"));
 const manifest = JSON.parse(read("manifest.webmanifest"));
 const serviceWorker = read("sw.js");
+/** The strings in one of the service worker's lists. */
+const listed = (name) => {
+  const [, list] = serviceWorker.match(new RegExp(`const ${name} = \\[([\\s\\S]*?)\\];`));
+  return [...list.matchAll(/"([^"]+)"/g)].map(([, s]) => s);
+};
 
 const sources = readdirSync(join(root, "src"), { recursive: true })
   .filter((file) => file.endsWith(".js"))
@@ -28,20 +33,22 @@ describe("the page", () => {
     for (const path of local) expect(existsSync(join(root, path)), path).toBe(true);
   });
 
-  test("is installable from the clean site root", () => {
+  test("can be installed as an app", () => {
+    expect(html).toMatch(/<link rel="manifest" href="manifest\.webmanifest"/);
+    expect(html).toMatch(/serviceWorker\.register\("\.\/sw\.js"\)/);
+    // Relative to the manifest, so the app opens on the page wherever the site is hosted.
     expect(manifest.start_url).toBe("./");
     expect(manifest.scope).toBe("./");
     expect(manifest.display).toBe("standalone");
-    expect(new URL(manifest.start_url, "https://druewilding.com/planetarium/").href).toBe(
-      "https://druewilding.com/planetarium/"
-    );
-    expect(
-      manifest.icons.some(
-        ({ src, sizes, type }) => src === "favicon.svg" && sizes === "any" && type === "image/svg+xml"
-      )
-    ).toBe(true);
-    expect(html).toMatch(/<link rel="manifest" href="manifest\.webmanifest"/);
-    expect(html).toMatch(/navigator\.serviceWorker\.register\("\.\/sw\.js"\)/);
+    for (const { src } of manifest.icons) expect(existsSync(join(root, src)), src).toBe(true);
+    // Android installs want PNGs at these sizes, and one it can crop to its own shape.
+    const pngs = manifest.icons.filter(({ type }) => type === "image/png");
+    expect(pngs.map(({ sizes }) => sizes)).toEqual(expect.arrayContaining(["192x192", "512x512"]));
+    expect(pngs.some(({ purpose }) => purpose === "maskable")).toBe(true);
+    for (const { src, sizes } of pngs) {
+      const png = readFileSync(join(root, src));
+      expect(`${png.readUInt32BE(16)}x${png.readUInt32BE(20)}`, src).toBe(sizes);
+    }
   });
 
   test("loads data and textures that exist", () => {
@@ -69,20 +76,34 @@ describe("the page", () => {
       ...sources.flatMap((file) =>
         [...read(file).matchAll(/["'`]((?:data|textures)\/[\w./-]+)["'`]/g)].map(([, p]) => p)
       ),
+      ...manifest.icons.map(({ src }) => src),
+      "sw.js",
     ];
     for (const path of loaded) expect(deployed, path).toContain(path.split("/")[0]);
   });
 
-  test("caches every local file the page loads for offline use", () => {
-    const [, shell] = serviceWorker.match(/const APP_SHELL = \[([\s\S]*?)\];/);
-    const cached = [...shell.matchAll(/"([^"]+)"/g)].map(([, path]) => path.replace(/^\.\//, ""));
-    const loaded = [
-      ...[...html.matchAll(/(?:src|href)="([^"#:]+)"/g)].map(([, path]) => path),
-      ...sources.flatMap((file) =>
-        [...read(file).matchAll(/["'`]((?:data|textures)\/[\w./-]+)["'`]/g)].map(([, path]) => path)
-      ),
-    ];
-    for (const path of loaded) expect(cached, path).toContain(path);
+  test("keeps a copy of every file the site serves, for offline", () => {
+    const shell = listed("APP_SHELL").map((path) => path.replace(/^\.\//, ""));
+    const served = ["", "index.html", "manifest.webmanifest", "favicon.svg", "css/styles.css"];
+    for (const dir of ["icons", "src", "data", "textures"]) {
+      for (const file of readdirSync(join(root, dir), { recursive: true, withFileTypes: true })) {
+        if (file.isFile()) served.push(relative(root, join(file.parentPath, file.name)));
+      }
+    }
+    expect(shell.toSorted()).toEqual(served.toSorted());
+  });
+
+  test("keeps a copy of the libraries the import map loads, and the files they import", () => {
+    const libraries = listed("LIBRARIES");
+    const needed = new Set(Object.values(importMap(html)));
+    for (const url of needed) {
+      // The same file in node_modules: /npm/three@0.180.0/build/x.js is three/build/x.js
+      const local = new URL(url).pathname.replace(/^\/npm\/((?:@[^/]+\/)?[^@/]+)@[^/]+/, "node_modules/$1");
+      for (const [, path] of read(local).matchAll(/^(?:import|export)\b[^;]*?\bfrom\s*["'](\.{1,2}\/[^"']+)["']/gm)) {
+        needed.add(new URL(path, url).href);
+      }
+    }
+    expect(libraries.toSorted(), "run `npm run importmap` to update sw.js").toEqual([...needed].toSorted());
   });
 
   test.each(Object.entries(importMap(html)))("loads %s from the CDN at the version in package.json", (name, url) => {
