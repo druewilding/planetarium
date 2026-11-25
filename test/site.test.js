@@ -41,6 +41,14 @@ describe("the page", () => {
     expect(manifest.scope).toBe("./");
     expect(manifest.display).toBe("standalone");
     for (const { src } of manifest.icons) expect(existsSync(join(root, src)), src).toBe(true);
+    // Android installs want PNGs at these sizes, and one it can crop to its own shape.
+    const pngs = manifest.icons.filter(({ type }) => type === "image/png");
+    expect(pngs.map(({ sizes }) => sizes)).toEqual(expect.arrayContaining(["192x192", "512x512"]));
+    expect(pngs.some(({ purpose }) => purpose === "maskable")).toBe(true);
+    for (const { src, sizes } of pngs) {
+      const png = readFileSync(join(root, src));
+      expect(`${png.readUInt32BE(16)}x${png.readUInt32BE(20)}`, src).toBe(sizes);
+    }
   });
 
   test("loads data and textures that exist", () => {
@@ -68,6 +76,8 @@ describe("the page", () => {
       ...sources.flatMap((file) =>
         [...read(file).matchAll(/["'`]((?:data|textures)\/[\w./-]+)["'`]/g)].map(([, p]) => p)
       ),
+      ...manifest.icons.map(({ src }) => src),
+      "sw.js",
     ];
     for (const path of loaded) expect(deployed, path).toContain(path.split("/")[0]);
   });
@@ -75,7 +85,7 @@ describe("the page", () => {
   test("keeps a copy of every file the site serves, for offline", () => {
     const shell = listed("APP_SHELL").map((path) => path.replace(/^\.\//, ""));
     const served = ["", "index.html", "manifest.webmanifest", "favicon.svg", "css/styles.css"];
-    for (const dir of ["src", "data", "textures"]) {
+    for (const dir of ["icons", "src", "data", "textures"]) {
       for (const file of readdirSync(join(root, dir), { recursive: true, withFileTypes: true })) {
         if (file.isFile()) served.push(relative(root, join(file.parentPath, file.name)));
       }
