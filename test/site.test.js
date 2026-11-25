@@ -106,6 +106,13 @@ describe("the page", () => {
     expect(libraries.toSorted(), "run `npm run importmap` to update sw.js").toEqual([...needed].toSorted());
   });
 
+  test("shows the version in package.json", async () => {
+    const { VERSION } = await import("../src/version.js");
+    expect(VERSION, "release-please should update src/version.js too").toBe(pkg.version);
+    const config = JSON.parse(read(".github/release-please-config.json"));
+    expect(config.packages["."]["extra-files"]).toContain("src/version.js");
+  });
+
   test.each(Object.entries(importMap(html)))("loads %s from the CDN at the version in package.json", (name, url) => {
     const version = pkg.devDependencies[name];
     expect(version, `${name} should be a dev dependency, so the tests can use it`).toBeDefined();

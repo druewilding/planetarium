@@ -38,6 +38,7 @@ const APP_SHELL = [
   "./src/space.js",
   "./src/terrain.js",
   "./src/timezone.js",
+  "./src/version.js",
   "./src/water.js",
   "./src/scene/atmosphere.js",
   "./src/scene/bodies.js",
