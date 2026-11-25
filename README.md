@@ -5,6 +5,7 @@ stars are, with a physically based sky and real brightness. Built to help unders
 of the planets and how the Sun's daily path changes with the seasons and your latitude.
 
 Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Pages.
+Install it from the browser as a standalone app; its shell, sky data, textures and runtime modules are cached for offline use and refreshed when online.
 
 ## What it does (Milestone 1: the sky from where you are)
 
