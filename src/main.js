@@ -230,7 +230,7 @@ async function main() {
   const ground = createGround(shared, glsl);
   scene.add(moon.mesh, moon.glow, sun.mesh, ground.mesh);
 
-  // The Earth seen from above (Rise up). Its maps load the first time you go up.
+  // The Earth seen from above (Lift off). Its maps load the first time you go up.
   const earth = createEarth(shared, glsl);
   scene.add(earth.mesh);
   const loadEarthMaps = () =>
@@ -303,7 +303,7 @@ async function main() {
   let sunLevel = 1;
   let exposure = 1;
   let globalLimit = 6;
-  // Up above the Earth (see Rise up, below).
+  // Up above the Earth (see Lift off, below).
   const aloft = {
     km: 0,
     frame: null, // Matrix4, J2000 → view, held still against the stars
@@ -601,7 +601,7 @@ async function main() {
     }
   });
 
-  // ---- Rise up: lift straight off the ground, keeping your view ----
+  // ---- Lift off: rise straight off the ground, keeping your view (and Land) ----
   // While you're up you float still against the stars: the view keeps the frame
   // it had when you left the ground, and the Earth turns beneath you (turn round
   // to see it). Coming down drifts back over wherever your spot has turned to,
@@ -614,11 +614,17 @@ async function main() {
   const toVector3 = (v) => new THREE.Vector3(v.x, v.y, v.z);
   const riseBtn = $("rise-btn");
   const altitudeEl = $("altitude");
+  // The arrow points up off the ground, or down to it.
+  const RISE_ICON = "M12 2 7 7h3.5v5h3V7H17z";
+  const LAND_ICON = "M12 13 7 8h3.5V2h3v6H17z";
+  const riseIcon = riseBtn.querySelector("path");
+  const GROUND_ICON = riseIcon.getAttribute("d").slice(RISE_ICON.length);
   function setAloftUi(up) {
     document.body.classList.toggle("aloft", up);
     altitudeEl.hidden = !up;
     riseBtn.setAttribute("aria-pressed", String(up));
-    riseBtn.querySelector("span").textContent = up ? "Back to the ground" : "Rise up";
+    riseBtn.querySelector("span").textContent = up ? "Land" : "Lift off";
+    riseIcon.setAttribute("d", (up ? LAND_ICON : RISE_ICON) + GROUND_ICON);
     riseBtn.title = up
       ? "Come back down to where you're standing"
       : "Rise straight up from where you're standing, high above the Earth";
