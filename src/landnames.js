@@ -53,7 +53,7 @@ const TAG = {
   mast: ["man_made", "height"],
 };
 
-/** A row from a square, as the OpenStreetMap element Overpass would have given. */
+/** A row from a square, as an OpenStreetMap element: { type, id, lat, lon, tags }. */
 export function toElement([id, kind, lat, lon, name, number]) {
   const [key, numberKey] = TAG[kind];
   const tags = { [key]: kind };
@@ -85,17 +85,12 @@ function loadIndex() {
 }
 
 /**
- * The labelled things within `radiusKm` of a place, as OpenStreetMap elements, or
- * null if the labels don't cover it yet (or can't be reached).
+ * The labelled things within `radiusKm` of a place, as OpenStreetMap elements.
+ * The labels cover the whole world: a square that isn't in the index has nothing
+ * to name (open sea, ice). Throws if the labels can't be reached.
  */
 export async function landNamesNear(lat, lon, radiusKm) {
-  let built, squares;
-  try {
-    ({ built, squares } = await loadIndex());
-  } catch {
-    return null;
-  }
-  if (!squares[squareKey(lat, lon)]) return null;
+  const { built, squares } = await loadIndex();
   const wanted = squaresAround(lat, lon, radiusKm).filter((key) => squares[key]);
   const rows = await Promise.all(
     wanted.map(async (key) => {

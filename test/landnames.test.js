@@ -25,7 +25,7 @@ describe("squaresAround", () => {
 });
 
 describe("toElement", () => {
-  test("turns a peak's row into the element Overpass gave", () => {
+  test("turns a peak's row into an OpenStreetMap element", () => {
     expect(toElement(["n251488763", "peak", 55.99251, 9.79581, "Yding Skovhøj", 170.8])).toEqual({
       type: "node",
       id: 251488763,

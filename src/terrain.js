@@ -22,29 +22,7 @@ import { landNamesNear } from "./landnames.js";
 import { LAND, loadWater, OCEAN, OPEN_OCEAN } from "./water.js";
 
 const TILE_URL = (z, x, y) => `https://elevation-tiles-prod.s3.amazonaws.com/terrarium/${z}/${x}/${y}.png`;
-// Public Overpass servers for OpenStreetMap queries, tried in turn: they're often busy.
-// Only asked where planetarium-labels doesn't reach yet (see landnames.js).
-const OVERPASS = [
-  "https://overpass-api.de/api/interpreter",
-  "https://overpass.private.coffee/api/interpreter",
-  "https://overpass.kumi.systems/api/interpreter",
-];
-// Everything worth naming on the land, in one query (the servers are slow): peaks,
-// towns and villages, lighthouses, observatories, and towers and masts with a height.
-const featuresQuery = (lat, lon, radiusM) => {
-  const near = `(around:${radiusM},${lat},${lon})`;
-  return (
-    "?data=" +
-    encodeURIComponent(
-      "[out:json][timeout:60];(" +
-        `node["natural"~"^(peak|volcano)$"]["name"]${near};` +
-        `node["place"~"^(city|town|village)$"]["name"]${near};` +
-        `nwr["man_made"~"^(lighthouse|observatory)$"]${near};` +
-        `nwr["man_made"~"^(tower|mast)$"]["height"]${near};` +
-        ");out center;"
-    )
-  );
-};
+// Names for the land come from planetarium-labels (see landnames.js), within this far.
 const FEATURE_RADIUS_KM = 50;
 const EARTH_R = EARTH_RADIUS_KM * 1000;
 const REFRACTION_K = 0.13;
@@ -462,36 +440,18 @@ function classify(tags) {
   return null;
 }
 
-/** The things worth naming within FEATURE_RADIUS_KM, from the public Overpass servers. */
-async function askOverpass(profile) {
-  // Rounded to about a kilometre: plenty for a 50 km search, and kinder to caches.
-  const query = featuresQuery(profile.lat.toFixed(2), profile.lon.toFixed(2), FEATURE_RADIUS_KM * 1000);
-  // Overpass answers "200 OK" even when a query timed out or was cut short, with
-  // a remark saying so: treat that as a failure, or the gap would be cached for good.
-  const check = async (res, src) => {
-    const json = await res.json();
-    if (!Array.isArray(json.elements) || /error|timed out|rate/i.test(json.remark ?? "")) {
-      throw new Error(`${new URL(src).host}: ${json.remark || "no results"}`);
-    }
-  };
-  // One try per server, to go easy on them: they limit how often each visitor asks.
-  const servers = OVERPASS.map((server) => server + query);
-  const res = await cachedFetch(OVERPASS[0] + query, servers, { tries: 1, check });
-  return (await res.json()).elements;
-}
-
 const UNNAMED = { lighthouse: "Lighthouse", observatory: "Observatory", tower: "Tower", mast: "Mast" };
 
 /**
  * Things from OpenStreetMap that can be seen from where the profile was made
  * (named peaks, towns, lighthouses, observatories, towers and masts), each with
- * where it appears in the sky. Empty if none or offline.
+ * where it appears in the sky. Empty if there's nothing to name; null if the
+ * names couldn't be loaded (so it can try again later).
  */
 export async function visibleFeatures(profile) {
   let elements;
   try {
-    // From planetarium-labels where it covers, else asking Overpass.
-    elements = (await landNamesNear(profile.lat, profile.lon, FEATURE_RADIUS_KM)) ?? (await askOverpass(profile));
+    elements = await landNamesNear(profile.lat, profile.lon, FEATURE_RADIUS_KM);
   } catch (err) {
     console.warn("Couldn't load names for the land", err);
     return null;
