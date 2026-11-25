@@ -90,3 +90,17 @@ export function lines(geometry, material, renderOrder = 2) {
   obj.renderOrder = renderOrder;
   return obj;
 }
+
+/**
+ * Fade a line (or a group of them) to a fraction of its own opacity, and hide it
+ * once it's gone. Used as you rise from the ground into space and back.
+ */
+export function setFade(obj, f) {
+  obj.visible = f > 0.002;
+  obj.traverse((o) => {
+    const u = o.material?.uniforms?.uOpacity;
+    if (!u) return;
+    o.userData.baseOpacity ??= u.value;
+    u.value = o.userData.baseOpacity * f;
+  });
+}

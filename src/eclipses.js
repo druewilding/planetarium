@@ -9,9 +9,9 @@
 
 import * as A from "astronomy-engine";
 
-import { AU_KM, MOON_RADIUS_KM, SUN_RADIUS_KM } from "./constants.js";
+import { AU_KM, EARTH_RADIUS_KM, MOON_RADIUS_KM, SUN_RADIUS_KM } from "./constants.js";
 
-const EARTH_SHADOW_RADIUS_KM = 6371 + 88;
+const EARTH_SHADOW_RADIUS_KM = EARTH_RADIUS_KM + 88;
 
 /** Light reaching the umbra through the atmosphere, as a share of full sunlight: dimmest at the centre. */
 export const UMBRA_CENTRE = 4e-5;

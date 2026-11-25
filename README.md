@@ -34,7 +34,9 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
   shadow creeps across the Moon, which turns a dim copper red: the only sunlight reaching it has been bent through the
   Earth's air. The shadow's size comes from the same geometry as the eclipse predictions, so the two agree. The info
   panel lists the next solar and lunar eclipses you can see from where you are, and the next total solar eclipse
-  anywhere; tap one to go to its peak (or to its centre line).
+  anywhere; tap one to go to its peak (or to its centre line). Risen up above the Earth, a solar eclipse is the Moon's
+  shadow on the Earth: tapping one glides you round to look down on it, a dark spot with a soft grey edge where the Sun
+  is partly covered. A lunar eclipse turns you to the red Moon, which looks the same from up there.
 - **Time tracks:** drag along a 24-hour track shaded by where the Sun is (night, twilight, day), or along a date track
   shaded by day length through the year. Dots mark the solstices, the equinoxes and the eclipses you can see from where
   you are on the date track, and an eclipse's moment on the time track (with a band for how long it lasts). Hover for what each one is, or tap to go there. A year stepper sits beside it, and
@@ -48,6 +50,17 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
   and daylight saving), or typed coordinates. The map zooms and pans (scroll, pinch or drag), and shows the cities as
   dots: the biggest when zoomed out, more as you zoom in. Dots swell as the pointer comes near, and clicking one stands
   you in that city. Changing location glides smoothly.
+- **Lift off:** rise straight off the ground, still looking the way you were. You're a kilometre up in half a second: the hills, with their names, and the lakes and sea fall away below you as the far land comes into view, then the sky
+  darkens to black as the air thins, and the view turns slowly down until half the Earth rises into the bottom of it:
+  lit by the Sun, with city lights on its night side and your spot marked. The stars, the Moon, the planets and their
+  labels stay with you. Up there you float still against the stars, so the sky stops turning and the Earth turns
+  beneath you instead, carrying your spot round into the night and back into the day. There's no up or down in
+  space, so dragging slides the sky freely under your finger; drag on the Earth instead and it turns like a ball, with the sky turning with it, carrying you round to look down on anywhere. The Moon, being near, shifts against the stars as you
+  climb. Choosing another place while you're up glides you round the Earth until you're floating straight over it. − + set how high you are, from 1 km to 250,000 km, and **Face the Earth** turns it back to the middle of the view. Up here the Earth is in the search too, or tap it, for what's below you and how much of it is lit. **North up** turns the Earth in place, with the sky turning round it, until its north is at the top, and then offers **South up** (the one it offers first depends on which hemisphere you're in). The layers
+  change to suit space: the horizon, the compass and the Sun's path fade out, and the orbits fade in: the Moon's round
+  the Earth, the Earth's round the Sun (with where it will be on the first of each month) and the planets', each
+  named in its own colour and fading with distance, so the far side of an orbit is a ghost of its near side. **Back
+  to the ground** brings you down over wherever your spot has turned to, turning back to the view you had.
 - **Overlays:** the Sun's path today with hour marks, the solstice and equinox paths, the Moon's path, the ecliptic,
   the celestial equator, and alt/az and RA/Dec grids.
 - **Info panel:** rise, set and transit times, twilight, day length, Moon phases and age, distances, light travel time,
@@ -58,7 +71,8 @@ Pure HTML/CSS/JS with no build step, so it can be hosted directly on GitHub Page
   uses the compass for north (via `deviceorientationabsolute` on Android, `webkitCompassHeading` on iOS). Phone
   compasses are often a few degrees out and point to magnetic north, so dragging sideways turns the sky into line.
 - **Share links:** the address always holds where you're standing, the moment, which way you're looking, the zoom
-  and whatever you've picked out, so a link opens exactly the sky you saw. While the clock is on now (real time), the
+  and whatever you've picked out, so a link opens exactly the sky you saw. Risen up above the Earth, it also holds how
+  high you are and when you took off, so it opens straight onto the same view from space. While the clock is on now (real time), the
   link leaves the time out, so it opens on the sky as it is whenever it's followed. The **Share** button sends it (or
   copies it). Layer toggles stay out of the link, since those are each person's own preferences. Positions are
   rounded to about a kilometre.
@@ -140,6 +154,7 @@ planetarium/
 ├── src/
 │   ├── main.js            # app setup, render loop, eye adaptation, picking, labels
 │   ├── astro.js           # astronomy-engine wrapper → horizon (world) frame
+│   ├── climb.js           # how high you are, second by second, rising and landing
 │   ├── clock.js           # simulated time, rates, smooth jumps
 │   ├── timezone.js        # wall-clock time for any location
 │   ├── projection.js      # perspective ↔ stereographic projection (JS side)
@@ -151,14 +166,16 @@ planetarium/
 │   ├── constants.js       # sizes and distances shared by the astronomy and the drawing
 │   ├── scene/
 │   │   ├── atmosphere.js  # scattering model (GLSL + JS twin)
+│   │   ├── earth.js       # the Earth seen from above, drawn into the sky
 │   │   ├── bodies.js      # Sun, Moon, ground
 │   │   ├── points.js      # stars and planets as points
 │   │   ├── lines.js       # lines on the sky (refraction-aware)
 │   │   ├── overlays.js    # constellations, grids, paths
+│   │   ├── orbits.js      # the Moon's, the Earth's and the planets' orbits, in perspective
 │   │   └── glsl.js        # shared shader code: tone mapping, sky lookup, refraction
 │   └── ui/                # time bar, compass, location dialog, info panel, layers, search, labels, camera
 ├── data/                  # stars, constellations, cities, land outlines (compact JSON)
-├── textures/moon.jpg
+├── textures/            # the Moon, the Milky Way, and the Earth by day, by night and its seas
 ├── test/                  # Vitest tests
 └── tools/                 # scripts that produced data/, and the import map updater
 ```
@@ -174,6 +191,8 @@ planetarium/
 - Milky Way: [NASA SVS Deep Star Maps 2020](https://svs.gsfc.nasa.gov/4851) (the star-free Milky Way layer,
   public domain)
 - Moon texture: [NASA SVS CGI Moon Kit](https://svs.gsfc.nasa.gov/4720) (LRO, public domain)
+- Earth by day, its city lights and its seas: NASA's Blue Marble and Earth at Night (public domain), as prepared for
+  the [three.js examples](https://github.com/mrdoob/three.js/tree/dev/examples/textures/planets)
 - Coastlines and cities: [Natural Earth](https://www.naturalearthdata.com) (public domain)
 - Mountain, place and landmark names: © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors (ODbL), via the
   [Overpass API](https://overpass-api.de)
@@ -185,10 +204,11 @@ planetarium/
 ## Roadmap
 
 1. ✅ The sky from your location
-2. Earth from orbit: textured globe, day/night terminator, the Moon's orbit
+2. Earth from orbit: ✅ textured globe, day/night terminator, ✅ the Moon's, the Earth's and the planets' orbits;
+   still to come: rising far enough to see the solar system from outside, true-scale sizes
 3. Fly-to travel between bodies, orbit trails
 4. Standing on the Moon: Earth's phases, the two-week day
 5. Planets and moons: Jupiter's Galilean moons, Saturn's rings and Titan, Mars' moons
 6. The Martian sky, with its blue sunset
-7. Eclipses: ✅ find them and jump to them, ✅ the red Moon; still to come: the Moon's shadow on the Earth
+7. ✅ Eclipses: find them and jump to them, the red Moon, the Moon's shadow on the Earth
 8. ✅ Shareable links (place, time, view in the URL)

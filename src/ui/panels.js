@@ -1,6 +1,10 @@
 // Layers panel (toggles, remembered per browser) and the object search box.
 
+import { ORBIT_COLORS } from "../scene/orbits.js";
 import { OVERLAY_COLORS } from "../scene/overlays.js";
+
+// Some layers only make sense standing on the ground, and some only up in space
+// (`where`); the panel shows the ones for where you are.
 
 export const LAYER_GROUPS = [
   {
@@ -10,15 +14,17 @@ export const LAYER_GROUPS = [
       { key: "atmosphere", label: "Atmosphere", hint: "Turn off to see a Moon-like black sky" },
       {
         key: "ground",
+        where: "ground",
         label: "Solid ground",
         hint: "Turn off to see through the earth: the sky below is always dark, with the hills outlined",
       },
       {
         key: "terrain",
+        where: "ground",
         label: "Hills & mountains",
         hint: "The real skyline around you, from elevation maps (Terrain Tiles: SRTM, EU-DEM, Kartverket and others). Needs a connection",
       },
-      { key: "refraction", label: "Refraction near horizon" },
+      { key: "refraction", where: "ground", label: "Refraction near horizon" },
       {
         key: "bigBodies",
         label: "Enlarge Sun & Moon",
@@ -34,29 +40,36 @@ export const LAYER_GROUPS = [
       { key: "constellationNames", label: "Constellation names" },
       {
         key: "peakNames",
+        where: "ground",
         label: "Mountain names",
         color: "#8fe39a",
         hint: "Named peaks you can see from here. Names © OpenStreetMap contributors",
       },
       {
         key: "placeNames",
+        where: "ground",
         label: "Places & landmarks",
         color: "#dcc2ff",
         hint: "Towns, villages, lighthouses, observatories, towers and masts you can see from here. © OpenStreetMap contributors",
       },
-      { key: "compass", label: "Horizon & compass", color: OVERLAY_COLORS.horizon },
+      { key: "compass", where: "ground", label: "Horizon & compass", color: OVERLAY_COLORS.horizon },
+      { key: "spot", where: "space", label: "Where you came from", color: "var(--accent)" },
+      { key: "monthMarks", where: "space", label: "Months along the Earth’s orbit", color: ORBIT_COLORS.earth },
     ],
   },
   {
     title: "Lines",
     items: [
       { key: "constellations", label: "Constellation figures", color: OVERLAY_COLORS.constellations },
-      { key: "sunPath", label: "Sun’s path today", color: OVERLAY_COLORS.sunPath },
-      { key: "seasonPaths", label: "Solstice & equinox paths", color: OVERLAY_COLORS.juneSolstice },
-      { key: "moonPath", label: "Moon’s path (±12 h)", color: OVERLAY_COLORS.moonPath },
+      { key: "sunPath", where: "ground", label: "Sun’s path today", color: OVERLAY_COLORS.sunPath },
+      { key: "seasonPaths", where: "ground", label: "Solstice & equinox paths", color: OVERLAY_COLORS.juneSolstice },
+      { key: "moonPath", where: "ground", label: "Moon’s path (±12 h)", color: OVERLAY_COLORS.moonPath },
+      { key: "moonOrbit", where: "space", label: "Moon’s orbit round the Earth", color: ORBIT_COLORS.moon },
+      { key: "earthOrbit", where: "space", label: "Earth’s orbit round the Sun", color: ORBIT_COLORS.earth },
+      { key: "planetOrbits", where: "space", label: "Planets’ orbits", color: ORBIT_COLORS.Mars },
       { key: "ecliptic", label: "Ecliptic (planets’ highway)", color: OVERLAY_COLORS.ecliptic },
       { key: "equator", label: "Celestial equator", color: OVERLAY_COLORS.equator },
-      { key: "altAzGrid", label: "Altitude / azimuth grid", color: OVERLAY_COLORS.altAzGrid },
+      { key: "altAzGrid", where: "ground", label: "Altitude / azimuth grid", color: OVERLAY_COLORS.altAzGrid },
       { key: "eqGrid", label: "RA / Dec grid", color: OVERLAY_COLORS.eqGrid },
     ],
   },
@@ -79,6 +92,11 @@ export const DEFAULT_LAYERS = {
   sunPath: true,
   seasonPaths: false,
   moonPath: false,
+  spot: true,
+  monthMarks: true,
+  moonOrbit: true,
+  earthOrbit: true,
+  planetOrbits: true,
   ecliptic: false,
   equator: false,
   altAzGrid: false,
@@ -100,6 +118,7 @@ export function createLayersPanel({ onChange }) {
   const layers = loadLayers();
   const panel = document.getElementById("layers");
   const content = document.getElementById("layers-content");
+  const rows = []; // { where, el }, to show the ones for where you are
   for (const group of LAYER_GROUPS) {
     const h = document.createElement("h3");
     h.textContent = group.title;
@@ -107,6 +126,7 @@ export function createLayersPanel({ onChange }) {
     for (const item of group.items) {
       const label = document.createElement("label");
       label.className = "toggle";
+      rows.push({ where: item.where, el: label });
       if (item.hint) label.title = item.hint;
       const input = document.createElement("input");
       input.type = "checkbox";
@@ -144,8 +164,15 @@ export function createLayersPanel({ onChange }) {
     if (e.key === "Escape" && !panel.hidden) toggle(false);
   });
 
+  /** Show the layers for standing on the ground ("ground") or being up in space ("space"). */
+  function setPlace(place) {
+    for (const r of rows) r.el.hidden = !!r.where && r.where !== place;
+    panel.querySelector("h2").textContent = place === "space" ? "Layers in space" : "Layers";
+  }
+  setPlace("ground");
+
   onChange(layers);
-  return { layers };
+  return { layers, setPlace };
 }
 
 const fold = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -190,8 +217,9 @@ export function createSearch(items) {
     const q = fold(input.value.trim());
     if (!q) matches = [];
     else {
-      const starts = records.filter((r) => r.key.startsWith(q) || r.key.split(/\s+/).some((w) => w.startsWith(q)));
-      const contains = records.filter((r) => !starts.includes(r) && r.key.includes(q));
+      const here = records.filter((r) => !r.shown || r.shown());
+      const starts = here.filter((r) => r.key.startsWith(q) || r.key.split(/\s+/).some((w) => w.startsWith(q)));
+      const contains = here.filter((r) => !starts.includes(r) && r.key.includes(q));
       matches = [...starts, ...contains].slice(0, 8);
     }
     active = 0;

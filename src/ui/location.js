@@ -421,10 +421,13 @@ export function createLocation({ cities, land, onChange, getTime }) {
     if (pointers.size) return;
     canvas.classList.remove("panning");
     if (e.type !== "pointerup" || moved || !p) return;
-    // A tap near a city takes the city itself; anywhere else is just that spot.
+    // A tap near a city takes the city itself, and that's that; anywhere else is
+    // just that spot, and the map stays open to fine-tune it.
     const dot = dotNear(p.x, p.y, e.pointerType === "mouse" ? 14 : 22);
-    if (dot) choose(cityLocation(dot.city));
-    else choose(fromPoint(Math.max(-89.9, Math.min(89.9, latAt(p.y))), lonAt(p.x)));
+    if (dot) {
+      choose(cityLocation(dot.city));
+      dialog.close();
+    } else choose(fromPoint(Math.max(-89.9, Math.min(89.9, latAt(p.y))), lonAt(p.x)));
   };
   canvas.addEventListener("pointerup", release);
   canvas.addEventListener("pointercancel", release);

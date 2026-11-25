@@ -10,9 +10,11 @@
 
 import * as THREE from "three";
 
+import { EARTH_RADIUS_KM } from "../constants.js";
+
 export const ATMOSPHERES = {
   earth: {
-    planetRadius: 6371,
+    planetRadius: EARTH_RADIUS_KM,
     height: 100,
     observerHeight: 0.01,
     // Coefficients at wavelengths near the sRGB primaries (≈610, 550, 465 nm) rather

@@ -101,7 +101,8 @@ export function createSun(shared, glsl) {
     uncovered = 1,
     scale = 1,
     throughEarth = false,
-    glasses = false
+    glasses = false,
+    aloft = false
   ) {
     uniforms.uFilter.value.set(...(glasses ? GLASSES_TINT : [1, 1, 1]));
     const angR = sun.angularRadius * scale;
@@ -118,7 +119,8 @@ export function createSun(shared, glsl) {
     uniforms.uDiscExposure.value = Math.min(exposure, 4 / L);
     const E = (sun.illuminance * dim * uncovered * (transmit[0] + transmit[1] + transmit[2])) / 3;
     uniforms.uGlare.value = throughEarth ? 0 : 0.8 * (1 - Math.exp(-E * exposure * 0.02));
-    mesh.visible = throughEarth || sun.alt > -2;
+    // (Up above the Earth there's no horizon to set behind: the Earth itself hides it.)
+    mesh.visible = throughEarth || aloft || sun.alt > -2;
   }
   return { mesh, update };
 }
@@ -264,7 +266,7 @@ export function createMoon(shared, glsl, texture, textureMean) {
   glow.frustumCulled = false;
 
   /** `throughEarth`: seen through see-through ground, with no glow around it. */
-  function update(moon, sky, transmit, exposure, camera, scale = 1, throughEarth = false) {
+  function update(moon, sky, transmit, exposure, camera, scale = 1, throughEarth = false, aloft = false) {
     const r = Math.tan(moon.angularRadius * scale) * MOON_DISTANCE;
     moonOrientation(moon.axis, sky.eqjToWorld, basis);
     mesh.matrix
@@ -285,7 +287,7 @@ export function createMoon(shared, glsl, texture, textureMean) {
     uniforms.uEarthshine.value = FULL_MOON_LUMINANCE * 1.2e-4 * earthPhase * earthPhase;
     // In the Earth's shadow the Moon is far dimmer, and the eye adapts to that instead.
     uniforms.uMoonExposure.value = Math.min(exposure, 0.9 / (FULL_MOON_LUMINANCE * Math.max(moon.shadow.light, 1e-5)));
-    mesh.visible = throughEarth || moon.alt > -3;
+    mesh.visible = throughEarth || aloft || moon.alt > -3;
 
     // Glow: grows with how bright the Moon is compared with what the eye is adapted to,
     // so it's strong on a dark night and gone in daylight.
@@ -332,6 +334,9 @@ export function createGround(shared, glsl) {
   const uniforms = {
     ...shared,
     uGroundL: { value: 0 },
+    uFall: { value: 0 }, // rising off the ground: 0 standing, 1 faded into the Earth below
+    uFloor: { value: 0 }, // the lowest the land's edge can be (radians): level on the ground, none up above
+    uRise: { value: 1 }, // eye height on the ground ÷ eye height now (for where the water has sunk to)
     uWater: { value: water },
     uWaterCols: { value: SKYLINE_SAMPLES },
     uSunDir: { value: new THREE.Vector3(0, -1, 0) },
@@ -354,6 +359,9 @@ export function createGround(shared, glsl) {
       ${glsl.SKY_LOOKUP}
       ${glsl.LAND}
       uniform float uGroundL;
+      uniform float uFall;
+      uniform float uFloor;
+      uniform float uRise;
       uniform sampler2D uWater;
       uniform float uWaterCols;
       uniform vec3 uSunDir;
@@ -363,14 +371,14 @@ export function createGround(shared, glsl) {
       varying vec3 vDir;
 
       // How much of the ground this way is water (0 to 1).
-      float waterAt(vec3 d, float alt) {
+      float waterAt(vec3 d, float alt, float soft) {
         float az = atan(d.x, -d.z);
         float x = degrees(alt) / ${WATER_SCALE};
         float s = sign(x) * log(abs(x) + sqrt(x * x + 1.0)); // asinh
         float v = 0.5 + 0.5 * s / ${WATER_SPAN.toFixed(6)};
         float w = texture2D(uWater, vec2(fract(az / 6.28318530718 + 0.5 / uWaterCols), v)).r;
         // A crisp shore through the blend between samples, rather than steps.
-        return clamp((w - 0.5) / max(fwidth(w), 1e-3) + 0.5, 0.0, 1.0);
+        return clamp((w - 0.5) / (max(fwidth(w), 1e-3) + soft) + 0.5, 0.0, 1.0);
       }
 
       // Fresnel reflectance of water (Schlick).
@@ -421,7 +429,7 @@ export function createGround(shared, glsl) {
         // land below eye level shows against the hazy far distance, drawn with the
         // sky's colour at the horizon (the sky texture below 0° isn't meant to be seen).
         float edge = max(fwidth(alt) * 0.75, 1e-5);
-        float top = max(hAlt, 0.0);
+        float top = max(hAlt, uFloor);
         float cover = 1.0 - smoothstep(top - edge, top + edge, alt);
         if (cover <= 0.0) discard;
         float distance = smoothstep(hAlt - edge, hAlt + edge, alt);
@@ -431,12 +439,17 @@ export function createGround(shared, glsl) {
         hazeAmount = max(hazeAmount, distance);
         vec3 albedo = vec3(0.11, 0.12, 0.09);
         vec3 ground = albedo * uGroundL;
-        float wet = waterAt(d, alt) * step(0.001, uTerrain);
+        // The water map is for eye height on the ground. Risen up, the water below
+        // has sunk with the land: look it up where it was seen from the ground.
+        // (The map is only so detailed: rising, its shores soften, and a few hundred
+        // metres up the water has gone into the land.)
+        float wAlt = atan(tan(alt) * uRise);
+        float wet = waterAt(d, wAlt, 1.0 - uRise) * step(0.001, uTerrain) * smoothstep(0.03, 0.4, uRise);
         if (wet > 0.0) ground = mix(ground, waterColour(d, ground), wet);
         vec3 haze = skyAt(normalize(vec3(d.x, 0.003, d.z)));
         vec4 c = display(mix(ground, haze, hazeAmount));
         float fadeIn = mix(1.0, uTerrain, smoothstep(-edge, edge, alt));
-        gl_FragColor = vec4(c.rgb, cover * fadeIn);
+        gl_FragColor = vec4(c.rgb, cover * fadeIn * (1.0 - uFall));
       }
     `,
     transparent: true,
@@ -457,8 +470,12 @@ export function createGround(shared, glsl) {
    * `illuminance`: horizontal illuminance in lux → ground luminance. `sun` and
    * `moon`: { dir, light: [r, g, b] lux reaching the water } for the glitter.
    */
-  function update(illuminance, terrain, sun, moon) {
+  /** `fall`, `floor`, `rise`: rising off the ground (see the uniforms above). */
+  function update(illuminance, terrain, sun, moon, { fall = 0, floor = 0, rise = 1 } = {}) {
     uniforms.uGroundL.value = illuminance / Math.PI;
+    uniforms.uFall.value = fall;
+    uniforms.uFloor.value = floor;
+    uniforms.uRise.value = rise;
     uniforms.uTerrain.value = terrain;
     uniforms.uSunDir.value.copy(sun.dir);
     uniforms.uSunLight.value.fromArray(sun.light);

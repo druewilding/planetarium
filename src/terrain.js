@@ -17,6 +17,7 @@
 
 import { A } from "./astro.js";
 import { cachedFetch } from "./cachedfetch.js";
+import { EARTH_RADIUS_KM } from "./constants.js";
 import { LAND, loadWater, OCEAN, OPEN_OCEAN } from "./water.js";
 
 const TILE_URL = (z, x, y) => `https://elevation-tiles-prod.s3.amazonaws.com/terrarium/${z}/${x}/${y}.png`;
@@ -43,7 +44,7 @@ const featuresQuery = (lat, lon, radiusM) => {
   );
 };
 const FEATURE_RADIUS_KM = 50;
-const EARTH_R = 6371000;
+const EARTH_R = EARTH_RADIUS_KM * 1000;
 const REFRACTION_K = 0.13;
 const R_EFF = EARTH_R / (1 - REFRACTION_K);
 const EYE_HEIGHT = 2; // metres above the ground

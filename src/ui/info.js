@@ -418,6 +418,25 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, onG
     return `<dl>${position(f, null)}${rows}</dl><p class="note">From OpenStreetMap.</p>`;
   }
 
+  /** The Earth, seen from up above it. */
+  function earthDetails(e) {
+    if (!e) return "";
+    const km = (v) => (v < 1e6 ? `${Math.round(v).toLocaleString()} km` : `${(v / 1e6).toFixed(1)} million km`);
+    return `<dl>
+        <dt>Below you</dt><dd>${esc(e.below)}, ${e.daylight}</dd>
+        <dt>Height</dt><dd>${km(e.km)} up</dd>
+        <dt>Across the sky</dt><dd>${e.across.toFixed(e.across < 10 ? 1 : 0)}°</dd>
+        <dt>Lit</dt><dd>${(e.lit * 100).toFixed(0)}% of the side facing you</dd>
+      </dl>
+      <div class="section"><h4>Facts</h4><dl>
+        <dt>To the Sun</dt><dd>${km(e.sunKm)}</dd>
+        <dt>To the Moon</dt><dd>${km(e.moonKm)}</dd>
+        <dt>Size</dt><dd>${km(12742)} across</dd>
+        <dt>A day</dt><dd>23 h 56 min to turn once</dd>
+        <dt>A year</dt><dd>365.26 days round the Sun</dd>
+      </dl></div>`;
+  }
+
   function constellationDetails(s, c) {
     const pos = c.position(s.sky);
     const stars = catalog.starsIn(c.id).slice(0, 5);
@@ -490,6 +509,9 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, onG
     } else if (sel.type === "feature") {
       kind = FEATURE_KIND[sel.feature.kind];
       body = featureDetails(s, sel.feature);
+    } else if (sel.type === "earth") {
+      kind = "Our home planet";
+      body = earthDetails(s.earth);
     }
     return `<h3>${esc(title)}</h3><p class="kind">${esc(kind)}</p>${body}
       <div class="info-actions">

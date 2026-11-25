@@ -303,12 +303,14 @@ input[type="number"]:focus {
   z-index: 6;
 }
 
-.zoom {
+.zoom,
+.altitude {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
+#alt-label,
 #fov-label {
   min-width: 34px;
   text-align: center;
@@ -926,6 +928,58 @@ input[type="range"] {
   z-index: 2;
 }
 
+/* Up above the Earth, pointing your phone at the real sky, the compass and
+   looking up no longer make sense, and the − + set your height instead of the zoom
+   (scroll or pinch still zooms) */
+body:not(.aloft) #orient-btn,
+body.aloft #sensor-btn,
+body.aloft #look-up,
+body.aloft .compass-widget,
+body.aloft .zoom {
+  display: none;
+}
+
+/* Controls swapping between the ground and space fade in rather than pop */
+@keyframes appear {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+body.aloft .altitude,
+body.aloft #orient-btn,
+body:not(.aloft) .zoom,
+body:not(.aloft) .compass-widget,
+body:not(.aloft) #look-up {
+  animation: appear 0.5s ease;
+}
+
+.rise-btn[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Your spot on the Earth, seen from above: a ring, with the place's name beside it */
+.label.you {
+  color: var(--accent);
+  font-weight: 600;
+  padding-left: 16px;
+}
+
+.label.you::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin-top: -6px;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
 .label {
   position: absolute;
   left: 0;
@@ -1027,6 +1081,43 @@ input[type="range"] {
 .label.path {
   font-size: 10px;
   color: rgba(255, 255, 255, 0.6);
+}
+
+/* Orbits' names, in the colours of their lines (see ORBIT_COLORS in orbits.js) */
+.label.orbit {
+  font-size: 10px;
+  font-style: italic;
+  opacity: 0.9;
+}
+.label.orbit.moon {
+  color: #c9d6ff;
+}
+.label.orbit.Mercury {
+  color: #c2b8ad;
+}
+.label.orbit.Venus {
+  color: #f2dc9b;
+}
+.label.orbit.Mars {
+  color: #ff8a65;
+}
+.label.orbit.Jupiter {
+  color: #e6b98c;
+}
+.label.orbit.Saturn {
+  color: #d8c070;
+}
+.label.orbit.Uranus {
+  color: #8fe3e6;
+}
+.label.orbit.Neptune {
+  color: #7d96ff;
+}
+
+/* The first of each month, along the Earth's orbit */
+.label.month {
+  font-size: 10px;
+  color: rgba(111, 211, 255, 0.85);
 }
 
 .label.selected-ring {
@@ -1362,4 +1453,9 @@ button.info-head:hover {
   text-align: center;
   z-index: 7;
   pointer-events: none;
+}
+
+/* South up: the arrow points down */
+.orient-btn.south svg {
+  transform: rotate(180deg);
 }
