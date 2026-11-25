@@ -1,7 +1,8 @@
 // The page loads three and astronomy-engine straight from a CDN, through the
 // import map in index.html. They're also dev dependencies, so the tests run
 // against the same code. This writes the versions in package.json into the
-// import map, so the two stay in step after an update.
+// import map, and into the service worker's list of files to keep offline, so
+// they all stay in step after an update.
 // Usage: npm run importmap
 
 import { readFileSync, writeFileSync } from "node:fs";
@@ -25,8 +26,19 @@ export function syncImportMap(html, versions) {
   return synced;
 }
 
+/** `text` with every CDN url for one of `names` pointing at the version in `versions`. */
+export function syncVersions(text, names, versions) {
+  let synced = text;
+  for (const name of names) {
+    if (versions[name])
+      synced = synced.replaceAll(new RegExp(`/npm/${name}@[^/]+/`, "g"), `/npm/${name}@${versions[name]}/`);
+  }
+  return synced;
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const page = new URL("../index.html", import.meta.url);
+  const worker = new URL("../sw.js", import.meta.url);
   const { devDependencies } = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
   const html = readFileSync(page, "utf8");
   const synced = syncImportMap(html, devDependencies);
@@ -35,5 +47,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   } else {
     writeFileSync(page, synced);
     console.log("Updated the import map:", importMap(synced));
+  }
+  const sw = readFileSync(worker, "utf8");
+  const swSynced = syncVersions(sw, Object.keys(importMap(synced)), devDependencies);
+  if (swSynced !== sw) {
+    writeFileSync(worker, swSynced);
+    console.log("Updated the service worker's libraries");
   }
 }
