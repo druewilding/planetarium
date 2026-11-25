@@ -162,6 +162,7 @@ function buildCatalog(starData, constellations) {
     constellationLabels: constellations.map((c, i) => ({
       key: `con${i}`,
       name: c.name,
+      constellation: cons.find((cc) => cc.id === c.id),
       ra: c.label[0],
       dec: c.label[1],
     })),
@@ -1451,6 +1452,10 @@ async function main() {
 
   function pick(x, y) {
     if (!sky) return;
+    // A name you can see: what it names, exactly. (Mountains, towns and landmarks
+    // are only chosen this way: hidden names can't be tapped.)
+    const named = labels.at(x, y);
+    if (named) return select(named());
     const below = (d) => behindLand(d);
     let best = null;
     let bestScore = Infinity;
@@ -1467,19 +1472,6 @@ async function main() {
     consider(sky.sun.dir, Math.max(20, shownRadius(sky.sun) * pxPerRad + 6), 10, selectSun);
     consider(sky.moon.dir, Math.max(20, shownRadius(sky.moon) * pxPerRad + 6), 10, selectMoon);
     for (const p of sky.planets) consider(p.dir, 18, 6, () => selectPlanet(p));
-    // Mountains, towns and landmarks: the label sits centred just above the spot.
-    {
-      for (const p of isAloft() ? [] : shownFeatures()) {
-        const s = p.dir && screenOf(p.dir);
-        if (!s) continue;
-        const dx = x - s[0];
-        const dy = y - (s[1] - 16);
-        const onLabel = Math.abs(dx) < p.name.length * 3.5 + 6 && Math.abs(dy) < 10;
-        if (!onLabel && Math.hypot(x - s[0], y - s[1]) > 12) continue;
-        const score = Math.min(Math.hypot(dx, dy), Math.hypot(x - s[0], y - s[1])) - 8;
-        if (score < bestScore) [bestScore, best] = [score, () => selectFeature(p)];
-      }
-    }
     for (const s of catalog.stars) {
       if (s.mag > globalLimit + 0.5) break; // sorted by magnitude
       consider(s.position(sky).dir, 14, Math.max(0, 4 - s.mag) * 1.5, () => selectStar(s));
@@ -1569,6 +1561,7 @@ async function main() {
           priority: 100,
           always: true,
           offset: edgeOffset(sky.sun),
+          pick: selectSun,
         });
       if (!hidden(sky.moon.dir)) {
         // Near the Sun (as in a solar eclipse), put the Moon's name below its disc
@@ -1583,6 +1576,7 @@ async function main() {
           priority: 99,
           always: true,
           offset: nearSun ? [dx, -dy] : [dx, dy],
+          pick: selectMoon,
         });
       }
       for (const p of sky.planets) {
@@ -1594,6 +1588,7 @@ async function main() {
           cls: `body${p.mag > globalLimit ? " dim" : ""}`,
           priority: 90 - p.mag,
           always: true,
+          pick: () => selectPlanet(p),
         });
       }
     }
@@ -1604,7 +1599,8 @@ async function main() {
         if (s.mag > limit) break;
         const d = s.position(sky).dir;
         if (hidden(d)) continue;
-        items.push({ key: `s${s.hip}`, text: s.proper, dir: d, cls: "star", priority: 50 - s.mag });
+        const pick = () => selectStar(s);
+        items.push({ key: `s${s.hip}`, text: s.proper, dir: d, cls: "star", priority: 50 - s.mag, pick });
       }
     }
     if (layers.constellationNames) {
@@ -1618,6 +1614,7 @@ async function main() {
           cls: "constellation",
           priority: 20,
           offset: [-c.name.length * 4, -6],
+          pick: () => selectConstellation(c.constellation),
         });
       }
     }
@@ -1635,6 +1632,7 @@ async function main() {
           priority: chosen ? 1000 : featurePriority(p),
           always: chosen,
           offset: [-p.name.length * 3, -16],
+          pick: () => selectFeature(p),
         });
       }
     }
