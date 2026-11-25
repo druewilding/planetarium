@@ -195,8 +195,10 @@ planetarium/
 - Earth by day, its city lights and its seas: NASA's Blue Marble and Earth at Night (public domain), as prepared for
   the [three.js examples](https://github.com/mrdoob/three.js/tree/dev/examples/textures/planets)
 - Coastlines and cities: [Natural Earth](https://www.naturalearthdata.com) (public domain)
-- Mountain, place and landmark names: © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors (ODbL), via the
-  [Overpass API](https://overpass-api.de)
+- Mountain, place and landmark names: © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors (ODbL),
+  from [planetarium-labels](https://github.com/druewilding/planetarium-labels) (built from
+  [Geofabrik](https://download.geofabrik.de)'s extracts), or the [Overpass API](https://overpass-api.de) where that
+  doesn't reach yet
 - Water: [OpenFreeMap](https://openfreemap.org) vector tiles, © [OpenMapTiles](https://www.openmaptiles.org),
   data © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors (ODbL)
 - Terrain: [Terrain Tiles on AWS](https://registry.opendata.aws/terrain-tiles/), built by Mapzen from SRTM, EU-DEM,
