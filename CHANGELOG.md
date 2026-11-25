@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.0](https://github.com/druewilding/planetarium/compare/v1.2.0...v1.3.0) (2026-11-25)
+
+
+### Features
+
+* Add app icons, and open offline straight after the first visit ([#44](https://github.com/druewilding/planetarium/issues/44)) ([8339643](https://github.com/druewilding/planetarium/commit/8339643136d11d4fec6b9e8560fe07026d00fc4e))
+* Name the land from planetarium-labels in Denmark and Norway ([#43](https://github.com/druewilding/planetarium/issues/43)) ([7686037](https://github.com/druewilding/planetarium/commit/76860374cad6bc9400b1467a0f377f01966ba6c9)), closes [#21](https://github.com/druewilding/planetarium/issues/21)
+
 ## [1.2.0](https://github.com/druewilding/planetarium/compare/v1.1.0...v1.2.0) (2026-11-25)
 
 
