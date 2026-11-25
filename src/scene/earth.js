@@ -34,10 +34,10 @@ export function createEarth(shared, glsl) {
     uniforms,
     vertexShader: /* glsl */ `
       ${glsl.PROJECTION}
-      varying vec3 vDir;
+      varying vec3 vClip;
       void main() {
-        vDir = normalize(position);
         gl_Position = projectView(modelViewMatrix * vec4(position, 1.0));
+        vClip = gl_Position.xyw;
       }
     `,
     fragmentShader: /* glsl */ `
@@ -74,10 +74,62 @@ export function createEarth(shared, glsl) {
         return 1.0 - (a1 + a2 - a3) / (3.14159265 * rs * rs);
       }
       uniform float uAirGlow;
-      varying vec3 vDir;
+      uniform float uStereo;
+      uniform float uProjScale;
+      uniform float uAspect;
+      varying vec3 vClip;
+
+      // The line of sight through this pixel, worked out from where the pixel is
+      // on screen (the projection, undone as in projection.js unproject). Blending
+      // it from the shell's corners instead is slightly off inside each triangle
+      // once the view curves (stereographic), and the Earth shows the facets.
+      vec3 lineOfSight() {
+        vec2 ndc = vClip.xy / vClip.z;
+        vec2 p = vec2(ndc.x * uAspect, ndc.y);
+        float rho = length(p);
+        float r = rho / uProjScale;
+        float theta;
+        if (uStereo <= 0.0) theta = atan(r);
+        else {
+          float lo = 0.0;
+          float hi = mix(1.5, 2.6, uStereo);
+          for (int i = 0; i < 24; i++) {
+            float mid = 0.5 * (lo + hi);
+            if (mix(tan(min(mid, 1.55)), 2.0 * tan(0.5 * mid), uStereo) < r) lo = mid;
+            else hi = mid;
+          }
+          theta = 0.5 * (lo + hi);
+        }
+        vec3 v = rho < 1e-9 ? vec3(0.0, 0.0, -1.0) : vec3(p / rho * sin(theta), -cos(theta));
+        return normalize(v * mat3(viewMatrix)); // (view → world: the rotation's transpose)
+      }
+
+      // Close up, one pixel of a map covers many of the screen, and plain (bilinear)
+      // filtering shows them as squares, which the city lights make worse. A
+      // smooth (cubic B-spline) filter instead, from four bilinear lookups; the
+      // mipmap is chosen from uv's own gradients, scaled up by blur.
+      const vec2 MAP = vec2(2048.0, 1024.0);
+      vec4 smoothly(sampler2D map, vec2 uv, float blur) {
+        vec2 gx = dFdx(uv) * exp2(blur);
+        vec2 gy = dFdy(uv) * exp2(blur);
+        vec2 st = uv * MAP - 0.5;
+        vec2 i = floor(st);
+        vec2 f = st - i;
+        vec2 f2 = f * f;
+        vec2 f3 = f2 * f;
+        vec2 w0 = (1.0 - 3.0 * f + 3.0 * f2 - f3) / 6.0;
+        vec2 w1 = (4.0 - 6.0 * f2 + 3.0 * f3) / 6.0;
+        vec2 w3 = f3 / 6.0;
+        vec2 g0 = w0 + w1;
+        vec2 g1 = 1.0 - g0;
+        vec2 h0 = (i - 0.5 + w1 / g0) / MAP;
+        vec2 h1 = (i + 1.5 + w3 / g1) / MAP;
+        return g0.y * (g0.x * textureGrad(map, vec2(h0.x, h0.y), gx, gy) + g1.x * textureGrad(map, vec2(h1.x, h0.y), gx, gy))
+             + g1.y * (g0.x * textureGrad(map, vec2(h0.x, h1.y), gx, gy) + g1.x * textureGrad(map, vec2(h1.x, h1.y), gx, gy));
+      }
       const float PI = 3.14159265359;
       void main() {
-        vec3 d = normalize(vDir);
+        vec3 d = lineOfSight();
         // Where the line of sight meets a sphere of radius 1, centred 1 + h away.
         // (c is written as h(2 + h), not k² − 1, to keep precision close to the ground.)
         float k = 1.0 + uHeight;
@@ -100,6 +152,11 @@ export function createEarth(shared, glsl) {
         // (a coarser mipmap) rather than show its squares.
         float km = uHeight * 6371.0;
         float blur = clamp(6.0 - log2(max(km, 0.01) / 2.0), 0.0, 9.0);
+        // Lower still, the maps (about 20 km a pixel) just smear into blotches: the
+        // land, and the city lights (later, being starker), only come in once you're
+        // high enough to see them as a whole. Until then, the Earth's average colour.
+        float detail = smoothstep(200.0, 2500.0, km);
+        float cities = smoothstep(1000.0, 5000.0, km);
 
         float sun = dot(n, uSunDir);
         // Under the Moon's shadow, less: squared, so the soft outer shadow (where the
@@ -107,14 +164,14 @@ export function createEarth(shared, glsl) {
         float shown = sunShowing(n);
         shown *= shown;
         float lit = smoothstep(-0.1, 0.2, sun);
-        vec3 albedo = pow(texture2D(uDay, uv, blur).rgb, vec3(2.2)) * 0.9;
+        vec3 albedo = pow(mix(texture2D(uDay, uv, 11.0).rgb, smoothly(uDay, uv, blur).rgb, detail), vec3(2.2)) * 0.9;
         vec3 L = albedo * uSunE / PI * max(sun, 0.0) * lit * shown;
         // The Sun's reflection off the sea.
-        float ocean = texture2D(uOcean, uv, blur).r;
+        float ocean = mix(texture2D(uOcean, uv, 11.0).r, smoothly(uOcean, uv, blur).r, detail);
         vec3 r = reflect(-uSunDir, n);
         L += ocean * pow(max(dot(r, -d), 0.0), 80.0) * uSunE * 0.004 * lit * shown;
         // City lights where it's dark, without the map's dim blue land behind them.
-        vec3 lights = max(texture2D(uNight, uv, blur).rgb - vec3(0.12, 0.12, 0.2), 0.0);
+        vec3 lights = max(smoothly(uNight, uv, blur).rgb - vec3(0.12, 0.12, 0.2), 0.0) * cities;
         // (Never dimmer than shows on screen: with a sunlit crescent in view the eye
         // adapts to that, and the lights, at their true brightness, would vanish.)
         float glow = max(3.0, 0.5 / max(uExposure, 1e-6));
