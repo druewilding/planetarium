@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.1](https://github.com/druewilding/planetarium/compare/v1.4.0...v1.4.1) (2026-11-25)
+
+
+### Bug Fixes
+
+* Stop asking the network for the favicon every time the link changes ([#54](https://github.com/druewilding/planetarium/issues/54)) ([17e98c3](https://github.com/druewilding/planetarium/commit/17e98c3785336d252536089d72c337407ae37142))
+
 ## [1.4.0](https://github.com/druewilding/planetarium/compare/v1.3.0...v1.4.0) (2026-11-25)
 
 
