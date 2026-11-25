@@ -71,6 +71,9 @@ export function readLink(hash) {
   return Object.keys(link).length > 1 || link.body ? link : null;
 }
 
+/** A number to `places` decimals, without trailing zeros: 59.91, not 59.91000. */
+const decimals = (x, places) => String(Number(x.toFixed(places)));
+
 const isoSeconds = (ms) => new Date(Math.round(ms / 1000) * 1000).toISOString().replace(".000Z", "Z");
 
 /** Build the fragment (without '#') for the current state. */
@@ -78,9 +81,10 @@ export function writeLink({ body = DEFAULT_BODY, place, time, view, selection, u
   const p = new URLSearchParams();
   p.set("body", body);
   if (place) {
-    // About a kilometre: plenty for the sky, and doesn't give away your front door.
-    p.set("lat", place.lat.toFixed(2));
-    p.set("lon", place.lon.toFixed(2));
+    // To about a metre, so the link shows exactly what you saw: the same hills and
+    // names, even standing on a summit.
+    p.set("lat", decimals(place.lat, 5));
+    p.set("lon", decimals(place.lon, 5));
     if (place.tz) p.set("tz", place.tz);
   }
   if (time != null) p.set("t", isoSeconds(time));
