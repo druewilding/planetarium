@@ -12,6 +12,11 @@ const PATIENCE_MS = 3000;
 // away for this long (still fetching, to update them for next time).
 const SLOW_FOR_MS = 60_000;
 let slowUntil = 0;
+// Images (the favicon, icons, textures) are checked on the network once while
+// this worker runs, then come from the saved copy: Chrome asks for the favicon
+// again every time the address changes, which the link does as you look around.
+const IMAGE = /\.(svg|png|jpg|webp)$/;
+const checked = new Set();
 
 // Everything the page loads from here. The tests check nothing is missing.
 const APP_SHELL = [
@@ -97,7 +102,14 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
   const url = new URL(request.url);
   if (url.origin === CDN) event.respondWith(savedFirst(request));
-  else if (url.href.startsWith(self.registration.scope)) event.respondWith(networkFirst(request));
+  else if (url.href.startsWith(self.registration.scope)) {
+    const image = IMAGE.test(url.pathname);
+    if (image && checked.has(url.href)) event.respondWith(savedFirst(request));
+    else {
+      if (image) checked.add(url.href);
+      event.respondWith(networkFirst(request));
+    }
+  }
   // Anything else (elevation tiles, place names) goes straight to the network.
 });
 
