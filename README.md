@@ -198,8 +198,7 @@ planetarium/
 - Coastlines and cities: [Natural Earth](https://www.naturalearthdata.com) (public domain)
 - Mountain, place and landmark names: © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors (ODbL),
   from [planetarium-labels](https://github.com/druewilding/planetarium-labels) (built from
-  [Geofabrik](https://download.geofabrik.de)'s extracts), or the [Overpass API](https://overpass-api.de) where that
-  doesn't reach yet
+  [Geofabrik](https://download.geofabrik.de)'s extracts)
 - Water: [OpenFreeMap](https://openfreemap.org) vector tiles, © [OpenMapTiles](https://www.openmaptiles.org),
   data © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors (ODbL)
 - Terrain: [Terrain Tiles on AWS](https://registry.opendata.aws/terrain-tiles/), built by Mapzen from SRTM, EU-DEM,
