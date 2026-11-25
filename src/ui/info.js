@@ -437,6 +437,14 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, onG
       </dl></div>`;
   }
 
+  /** "α Orionis · Star in Orion", with the constellation a link to it. */
+  function starKind(star) {
+    const con =
+      star.con &&
+      `Star in <button class="jump" data-select="constellation" data-id="${esc(star.con)}" title="Look at ${esc(star.conName)}">${esc(star.conName)}</button>`;
+    return [star.proper && esc(star.designation), con].filter(Boolean).join(" · ") || "Star";
+  }
+
   function constellationDetails(s, c) {
     const pos = c.position(s.sky);
     const stars = catalog.starsIn(c.id).slice(0, 5);
@@ -501,7 +509,7 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, onG
       kind = "Planet";
       body = planetDetails(s, p);
     } else if (sel.type === "star") {
-      kind = sel.star.subtitle;
+      kind = starKind(sel.star);
       body = starDetails(s, sel.star);
     } else if (sel.type === "constellation") {
       kind = "Constellation";
@@ -513,7 +521,9 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, onG
       kind = "Our home planet";
       body = earthDetails(s.earth);
     }
-    return `<h3>${esc(title)}</h3><p class="kind">${esc(kind)}</p>${body}
+    // The star's kind links to its constellation, so it's already HTML.
+    const kindHtml = sel.type === "star" ? kind : esc(kind);
+    return `<h3>${esc(title)}</h3><p class="kind">${kindHtml}</p>${body}
       <div class="info-actions">
         <button class="chip small" data-action="look">Look at it</button>
         ${sel.type === "feature" ? goButton(sel.feature.group === "peak" ? "Go to the summit" : "Go there") : ""}

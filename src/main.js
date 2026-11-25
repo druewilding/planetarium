@@ -145,6 +145,8 @@ function buildCatalog(starData, constellations) {
       proper,
       name: label,
       label: proper || (bayer ? designation : label),
+      designation,
+      conName: con && (conName[con] || con),
       subtitle: [proper && designation, con && `Star in ${conName[con] || con}`].filter(Boolean).join(" · ") || "Star",
       position: positionOf(ra, dec),
     };
@@ -516,6 +518,9 @@ async function main() {
       else if (type === "star") {
         const star = catalog.stars.find((st) => String(st.hip) === id);
         if (star) select(selectStar(star), { look: true });
+      } else if (type === "constellation") {
+        const c = catalog.constellations.find((cc) => cc.id === id);
+        if (c) select(selectConstellation(c), { look: true });
       }
     },
   });
