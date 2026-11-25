@@ -67,7 +67,14 @@ export function distanceAU(a, b) {
  * axis slowly wobbles (precession and nutation), which takes it from the frame
  * of date back to J2000.
  */
+let axesAt = { ms: NaN, axes: null }; // (asked for several times a frame, for the same instant)
 export function earthAxes(ms) {
+  if (ms === axesAt.ms) return axesAt.axes;
+  const axes = turnedAxes(ms);
+  axesAt = { ms, axes };
+  return axes;
+}
+function turnedAxes(ms) {
   const time = A.MakeTime(new Date(ms));
   const theta = A.SiderealTime(time) * 15 * D2R;
   const toJ2000 = A.Rotation_EQD_EQJ(time);
@@ -88,6 +95,13 @@ export function surfaceDirection(lat, lon, ms) {
   const b = cl * Math.sin(lon * D2R);
   const n = Math.sin(lat * D2R);
   return { x: a * x.x + b * y.x + n * z.x, y: a * x.y + b * y.y + n * z.y, z: a * x.z + b * y.z + n * z.z };
+}
+
+/** The other way: the latitude and longitude (degrees) under a J2000 direction from the Earth's centre. */
+export function latLonOf(d, ms) {
+  const { x, y, z } = earthAxes(ms);
+  const dot = (a) => d.x * a.x + d.y * a.y + d.z * a.z;
+  return { lat: Math.asin(Math.max(-1, Math.min(1, dot(z)))) / D2R, lon: Math.atan2(dot(y), dot(x)) / D2R };
 }
 
 /** The direction from the Earth to the Sun, in the J2000 frame (a unit vector). */

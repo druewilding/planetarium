@@ -16,6 +16,7 @@ import {
 } from "./astro.js";
 import { climb, GROUND_KM } from "./climb.js";
 import { Clock } from "./clock.js";
+import { EARTH_RADIUS_KM } from "./constants.js";
 import { DEFAULT_BODY, readLink, writeLink } from "./link.js";
 import { createProjection } from "./projection.js";
 import {
@@ -36,7 +37,7 @@ import { createMilkyWay } from "./scene/milkyway.js";
 import { createOrbits } from "./scene/orbits.js";
 import { createOverlays } from "./scene/overlays.js";
 import { createPlanetPoints, createPointsMaterial, createStars } from "./scene/points.js";
-import { earthAxes, surfaceDirection } from "./space.js";
+import { earthAxes, latLonOf, surfaceDirection } from "./space.js";
 import {
   computeProfile,
   createTerrain,
@@ -275,6 +276,7 @@ async function main() {
       if (!locTween) {
         skyline = flight.final; // landed
         ground.setSkyline(skyline);
+        landSunk = false;
         flight = null;
       }
       return;
@@ -286,6 +288,7 @@ async function main() {
       if (skylineFade === 0) {
         skyline = want;
         ground.setSkyline(skyline);
+        landSunk = false; // (sink it again, if you're up)
       }
     } else if (skyline) skylineFade = Math.min(1, skylineFade + dt * 2.5);
   }
@@ -328,19 +331,25 @@ async function main() {
     onChange: (next, { animate } = {}) => setLocation(next, animate),
   });
 
-  function setLocation(next, animate, { duration = 1.6 } = {}) {
+  /**
+   * Stand at (or, up above the Earth, float over) `next`. `at`: up there, the
+   * moment to float over it as it is then (default now). Returns where you'll be
+   * up there ({frame, dir}), if you're up.
+   */
+  function setLocation(next, animate, { duration = 1.6, at = clock.ms } = {}) {
     // Mountains belong to where you were standing.
     if (selection?.type === "feature") select(null);
     location.set(next);
     // Up above the Earth: glide round it to float over the new place instead.
+    let there = null;
     if (isAloft() && !aloft.tween?.landing) {
-      moveAloftOver(next, animate && !!loc);
+      there = moveAloftOver(next, animate && !!loc, at);
       duration = MOVE_SECONDS;
     }
     if (!loc || !animate) {
       loc = { ...next };
       locTween = null;
-      return;
+      return there;
     }
     let dLon = next.lon - loc.lon;
     dLon = ((dLon + 540) % 360) - 180;
@@ -348,6 +357,7 @@ async function main() {
     // (south in the north, north in the south) and its daily path still makes sense.
     if (!isAloft() && Math.sign(next.lat || 1) !== Math.sign(loc.lat || 1)) view.lookTo({ az: view.state.az + 180 });
     locTween = { from: { ...loc }, to: next, dLon, t: 0, k: 0, duration };
+    return there;
   }
 
   function updateLocationTween(dt) {
@@ -385,7 +395,6 @@ async function main() {
     const y = Math.min(h * 0.85, barTop - 24); // horizon's screen position
     return projection.altitudeForHorizonAt(-(y - h / 2) / (h / 2), fov);
   }
-  /** Face the Sun or Moon if up (keeping the horizon in view), else the equator side of the sky. */
   /**
    * Taking off: where the Earth's centre goes on screen (and your spot, at first),
    * just above the time bar so half the Earth rises into view as you leave it. As
@@ -416,6 +425,7 @@ async function main() {
       duration ? { duration } : undefined
     );
   }
+  /** Face the Sun or Moon if up (keeping the horizon in view), else the equator side of the sky. */
   function defaultView(s, fov = DEFAULT_FOV) {
     const base = horizonAltitude(fov);
     const body = s.sun.alt > 3 ? s.sun : s.moon.alt > 3 ? s.moon : null;
@@ -606,7 +616,6 @@ async function main() {
   // it had when you left the ground, and the Earth turns beneath you (turn round
   // to see it). Coming down drifts back over wherever your spot has turned to,
   // and blends back into the ground's frame.
-  const EARTH_RADIUS_KM = 6371;
   const RISE_TO_KM = 20000;
   const MOVE_SECONDS = 3; // gliding round the Earth to float over another place
   const MIN_KM = 1;
@@ -818,12 +827,7 @@ async function main() {
    * straight down, compared with taking off from there.
    */
   function aloftOver() {
-    const { x, y, z } = earthAxes(aloft.takeoff);
-    const d = aloft.dir;
-    const over = {
-      lat: Math.asin(Math.max(-1, Math.min(1, d.x * z.x + d.y * z.y + d.z * z.z))) * R2D,
-      lon: Math.atan2(d.x * y.x + d.y * y.y + d.z * y.z, d.x * x.x + d.y * x.y + d.z * x.z) * R2D,
-    };
+    const over = latLonOf(aloft.dir, aloft.takeoff);
     const turn = aloft.frame.clone().multiply(horizonFrame(aloft.takeoff, over).transpose());
     const ex = new THREE.Vector3(1, 0, 0).applyMatrix4(turn);
     return { over, spin: Math.atan2(-ex.z, ex.x) * R2D };
@@ -895,12 +899,12 @@ async function main() {
     setAloftUi(false);
   }
 
-  /** Go higher (factor > 1) or lower, from wherever the last change was heading. */
   /** Taking off: up to `km` (see climb.js). */
   function climbTo(km) {
     const curve = climb(km);
-    return { curve, t: 0, duration: curve.duration, to: km, rise: true };
+    return { curve, t: 0, duration: curve.duration, to: km };
   }
+  /** Go higher (factor > 1) or lower, from wherever the last change was heading. */
   function changeHeight(factor) {
     if (!isAloft() || aloft.tween?.landing) return;
     const to = Math.min(MAX_KM, Math.max(MIN_KM, (aloft.tween?.to ?? aloft.km) * factor));
@@ -916,6 +920,13 @@ async function main() {
   function updateAloft(dt) {
     if (isAloft()) updateMove(dt);
     if (isAloft()) updateSpin(dt);
+    // Once the ground has dropped away, turn slowly to look down at the Earth
+    // (unless you've already started looking around yourself), even if you've
+    // changed height on the way up.
+    if (isAloft() && !aloft.panned && !aloft.tween?.landing && performance.now() - aloft.startedAt > 1200) {
+      aloft.panned = true;
+      if (view.touchedAt() < aloft.startedAt && !sensor.active) faceEarth({ duration: 7, spot: earthSpot(faceFov()) });
+    }
     const tw = aloft.tween;
     if (!isAloft() || !tw) return;
     tw.t = Math.min(tw.duration, tw.t + dt);
@@ -928,12 +939,6 @@ async function main() {
       // Higher or lower: evenly in scale, so a kilometre near the ground counts as
       // much as a thousand far out.
       aloft.km = Math.exp(Math.log(tw.from) + (Math.log(tw.to) - Math.log(tw.from)) * ease(p));
-    }
-    // Once the ground has dropped away, turn slowly to look down at the Earth
-    // (unless you've already started looking around yourself).
-    if (tw.rise && !aloft.panned && performance.now() - aloft.startedAt > 1200) {
-      aloft.panned = true;
-      if (view.touchedAt() < aloft.startedAt && !sensor.active) faceEarth({ duration: 7, spot: earthSpot(faceFov()) });
     }
     if (tw.landing) {
       // Swing round to your spot, and back into the ground's own frame, high up,
@@ -1009,9 +1014,7 @@ async function main() {
     const time = A.MakeTime(new Date(clock.ms));
     const d = aloft.dir;
     // Right under you now (the Earth keeps turning beneath you as you float).
-    const { x, y, z } = earthAxes(clock.ms);
-    const lat = Math.asin(Math.max(-1, Math.min(1, d.x * z.x + d.y * z.y + d.z * z.z))) * R2D;
-    const lon = Math.atan2(d.x * y.x + d.y * y.y + d.z * y.z, d.x * x.x + d.y * x.y + d.z * x.z) * R2D;
+    const { lat, lon } = latLonOf(d, clock.ms);
     const key = `${lat.toFixed(1)},${lon.toFixed(1)}`;
     if (belowName.key !== key) belowName = { key, name: location.fromPoint(lat, lon).name };
     const sun = toVector3(A.GeoVector(Body.Sun, time, true));
@@ -1067,12 +1070,12 @@ async function main() {
     for (const key of GROUND_LINES) setFade(overlays.layers[key], layers[key] ? onGround : 0);
     for (const key of SPACE_LINES) setFade(orbits.layers[key], layers[key] ? inSpace : 0);
     monthMarks = [];
-    const on = Object.fromEntries(SPACE_LINES.map((key) => [key, layers[key] && inSpace > 0]));
-    if (!on.earthOrbit && layers.monthMarks && inSpace > 0.5) on.earthOrbit = true; // (for the marks)
-    if (!Object.values(on).some(Boolean)) return;
+    if (inSpace <= 0) return; // (the orbits' names only show up there, too)
+    const on = Object.fromEntries(SPACE_LINES.map((key) => [key, layers[key]]));
+    on.months = layers.monthMarks && inSpace > 0.5;
     const you = youFromEarth();
     const { o } = orbits.update(clock.ms, you, on);
-    if (layers.monthMarks && inSpace > 0.5) monthMarks = orbits.monthMarks(o, you);
+    if (on.months) monthMarks = orbits.monthMarks(o, you);
   }
 
   // ---- Point your phone at the sky ----
@@ -1311,12 +1314,12 @@ async function main() {
     // A lunar eclipse happens at night: no use for the glasses.
     if (glasses && body === "moon") setGlasses(false);
     const dest = place ? location.fromPoint(place.lat, place.lon) : loc;
-    if (place) setLocation(dest, true);
+    // (Up above the Earth: glide round to float over the place as it will be then.)
+    const moved = place ? setLocation(dest, true, { at: ms }) : null;
     clock.set(ms);
     if (isAloft() && !aloft.tween?.landing) {
-      // Up above the Earth: glide round to float over the place as it will be then.
       if (glasses) setGlasses(false);
-      const there = moveAloftOver(dest, true, ms);
+      const there = moved ?? moveAloftOver(dest, true, ms);
       if (body === "moon") {
         // The Moon in the Earth's shadow looks the same from up here: turn to it,
         // as it will be seen from there and then.
@@ -1782,8 +1785,13 @@ async function main() {
   }
   /** The land's angle (degrees) seen from `km` higher than standing. */
   const sinkAngle = (deg, km, d) => Math.atan(Math.tan(deg * D2R) - km / d) * R2D;
+  let sunkFor = { km: NaN, p: null };
   function sinkLand(km) {
     const p = skylineFade > 0.5 ? skyline : null;
+    // (Only when something's changed: it uploads the whole skyline again. Flying,
+    // the skyline itself changes every frame.)
+    if (landSunk && !flight && km === sunkFor.km && p === sunkFor.p) return;
+    sunkFor = { km, p };
     const d = typicalDistance(p);
     let top = -90;
     for (let j = 0; j < SKYLINE_SAMPLES; j++) {
@@ -1887,7 +1895,7 @@ async function main() {
     // Up high, the eye adapts to the sunlit Earth as much of it as fills the view
     // (look away from it into the black, and the stars come out).
     updateEarth(sunE, skyFade);
-    let earthSeen = 0;
+    let earthLight = 0; // (how bright the Earth in view is, for the eye)
     if (isAloft()) {
       const look = dirFromAltAz(view.state.alt, view.state.az);
       const half = (view.state.fov / 2) * D2R;
@@ -1897,8 +1905,8 @@ async function main() {
       const sunlit = 0.5 - 0.5 * sky.sun.trueDir.dot(aloft.earthDir);
       // A bright Earth anywhere in view sets the eye (like the daytime sky does), more
       // so the more of the view it fills.
-      earthSeen = smooth(1, 40, km) * ((0.25 * sunE) / Math.PI) * (0.6 * overlap + 0.4 * fills) * sunlit;
-      adapt += earthSeen;
+      earthLight = smooth(1, 40, km) * ((0.25 * sunE) / Math.PI) * (0.6 * overlap + 0.4 * fills) * sunlit;
+      adapt += earthLight;
     }
     // The constant stops the eye "turning up the gain" too far on dark nights; without
     // it, faint moonlight scattered near the horizon shows as a grey glowing band.
@@ -1918,7 +1926,7 @@ async function main() {
     // (Floored, so a Sun that has set, or been dimmed right down, can't send it soaring.)
     if (glasses) exposure = 1.5 / (SUN_LUMINANCE * Math.max(sunLevel, 1e-3) * Math.max(mean(tSun), 1e-3));
     shared.uExposure.value = exposure;
-    shared.uScotopic.value = 0.6 * (1 - smooth(0.005, 1, average + earthSeen));
+    shared.uScotopic.value = 0.6 * (1 - smooth(0.005, 1, average + earthLight));
     // Labels and figures recede in daylight, like a printed overlay on a bright sky.
     const night = 1 - smooth(0.3, 300, average);
     if (Math.abs(night - lastNight) > 0.01) {

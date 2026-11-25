@@ -5,6 +5,7 @@ import {
   bodyPosition,
   distanceAU,
   earthAxes,
+  latLonOf,
   LIGHT_YEAR_AU,
   starPosition,
   sunDirection,
@@ -114,5 +115,20 @@ describe("the Earth's turn", () => {
     const start = surfaceDirection(0, 0, MIDSUMMER_NOON);
     expect(angle(start, surfaceDirection(0, 0, MIDSUMMER_NOON + 86164091))).toBeLessThan(0.01);
     expect(angle(start, surfaceDirection(0, 0, MIDSUMMER_NOON + 86400000))).toBeCloseTo(0.99, 1);
+  });
+});
+
+describe("latLonOf", () => {
+  test("finds the place under a direction again (surfaceDirection, undone)", () => {
+    for (const [lat, lon] of [
+      [59.91, 10.75],
+      [-33.87, 151.21],
+      [0, -179.5],
+      [89, 45],
+    ]) {
+      const back = latLonOf(surfaceDirection(lat, lon, NEW_YEAR), NEW_YEAR);
+      expect(back.lat).toBeCloseTo(lat, 6);
+      expect(back.lon).toBeCloseTo(lon, 6);
+    }
   });
 });

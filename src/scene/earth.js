@@ -8,9 +8,7 @@
 
 import * as THREE from "three";
 
-import { MOON_RADIUS_KM, SUN_RADIUS_KM } from "../constants.js";
-
-const EARTH_RADIUS_KM = 6371;
+import { EARTH_RADIUS_KM, MOON_RADIUS_KM, SUN_RADIUS_KM } from "../constants.js";
 
 const SHELL = 920; // in front of the Sun (990), the Moon (980) and the stars, behind the ground (900)
 
@@ -105,13 +103,11 @@ export function createEarth(shared, glsl) {
       }
 
       // Close up, one pixel of a map covers many of the screen, and plain (bilinear)
-      // filtering shows them as squares, which the city lights make worse. A
-      // smooth (cubic B-spline) filter instead, from four bilinear lookups; the
-      // mipmap is chosen from uv's own gradients, scaled up by blur.
+      // filtering shows them as squares, which the city lights make worse. There,
+      // a smooth (cubic B-spline) filter instead, from four bilinear lookups (only
+      // there: it's four times the work). gx, gy: uv's gradients across the screen.
       const vec2 MAP = vec2(2048.0, 1024.0);
-      vec4 smoothly(sampler2D map, vec2 uv, float blur) {
-        vec2 gx = dFdx(uv) * exp2(blur);
-        vec2 gy = dFdy(uv) * exp2(blur);
+      vec4 smoothly(sampler2D map, vec2 uv, vec2 gx, vec2 gy) {
         vec2 st = uv * MAP - 0.5;
         vec2 i = floor(st);
         vec2 f = st - i;
@@ -126,6 +122,13 @@ export function createEarth(shared, glsl) {
         vec2 h1 = (i + 1.5 + w3 / g1) / MAP;
         return g0.y * (g0.x * textureGrad(map, vec2(h0.x, h0.y), gx, gy) + g1.x * textureGrad(map, vec2(h1.x, h0.y), gx, gy))
              + g1.y * (g0.x * textureGrad(map, vec2(h0.x, h1.y), gx, gy) + g1.x * textureGrad(map, vec2(h1.x, h1.y), gx, gy));
+      }
+      vec4 mapAt(sampler2D map, vec2 uv, vec2 gx, vec2 gy, bool close) {
+        return close ? smoothly(map, uv, gx, gy) : textureGrad(map, uv, gx, gy);
+      }
+      // The whole map's average (its smallest mipmap).
+      vec4 average(sampler2D map) {
+        return textureLod(map, vec2(0.5), 20.0);
       }
       const float PI = 3.14159265359;
       void main() {
@@ -150,13 +153,18 @@ export function createEarth(shared, glsl) {
 
         // Low down, a pixel of the map spans far more than a pixel of screen: blur it
         // (a coarser mipmap) rather than show its squares.
-        float km = uHeight * 6371.0;
+        float km = uHeight * ${EARTH_RADIUS_KM.toFixed(1)};
         float blur = clamp(6.0 - log2(max(km, 0.01) / 2.0), 0.0, 9.0);
         // Lower still, the maps (about 20 km a pixel) just smear into blotches: the
         // land, and the city lights (later, being starker), only come in once you're
         // high enough to see them as a whole. Until then, the Earth's average colour.
         float detail = smoothstep(200.0, 2500.0, km);
         float cities = smoothstep(1000.0, 5000.0, km);
+        // (Worked out here, where every pixel does it, for the lookups below, which
+        // only some pixels need.)
+        vec2 gx = dFdx(uv) * exp2(blur);
+        vec2 gy = dFdy(uv) * exp2(blur);
+        bool close = max(length(gx * MAP), length(gy * MAP)) < 0.5; // a map pixel over two or more of the screen's
 
         float sun = dot(n, uSunDir);
         // Under the Moon's shadow, less: squared, so the soft outer shadow (where the
@@ -164,18 +172,27 @@ export function createEarth(shared, glsl) {
         float shown = sunShowing(n);
         shown *= shown;
         float lit = smoothstep(-0.1, 0.2, sun);
-        vec3 albedo = pow(mix(texture2D(uDay, uv, 11.0).rgb, smoothly(uDay, uv, blur).rgb, detail), vec3(2.2)) * 0.9;
+        vec3 day = average(uDay).rgb;
+        if (detail > 0.0 && sun > -0.1) day = mix(day, mapAt(uDay, uv, gx, gy, close).rgb, detail);
+        vec3 albedo = pow(day, vec3(2.2)) * 0.9;
         vec3 L = albedo * uSunE / PI * max(sun, 0.0) * lit * shown;
         // The Sun's reflection off the sea.
-        float ocean = mix(texture2D(uOcean, uv, 11.0).r, smoothly(uOcean, uv, blur).r, detail);
         vec3 r = reflect(-uSunDir, n);
-        L += ocean * pow(max(dot(r, -d), 0.0), 80.0) * uSunE * 0.004 * lit * shown;
+        float glint = pow(max(dot(r, -d), 0.0), 80.0) * lit;
+        if (glint > 0.0) {
+          float ocean = average(uOcean).r;
+          if (detail > 0.0) ocean = mix(ocean, mapAt(uOcean, uv, gx, gy, close).r, detail);
+          L += ocean * glint * uSunE * 0.004 * shown;
+        }
         // City lights where it's dark, without the map's dim blue land behind them.
-        vec3 lights = max(smoothly(uNight, uv, blur).rgb - vec3(0.12, 0.12, 0.2), 0.0) * cities;
-        // (Never dimmer than shows on screen: with a sunlit crescent in view the eye
-        // adapts to that, and the lights, at their true brightness, would vanish.)
-        float glow = max(3.0, 0.5 / max(uExposure, 1e-6));
-        L += pow(lights, vec3(1.4)) * vec3(1.0, 0.8, 0.55) * glow * (1.0 - smoothstep(-0.12, 0.04, sun));
+        float dark = (1.0 - smoothstep(-0.12, 0.04, sun)) * cities;
+        if (dark > 0.0) {
+          vec3 lights = max(mapAt(uNight, uv, gx, gy, close).rgb - vec3(0.12, 0.12, 0.2), 0.0);
+          // (Never dimmer than shows on screen: with a sunlit crescent in view the eye
+          // adapts to that, and the lights, at their true brightness, would vanish.)
+          float glow = max(3.0, 0.5 / max(uExposure, 1e-6));
+          L += pow(lights, vec3(1.4)) * vec3(1.0, 0.8, 0.55) * glow * dark;
+        }
         // The air: blue haze, strongest towards the edge on the day side.
         float rim = pow(1.0 - max(dot(n, -d), 0.0), 4.0);
         L += vec3(0.25, 0.45, 1.0) * uSunE / PI * 0.04 * (0.2 + 1.5 * rim) * smoothstep(-0.2, 0.3, sun) * shown;
@@ -183,7 +200,7 @@ export function createEarth(shared, glsl) {
         // Looking through the air: the land fades into the haze along the horizon,
         // the more air the line of sight crosses (all of it near the ground; from
         // space, just the layer near the surface, thicker towards the edge).
-        float dist = (b - sqrt(disc)) * 6371.0; // km to the ground
+        float dist = (b - sqrt(disc)) * ${EARTH_RADIUS_KM.toFixed(1)}; // km to the ground
         float slant = 8.0 / max(dot(n, -d), 0.03); // km of dense air above that spot, along the line of sight
         float haze = (1.0 - exp(-min(dist, slant) / 150.0)) * uAirGlow;
         L = mix(L, skyAt(normalize(vec3(d.x, 0.003, d.z))), haze);
@@ -199,18 +216,26 @@ export function createEarth(shared, glsl) {
   mesh.frustumCulled = false;
   mesh.visible = false;
 
-  /** Load the maps (the first time you rise). */
+  /**
+   * Load the maps (the first time you rise). If they don't come (offline, say),
+   * the Earth stays plain, and the next time you rise they're tried again.
+   */
   let loading = null;
   function load(loadTextures, renderer) {
-    loading ??= loadTextures().then((maps) => {
-      for (const t of maps) {
-        t.colorSpace = THREE.NoColorSpace;
-        t.wrapS = THREE.RepeatWrapping; // see the seam note in the shader
-        t.anisotropy = renderer.capabilities.getMaxAnisotropy();
-      }
-      [uniforms.uDay.value, uniforms.uNight.value, uniforms.uOcean.value] = maps;
-      uniforms.uReady.value = 1;
-    });
+    loading ??= loadTextures()
+      .then((maps) => {
+        for (const t of maps) {
+          t.colorSpace = THREE.NoColorSpace;
+          t.wrapS = THREE.RepeatWrapping; // see the seam note in the shader
+          t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        }
+        [uniforms.uDay.value, uniforms.uNight.value, uniforms.uOcean.value] = maps;
+        uniforms.uReady.value = 1;
+      })
+      .catch((err) => {
+        console.warn("Couldn't load the Earth's maps", err);
+        loading = null;
+      });
     return loading;
   }
 

@@ -14,11 +14,12 @@
 import * as THREE from "three";
 
 import { A, AU_KM, Body, PLANETS } from "../astro.js";
+import { EARTH_RADIUS_KM } from "../constants.js";
 import { lines } from "./lines.js";
 
 const DAY = 86400000;
 const YEAR = 365.25 * DAY;
-const EARTH_RADIUS_AU = 6371 / AU_KM;
+const EARTH_RADIUS_AU = EARTH_RADIUS_KM / AU_KM;
 const IN_FRONT = 870; // the Earth is drawn at 920 (see earth.js)
 const BEHIND = 960;
 const MAX_STEP = (1.5 * Math.PI) / 180; // longest piece of line, as an angle on the sky
@@ -239,6 +240,18 @@ export function createOrbits(shared, glsl) {
     geom.setDrawRange(0, count);
   }
 
+  /**
+   * Has the viewpoint `p` moved more than `tol` (AU) since `orbit` was last drawn
+   * from it? Drawing an orbit is a lot of work, and seen from (nearly) the same
+   * place it looks the same, so only then is it drawn again.
+   */
+  function moved(orbit, p, tol) {
+    const d = orbit.drawnFrom;
+    if (d && Math.hypot(p.x - d.x, p.y - d.y, p.z - d.z) < tol) return false;
+    orbit.drawnFrom = { x: p.x, y: p.y, z: p.z };
+    return true;
+  }
+
   /** A direction from you to a point on a ring, for a label, or null when the Earth hides it. */
   function labelAt(c, s, o, e) {
     const [x, y, z] = pointAt(c, s, [0, 0, 0]).map((v, k) => v - [o.x, o.y, o.z][k]);
@@ -248,22 +261,31 @@ export function createOrbits(shared, glsl) {
   }
 
   /**
-   * Redraw the orbits that are switched on, seen from `you` (J2000, AU, from the
-   * Earth's centre) at `ms`.
+   * Bring the orbits that are switched on (`on`: moonOrbit, earthOrbit,
+   * planetOrbits, and months for the marks) up to date, seen from `you` (J2000,
+   * AU, from the Earth's centre) at `ms`. Each is drawn again only once you've
+   * moved far enough, against the stars, to see it differently.
    */
   function update(ms, you, on) {
     const earthNow = A.HelioVector(Body.Earth, new Date(ms));
     const o = { x: earthNow.x + you.x, y: earthNow.y + you.y, z: earthNow.z + you.z }; // you, from the Sun
     const e = { x: -you.x, y: -you.y, z: -you.z }; // the Earth's centre, from you
+    const height = Math.hypot(you.x, you.y, you.z); // from the Earth's centre
     names = [];
+    // (Switched off, it's drawn afresh when it's switched back on.)
+    if (!on.planetOrbits) for (const p of planets) p.drawnFrom = null;
+    if (!on.earthOrbit) earth.drawnFrom = null;
+    if (!on.moonOrbit) moon.drawnFrom = null;
 
     if (on.planetOrbits) {
       for (const p of planets) {
         // An orbit barely changes over the years: work it out again only now and then.
         if (!p.ring || Math.abs(ms - p.ring.epoch) > 20 * YEAR) {
           p.ring = sample(ms, (PERIOD[p.key] * DAY) / 360, 360, helio(Body[p.key]));
+          p.drawnFrom = null;
         }
-        draw(p, p.ring, o, e, 0.3);
+        // (Never nearer than about 0.3 AU: a few thousand km makes no difference.)
+        if (moved(p, o, 2e-5)) draw(p, p.ring, o, e, 0.3);
         // Name each orbit an eighth of the way round ahead of its planet.
         const dir = labelAt(p.ring, (indexAt(p.ring, ms) + 45) % 360, o, e);
         if (dir) names.push({ key: `orbit${p.key}`, text: `${p.name}’s orbit`, cls: `orbit ${p.key}`, dir });
@@ -271,15 +293,18 @@ export function createOrbits(shared, glsl) {
     }
 
     if (on.earthOrbit) {
+      if (earth.ring && Math.abs(ms - earth.ring.epoch) > 2 * YEAR) earth.ring = earth.drawnFrom = null;
       const c = (earth.ring ??= sample(ms, (PERIOD.Earth * DAY) / 366, 366, helio(Body.Earth)));
-      if (Math.abs(ms - c.epoch) > 2 * YEAR) earth.ring = null;
-      // You're right beside the Earth's orbit, so make the curve go exactly through the Earth.
-      const s = indexAt(c, ms);
-      const at = pointAt({ ...c, fix: null }, s, [0, 0, 0]);
-      c.fix = { s, width: 1.5, dx: earthNow.x - at[0], dy: earthNow.y - at[1], dz: earthNow.z - at[2] };
-      draw(earth, c, o, e, 0.3);
-      updateMonths(ms);
+      // It passes right by you (through the Earth), so it looks different sooner.
+      if (moved(earth, o, height * 0.002)) {
+        // You're right beside the Earth's orbit, so make the curve go exactly through the Earth.
+        const s = indexAt(c, ms);
+        const at = pointAt({ ...c, fix: null }, s, [0, 0, 0]);
+        c.fix = { s, width: 1.5, dx: earthNow.x - at[0], dy: earthNow.y - at[1], dz: earthNow.z - at[2] };
+        draw(earth, c, o, e, 0.3);
+      }
     }
+    if (on.earthOrbit || on.months) updateMonths(ms);
 
     if (on.moonOrbit) {
       // Half a month either side of now (the Moon's orbit shifts a little each time round).
@@ -294,8 +319,9 @@ export function createOrbits(shared, glsl) {
           true
         );
         moon.ring.centre = centre;
+        moon.drawnFrom = null;
       }
-      draw(moon, moon.ring, you, e);
+      if (moved(moon, you, height * 0.002)) draw(moon, moon.ring, you, e);
       const dir = labelAt(moon.ring, indexAt(moon.ring, ms + 4 * DAY), you, e);
       if (dir) names.push({ key: "orbitMoon", text: "Moon’s orbit", cls: "orbit moon", dir });
     }
