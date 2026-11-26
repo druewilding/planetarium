@@ -32,7 +32,8 @@ sky with no connection (the hills and place names need one the first time you vi
 - **The planets up close:** to the eye they're points of light, but zoom right in and each becomes a disc, true to size
   and lit from the Sun's direction, as through a telescope: Venus and Mercury go through phases, Mars is gibbous,
   Jupiter is striped and squashed at the poles, and Saturn has its rings, tilted the way they are that year (nearly
-  edge-on in 2025–26, wide open by 2029), with the globe's shadow across them.
+  edge-on in 2025–26, wide open by 2029), with the globe's shadow across them. **Look at it** on a planet zooms right in
+  (to 0.1°); in a transit, Mercury or Venus crosses the Sun as a black dot.
 - **Eclipses:** in a solar eclipse the Moon covers the Sun and the sky darkens with it. Even with most of the Sun
   covered, what's left still dazzles, so **Eclipse glasses** appear: like the real thing, they black out everything
   but the Sun, and the Moon's bite finally shows (in totality they show nothing, which is your cue to take them off). In a lunar eclipse the Earth's
@@ -55,13 +56,13 @@ sky with no connection (the hills and place names need one the first time you vi
   and daylight saving), or typed coordinates. The map zooms and pans (scroll, pinch or drag), and shows the cities as
   dots: the biggest when zoomed out, more as you zoom in. Dots swell as the pointer comes near, and clicking one stands
   you in that city. Changing location glides smoothly.
-- **Lift off:** rise straight off the ground, still looking the way you were. You're a kilometre up in half a second: the hills, with their names, and the lakes and sea fall away below you as the far land comes into view, then the sky
+- **Lift off:** rise straight off the ground, still looking the way you were (zoomed back out, if you were zoomed in). You're a kilometre up in half a second: the hills, with their names, and the lakes and sea fall away below you as the far land comes into view, then the sky
   darkens to black as the air thins. The view tips down a little, as far as it can while what you were looking at stays in sight:
   turn round (or press Face the Earth) to see the Earth below you, lit by the Sun, with city lights on its night side and your spot marked. The stars, the Moon, the planets and their
   labels stay with you. Up there you float still against the stars, so the sky stops turning and the Earth turns
   beneath you instead, carrying your spot round into the night and back into the day. There's no up or down in
   space, so dragging slides the sky freely under your finger; drag on the Earth instead and it turns like a ball, with the sky turning with it, carrying you round to look down on anywhere. The Moon, being near, shifts against the stars as you
-  climb. Choosing another place while you're up glides you round the Earth until you're floating straight over it. − + set how high you are, from 1 km to 250,000 km, and **Face the Earth** turns it back to the middle of the view. Up here the Earth is in the search too, or tap it, for what's below you and how much of it is lit. **North up** turns the Earth in place, with the sky turning round it, until its north is at the top, and then offers **South up** (the one it offers first depends on which hemisphere you're in). The layers
+  climb. Choosing another place while you're up glides you round the Earth until you're floating straight over it. The upper − + set how high you are, from 1 km to 250,000 km, and the lower ones zoom; **Face the Earth** turns it back to the middle of the view and zooms back out. Up here the Earth is in the search too, or tap it, for what's below you and how much of it is lit. **North up** turns the Earth in place, with the sky turning round it, until its north is at the top, and then offers **South up** (the one it offers first depends on which hemisphere you're in). The layers
   change to suit space: the horizon, the compass and the Sun's path fade out, and the orbits fade in: the Moon's round
   the Earth, the Earth's round the Sun (with where it will be on the first of each month) and the planets', each
   named in its own colour and fading with distance, so the far side of an orbit is a ghost of its near side. **Back

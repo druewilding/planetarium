@@ -55,7 +55,7 @@ import { createLocation } from "./ui/location.js";
 import { createLayersPanel, createSearch } from "./ui/panels.js";
 import { createSensor, sensorSupported } from "./ui/sensor.js";
 import { createTimebar } from "./ui/timebar.js";
-import { createView } from "./ui/view.js";
+import { createView, MIN_FOV } from "./ui/view.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -477,7 +477,8 @@ async function main() {
   function awayFromDefault() {
     const fovOff = Math.abs(view.state.fov - DEFAULT_FOV) > 2;
     if (sensor.active) return fovOff;
-    if (isAloft()) return earthSeen().angleTo(MIDDLE) > 4 * D2R; // (and any way round)
+    // (Up above: facing the Earth, any way round, zoomed out as Face the Earth leaves it.)
+    if (isAloft()) return earthSeen().angleTo(MIDDLE) > 4 * D2R || Math.abs(view.state.fov - faceFov()) > 1;
     const d = defaultView(sky);
     const azOff = Math.abs(((view.state.az - d.az + 540) % 360) - 180) > 4;
     return fovOff || azOff || Math.abs(view.state.alt - d.alt) > 4;
@@ -654,6 +655,9 @@ async function main() {
     aloft.startedAt = performance.now();
     beforeLookUp = null;
     view.setFree(true); // no up or down in space
+    // Zoomed right in (on a planet, say), zoom back out to see the Earth fall away.
+    // (Landing zooms back in, to the view you left.)
+    if (view.state.fov !== faceFov()) view.lookTo({ fov: faceFov() }, { duration: 1 });
     setAloftUi(true);
   }
   function comeDown() {
@@ -1291,6 +1295,8 @@ async function main() {
     if (!d) return;
     let fov = view.state.fov;
     if (selection.type === "moon" || selection.type === "sun") fov = Math.min(fov, 20);
+    // A planet is only a point until you're zoomed right in: look at it as through a telescope.
+    if (selection.type === "planet") fov = MIN_FOV;
     if (selection.type === "constellation") fov = Math.max(fov, 50);
     const { az } = altAz(d);
     // Behind the ground or the hills: face its direction, just above the skyline.
@@ -1986,7 +1992,8 @@ async function main() {
       moonAz: sky.moon.az,
       moonAlt: sky.moon.alt,
     });
-    $("fov-label").textContent = `${view.state.fov < 10 ? view.state.fov.toFixed(1) : view.state.fov.toFixed(0)}°`;
+    const fov = view.state.fov;
+    $("fov-label").textContent = `${fov < 1 ? fov.toFixed(2) : fov < 10 ? fov.toFixed(1) : fov.toFixed(0)}°`;
     updateOrientButton();
     if (isAloft()) $("alt-label").textContent = altitudeText(aloft.km);
 
