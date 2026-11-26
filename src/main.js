@@ -222,10 +222,7 @@ async function main() {
   const milkyWay = createMilkyWay(shared, glsl, milkyWayTex);
   overlays.eqj.add(milkyWay);
   overlays.eqj.add(createStars(starData, starMaterial));
-  // Zoomed in, the planets show as faint as a telescope would (see telescopeGain): Neptune, and Pluto.
-  const planetMaterial = createPointsMaterial(shared, glsl, 1000);
-  planetMaterial.uniforms.uBoost = { value: 0 };
-  const planetPoints = createPlanetPoints(PLANETS, planetMaterial);
+  const planetPoints = createPlanetPoints(PLANETS, createPointsMaterial(shared, glsl, 1000));
   // Orbits (shown from up above the Earth), in the same J2000 frame as the stars.
   const orbits = createOrbits(shared, glsl);
   overlays.eqj.add(orbits.group);
@@ -233,10 +230,7 @@ async function main() {
   const planetDiscs = createPlanetDiscs(shared, glsl, PLANETS);
   scene.add(planetDiscs.group);
   // Jupiter's moons: drawn after Jupiter's disc, so the ones in front of it show.
-  // You only see them zoomed in, as through a telescope, which shows fainter things.
-  const satelliteMaterial = createPointsMaterial(shared, glsl, 1000);
-  satelliteMaterial.uniforms.uBoost = { value: 0 };
-  const satellitePoints = createPlanetPoints(JUPITER_MOONS, satelliteMaterial);
+  const satellitePoints = createPlanetPoints(JUPITER_MOONS, planetPoints.points.material);
   satellitePoints.points.renderOrder = 5.3;
   scene.add(satellitePoints.points);
 
@@ -321,7 +315,9 @@ async function main() {
   let locTween = null;
   let layers = {};
   let exposure = 1;
-  let globalLimit = 6;
+  let globalLimit = 6; // the faintest magnitude you can see, by eye
+  // Zoomed in, as through binoculars or a telescope: fainter still (see telescopeGain).
+  const zoomedLimit = () => globalLimit + shared.uBoost.value;
   // Up above the Earth (see Lift off, below).
   const aloft = {
     km: 0,
@@ -1515,7 +1511,7 @@ async function main() {
     // (A little nearer than Jupiter wins: it's the moon you tapped by it.)
     for (const m of satellitesShown) consider(m.dir, 14, 8, () => selectSatellite(m));
     for (const s of catalog.stars) {
-      if (s.mag > globalLimit + 0.5) break; // sorted by magnitude
+      if (s.mag > zoomedLimit() + 0.5) break; // sorted by magnitude
       consider(s.position(sky).dir, 14, Math.max(0, 4 - s.mag) * 1.5, () => selectStar(s));
     }
     if (best) return select(best());
@@ -1616,7 +1612,6 @@ async function main() {
       moons.map((m, i) => (m.behind || m.inFront ? 1 : 1 - apart[i])),
       16
     );
-    satelliteMaterial.uniforms.uBoost.value = telescopeGain(view.state.fov);
     // Names: once they're apart from Jupiter, or crossing its disc once that's big.
     const disc = smooth(SATELLITE_FROM, SATELLITE_TO, shownRadius(jupiter) * perRad);
     // (Not while it's dark in Jupiter's shadow: there's nothing there to name or tap.)
@@ -1667,7 +1662,7 @@ async function main() {
           key: p.id,
           text: p.name,
           dir: p.dir,
-          cls: `body${p.mag > globalLimit ? " dim" : ""}`,
+          cls: `body${p.mag > zoomedLimit() ? " dim" : ""}`,
           priority: 90 - p.mag,
           always: true,
           offset: edgeOffset(p, 8),
@@ -1680,7 +1675,7 @@ async function main() {
           key: m.id,
           text: m.name,
           dir: m.dir,
-          cls: `body small${m.mag > globalLimit + telescopeGain(view.state.fov) ? " dim" : ""}`,
+          cls: `body small${m.mag > zoomedLimit() ? " dim" : ""}`,
           priority: 80 - m.mag,
           offset: [6, -6],
           pick: () => selectSatellite(m),
@@ -1689,7 +1684,7 @@ async function main() {
     }
     const zoomBoost = Math.max(0, Math.log2(70 / view.state.fov)) * 1.2;
     if (layers.starNames) {
-      const limit = Math.min(globalLimit, 2.2 + zoomBoost);
+      const limit = Math.min(zoomedLimit(), 2.2 + zoomBoost);
       for (const s of catalog.named) {
         if (s.mag > limit) break;
         const d = s.position(sky).dir;
@@ -2030,6 +2025,8 @@ async function main() {
       overlays.layers.constellations.material.uniforms.uOpacity.value = 0.14 + 0.24 * night;
     }
     globalLimit = 7.93 - 5 * Math.log10(1 + 63 * Math.sqrt(zenith));
+    // Stars, planets and moons alike (see the points' shader).
+    shared.uBoost.value = telescopeGain(view.state.fov);
     updateGlow(now, atm, lights, ambient);
 
     updateSkyline(dt);
@@ -2071,7 +2068,6 @@ async function main() {
       },
     });
     planetPoints.update(sky.planets, discs);
-    planetMaterial.uniforms.uBoost.value = telescopeGain(view.state.fov);
     satellitesShown = updateSatellites();
     overlays.updateFrames(sky);
     updatePlaceLayers(km);
