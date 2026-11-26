@@ -1912,6 +1912,29 @@ async function main() {
     return t * t * (3 - 2 * t);
   };
 
+  // ---- Light through the air ----
+  const AIR_TOP_KM = 100; // (all but a millionth of the air is below this)
+  const SPACE_GLOW = 0.35; // the share of the night sky's glow that isn't the air's own (see frame)
+  const LEVEL = new THREE.Vector3(1, 0, 0);
+  /**
+   * The share of light (RGB) the air lets through from a direction. On the ground, or
+   * low enough to still be in the air, that's the atmosphere's own model. Up above
+   * it, light only passes through any air if its path skims the Earth's edge: then
+   * it's dimmed as if seen level from the path's lowest point, twice (in, and out
+   * again). So the Sun reddens as it sets behind the Earth, as from the space station.
+   */
+  function throughAir(atm, dir) {
+    if (!isAloft() || aloft.km < 90) return transmittance(atm, dir);
+    const cos = dir.dot(aloft.earthDir);
+    if (cos <= 0) return [1, 1, 1]; // heading away from the Earth: no air ahead
+    const r = EARTH_RADIUS_KM + aloft.km;
+    const lowest = r * Math.sqrt(1 - cos * cos) - EARTH_RADIUS_KM;
+    if (lowest >= AIR_TOP_KM) return [1, 1, 1];
+    // (Lower than the ground, the Earth itself hides it.)
+    const t = transmittance({ ...atm, observerHeight: Math.max(lowest, 0) }, LEVEL);
+    return t.map((c) => c * c);
+  }
+
   function frame(now) {
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
@@ -1931,13 +1954,17 @@ async function main() {
     const km = isAloft() ? aloft.km : 0;
     const air = Math.exp(-km / 8);
     const skyFade = 1 - smooth(60, 120, km);
+    // The night sky's own faint glow: about two thirds of it is the air itself glowing
+    // (airglow), which goes with the air; the rest, zodiacal light (sunlight off the dust
+    // between the planets) and the light of countless faint stars, is there in space too.
+    const glow = (airLeft) => ATMOSPHERES.earth.nightGlow.map((g) => g * (SPACE_GLOW + (1 - SPACE_GLOW) * airLeft));
     const atm = !layers.atmosphere
-      ? NONE
+      ? { ...NONE, nightGlow: glow(0) }
       : km > 0
         ? {
             ...ATMOSPHERES.earth,
             observerHeight: Math.min(Math.max(km, 0.01), 90),
-            nightGlow: ATMOSPHERES.earth.nightGlow.map((g) => g * skyFade),
+            nightGlow: glow(skyFade),
           }
         : ATMOSPHERES.earth;
     atmosphere.setParams(atm);
@@ -1965,8 +1992,8 @@ async function main() {
     const throughEarth = (b) => !isAloft() && !layers.ground && b.alt < skylineAlt(b.az) - 0.3;
     const sunThrough = throughEarth(sky.sun);
     const moonThrough = throughEarth(sky.moon);
-    const tSun = transmittance(atm, sunThrough ? ZENITH : sky.sun.trueDir);
-    const tMoon = transmittance(atm, moonThrough ? ZENITH : sky.moon.trueDir);
+    const tSun = throughAir(atm, sunThrough ? ZENITH : sky.sun.trueDir);
+    const tMoon = throughAir(atm, moonThrough ? ZENITH : sky.moon.trueDir);
     const mean = (t) => (t[0] + t[1] + t[2]) / 3;
     // Direct light only reaches the ground once the Sun or Moon is over the hills.
     const overHills = (b) => smooth(-0.3, 0.3, b.alt - skylineAlt(b.az));
@@ -1983,7 +2010,8 @@ async function main() {
     let adapt = adaptTo(average, peak);
     // With no atmosphere the sky is black, so the eye adapts to the sunlit ground
     // instead, which would otherwise glare white. It shows a mid grey, as on the Moon.
-    if (!layers.atmosphere && layers.ground) {
+    // (Only standing on it, or nearly: from high up it's the Earth in view that sets the eye, below.)
+    if (!layers.atmosphere && layers.ground && km < 15) {
       const groundL = (GROUND_ALBEDO * groundE) / Math.PI;
       adapt = Math.max(adapt, 3 * groundL);
     }
@@ -2065,7 +2093,7 @@ async function main() {
         const through = throughEarth(p);
         return {
           shown: through || isAloft() || p.alt > -3,
-          transmit: transmittance(atm, through ? ZENITH : p.trueDir),
+          transmit: throughAir(atm, through ? ZENITH : p.trueDir),
           // Its moons' shadows on it, and the moons crossing in front of it.
           casters: p.id === "Jupiter" ? jupiterMoons(sky) : undefined,
         };
