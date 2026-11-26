@@ -107,4 +107,10 @@ describe("readLink", () => {
   test("lower-cases the body", () => {
     expect(readLink("#body=Moon").body).toBe("moon");
   });
+
+  test("is precise enough to land on what you were looking at, zoomed right in", () => {
+    const link = writeLink({ view: { az: 251.30912, alt: 35.45318, fov: 0.1 } });
+    expect(link).toContain("az=251.3091&alt=35.4532&fov=0.10");
+    expect(writeLink({ view: { az: 251.30912, alt: 35.45318, fov: 5 } })).toContain("az=251.31&alt=35.45");
+  });
 });

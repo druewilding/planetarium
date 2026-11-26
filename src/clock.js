@@ -86,6 +86,13 @@ export class Clock {
     this.set(Date.now());
   }
 
+  /** Back to real speed, if it's going faster or backwards (paused stays paused). */
+  realSpeed() {
+    if (this.rateIndex === REAL_TIME) return;
+    this.rateIndex = REAL_TIME;
+    this.emit();
+  }
+
   togglePlay() {
     this.playing = !this.playing;
     this.emit();

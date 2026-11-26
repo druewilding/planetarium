@@ -1,8 +1,9 @@
 // Info panel: an overview of today (Sun, Moon, visible planets) or details for
 // whatever is selected. Expensive searches are cached per local day.
 
-import { A, AU_KM, Body, compassPoint, R2D } from "../astro.js";
+import { A, AU_KM, Body, compassPoint, PLANETS, R2D } from "../astro.js";
 import { lunarEclipsesFrom, nextTotalSolarEclipse, solarEclipsesFrom } from "../eclipses.js";
+import { jupiterMoons, moonEventsBetween, nextMoonEvents } from "../satellites.js";
 import { seasonAt } from "../season.js";
 import { bodyPosition, distanceAU, LIGHT_SPEED_KM_S, LIGHT_YEAR_AU, LIGHT_YEAR_KM, starPosition } from "../space.js";
 import { skylineAt, spansAboveSkyline } from "../terrain.js";
@@ -112,7 +113,18 @@ export function phaseIcon(angle, southern, litAngle) {
   </svg>`;
 }
 
-export function createInfo({ container, getState, onLook, onClear, onSelect, onGo, onEclipse, placeName, catalog }) {
+export function createInfo({
+  container,
+  getState,
+  onLook,
+  onClear,
+  onSelect,
+  onGo,
+  onEclipse,
+  onWhen,
+  placeName,
+  catalog,
+}) {
   const cache = new Map();
   let lastHtml = "";
   let lastBuild = 0;
@@ -384,6 +396,83 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, onG
       ${elong < 15 ? `<p class="note">${esc(p.name)} is too close to the Sun to see right now.</p>` : ""}</div>`;
   }
 
+  // When a moon next crosses Jupiter, casts its shadow on it, and so on. Every
+  // event from a few days back to three weeks ahead is worked out at once (tens of
+  // milliseconds), so scrubbing back and forth through time doesn't search again.
+  const DAY = 86400000;
+  const MOON_DAYS = 20;
+  const moonMemo = new Map();
+  function moonEvents(id, ms) {
+    let m = moonMemo.get(id);
+    // (A day back from the window's start finds when one going on began.)
+    if (!m || ms < m.from + DAY || ms > m.until - MOON_DAYS * DAY) {
+      const from = ms - 3 * DAY;
+      const until = ms + (MOON_DAYS + 3) * DAY;
+      m = { from, until, all: moonEventsBetween(id, from, until) };
+      moonMemo.set(id, m);
+    }
+    return nextMoonEvents(m.all, ms, MOON_DAYS);
+  }
+
+  const MOON_EVENTS = [
+    ["shadow", "Its shadow on Jupiter"],
+    ["transit", "Crosses Jupiter"],
+    ["eclipse", "In Jupiter’s shadow"],
+    ["hidden", "Behind Jupiter"],
+  ];
+
+  function moonEventRow(key, label, e, s) {
+    if (!e) return `<dt>${label}</dt><dd>Not in the next 20 days</dd>`;
+    const { loc, ms } = s;
+    const span = `${formatTime(e.start, loc)} – ${formatTime(e.end, loc)}`;
+    if (e.start <= ms) return `<dt>${label}</dt><dd>Now, until ${formatTime(e.end, loc)}</dd>`;
+    // Jump to the middle of it.
+    const mid = Math.round((e.start + e.end) / 2);
+    return `<dt>${label}</dt><dd><button class="jump" data-when="${mid}" title="Go there and look">${formatShortDate(e.start, loc)}, ${span}</button></dd>`;
+  }
+
+  /** One of Jupiter's moons. */
+  function satelliteDetails(s, id) {
+    const { sky } = s;
+    const m = jupiterMoons(sky).find((x) => x.id === id);
+    const def = m.def;
+    const jupiter = sky.planets.find((p) => p.id === "Jupiter");
+    const jupiterKm = PLANETS.find((p) => p.id === "Jupiter").radiusKm;
+    const fromJupiterKm = m.offsetAU.length() * AU_KM;
+    // Which side of Jupiter it's on, on the sky: east is the way the Earth turns.
+    const sep = m.trueDir.angleTo(jupiter.trueDir) * R2D * 60;
+    const ra = (jupiter.ra * 15) / R2D;
+    const eqj = m.offsetAU.clone().applyMatrix4(sky.eqjToWorld.clone().transpose());
+    const side = -eqj.x * Math.sin(ra) + eqj.y * Math.cos(ra) >= 0 ? "east" : "west";
+    const where = m.behind
+      ? "Hidden behind Jupiter"
+      : m.inFront
+        ? "Crossing in front of Jupiter"
+        : m.light < 0.5
+          ? `In Jupiter’s shadow${m.light < 0.02 ? ", dark" : m.entering ? ", fading out" : ", lighting up"}`
+          : `${sep < 1 ? `${(sep * 60).toFixed(0)}″` : `${sep.toFixed(1)}′`} ${side} of Jupiter${m.light < 0.98 ? (m.entering ? ", going into its shadow" : ", coming out of its shadow") : ""}`;
+    const whole = Math.floor(def.periodDays);
+    const hours = Math.round((def.periodDays - whole) * 24);
+    const period = `${whole} day${whole === 1 ? "" : "s"} ${hours} hours`;
+    const lightMin = (m.dist * AU_KM) / LIGHT_SPEED_KM_S / 60;
+    const events = moonEvents(id, s.ms);
+    return `<dl>${position(m, s.skyline)}
+        <dt>Seen from here</dt><dd>${where}</dd>
+        ${m.shadowOnPlanet ? "<dt>Its shadow</dt><dd>On Jupiter’s clouds</dd>" : ""}</dl>
+      <div class="section"><h4>Coming up</h4><dl>
+        ${MOON_EVENTS.map(([key, label]) => moonEventRow(key, label, events[key], s)).join("")}
+      </dl></div>
+      <div class="section"><h4>Facts</h4><dl>
+        <dt>Brightness</dt><dd>mag ${m.mag.toFixed(1)}</dd>
+        <dt>From Jupiter</dt><dd>${sig(fromJupiterKm, 3)} km · ${(fromJupiterKm / jupiterKm).toFixed(1)} Jupiter radii</dd>
+        <dt>Goes round in</dt><dd>${period}</dd>
+        <dt>Size</dt><dd>${sig(def.radiusKm * 2, 4)} km across</dd>
+        <dt>Distance</dt><dd>${m.dist.toFixed(3)} AU · ${((m.dist * AU_KM) / 1e6).toFixed(0)} M km</dd>
+        <dt>Light travel time</dt><dd>${lightMin < 60 ? `${lightMin.toFixed(1)} min` : formatDuration(lightMin)}</dd>
+      </dl>
+      <p class="note">One of the four big moons Galileo found in 1610. Zoom in close to <button class="jump" data-select="planet" data-id="Jupiter">Jupiter</button> to see them.</p></div>`;
+  }
+
   function starDetails(s, star) {
     const { sky, loc, ms } = s;
     const obs = sky.obs;
@@ -508,6 +597,9 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, onG
       const p = s.sky.planets.find((x) => x.id === sel.id);
       kind = "Planet";
       body = planetDetails(s, p);
+    } else if (sel.type === "satellite") {
+      kind = "Moon of Jupiter";
+      body = satelliteDetails(s, sel.id);
     } else if (sel.type === "star") {
       kind = starKind(sel.star);
       body = starDetails(s, sel.star);
@@ -538,6 +630,8 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, onG
     if (action === "go") onGo?.();
     const jump = e.target.closest("[data-select]");
     if (jump) onSelect(jump.dataset.select, jump.dataset.id);
+    const when = e.target.closest("[data-when]")?.dataset.when;
+    if (when) onWhen?.(+when);
     const eclipse = e.target.closest("[data-eclipse]")?.dataset;
     if (eclipse) {
       const place = eclipse.lat != null ? { lat: +eclipse.lat, lon: +eclipse.lon } : null;

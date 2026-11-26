@@ -30,6 +30,7 @@ const APP_SHELL = [
   "./icons/maskable-512.png",
   "./css/styles.css",
   "./src/astro.js",
+  "./src/satellites.js",
   "./src/cachedfetch.js",
   "./src/climb.js",
   "./src/clock.js",
