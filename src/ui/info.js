@@ -393,7 +393,8 @@ export function createInfo({
         <dt>Angle from Sun</dt><dd>${elong.toFixed(0)}°</dd>
         <dt>In</dt><dd>${esc(con.name)}</dd>
       </dl>
-      ${elong < 15 ? `<p class="note">${esc(p.name)} is too close to the Sun to see right now.</p>` : ""}</div>`;
+      ${elong < 15 ? `<p class="note">${esc(p.name)} is too close to the Sun to see right now.</p>` : ""}</div>
+      ${p.id === "Jupiter" ? jupiterMoonsSection(s, p) : ""}`;
   }
 
   // When a moon next crosses Jupiter, casts its shadow on it, and so on. Every
@@ -431,6 +432,33 @@ export function createInfo({
     return `<dt>${label}</dt><dd><button class="jump" data-when="${mid}" title="Go there and look">${formatShortDate(e.start, loc)}, ${span}</button></dd>`;
   }
 
+  /** Where a moon of Jupiter is, as you see it: "1.0′ east of Jupiter", "Hidden behind Jupiter", … */
+  function moonWhere(m, jupiter, sky) {
+    // Which side of Jupiter it's on, on the sky: east is the way the Earth turns.
+    const sep = m.trueDir.angleTo(jupiter.trueDir) * R2D * 60;
+    const ra = (jupiter.ra * 15) / R2D;
+    const eqj = m.offsetAU.clone().applyMatrix4(sky.eqjToWorld.clone().transpose());
+    const side = -eqj.x * Math.sin(ra) + eqj.y * Math.cos(ra) >= 0 ? "east" : "west";
+    if (m.behind) return "Hidden behind Jupiter";
+    if (m.inFront) return "Crossing in front of Jupiter";
+    if (m.light < 0.5)
+      return `In Jupiter’s shadow${m.light < 0.02 ? ", dark" : m.entering ? ", fading out" : ", lighting up"}`;
+    const shadow = m.light < 0.98 ? (m.entering ? ", going into its shadow" : ", coming out of its shadow") : "";
+    return `${sep < 1 ? `${(sep * 60).toFixed(0)}″` : `${sep.toFixed(1)}′`} ${side} of Jupiter${shadow}`;
+  }
+
+  /** Jupiter's four big moons, each a link, and where they are now. */
+  function jupiterMoonsSection(s, jupiter) {
+    const rows = jupiterMoons(s.sky)
+      .map(
+        (m) =>
+          `<dt><button class="jump" data-select="satellite" data-id="${m.id}" title="Look at ${m.name}">${m.name}</button></dt><dd>${moonWhere(m, jupiter, s.sky)}</dd>`
+      )
+      .join("");
+    return `<div class="section"><h4>Moons</h4><dl>${rows}</dl>
+      <p class="note">Jupiter has nearly a hundred known moons. Only the four big Galilean moons are in the planetarium: the rest are small, and far too faint to see without a big telescope.</p></div>`;
+  }
+
   /** One of Jupiter's moons. */
   function satelliteDetails(s, id) {
     const { sky } = s;
@@ -439,18 +467,7 @@ export function createInfo({
     const jupiter = sky.planets.find((p) => p.id === "Jupiter");
     const jupiterKm = PLANETS.find((p) => p.id === "Jupiter").radiusKm;
     const fromJupiterKm = m.offsetAU.length() * AU_KM;
-    // Which side of Jupiter it's on, on the sky: east is the way the Earth turns.
-    const sep = m.trueDir.angleTo(jupiter.trueDir) * R2D * 60;
-    const ra = (jupiter.ra * 15) / R2D;
-    const eqj = m.offsetAU.clone().applyMatrix4(sky.eqjToWorld.clone().transpose());
-    const side = -eqj.x * Math.sin(ra) + eqj.y * Math.cos(ra) >= 0 ? "east" : "west";
-    const where = m.behind
-      ? "Hidden behind Jupiter"
-      : m.inFront
-        ? "Crossing in front of Jupiter"
-        : m.light < 0.5
-          ? `In Jupiter’s shadow${m.light < 0.02 ? ", dark" : m.entering ? ", fading out" : ", lighting up"}`
-          : `${sep < 1 ? `${(sep * 60).toFixed(0)}″` : `${sep.toFixed(1)}′`} ${side} of Jupiter${m.light < 0.98 ? (m.entering ? ", going into its shadow" : ", coming out of its shadow") : ""}`;
+    const where = moonWhere(m, jupiter, sky);
     const whole = Math.floor(def.periodDays);
     const hours = Math.round((def.periodDays - whole) * 24);
     const period = `${whole} day${whole === 1 ? "" : "s"} ${hours} hours`;
@@ -470,7 +487,7 @@ export function createInfo({
         <dt>Distance</dt><dd>${m.dist.toFixed(3)} AU · ${((m.dist * AU_KM) / 1e6).toFixed(0)} M km</dd>
         <dt>Light travel time</dt><dd>${lightMin < 60 ? `${lightMin.toFixed(1)} min` : formatDuration(lightMin)}</dd>
       </dl>
-      <p class="note">One of the four big moons Galileo found in 1610. Zoom in close to <button class="jump" data-select="planet" data-id="Jupiter">Jupiter</button> to see them.</p></div>`;
+      <p class="note">One of the four big moons Galileo found in 1610. Zoom in close to Jupiter to see them.</p></div>`;
   }
 
   function starDetails(s, star) {
@@ -595,10 +612,11 @@ export function createInfo({
       body = moonDetails(s, true);
     } else if (sel.type === "planet") {
       const p = s.sky.planets.find((x) => x.id === sel.id);
-      kind = "Planet";
+      kind = PLANETS.find((x) => x.id === sel.id).dwarf ? "Dwarf planet" : "Planet";
       body = planetDetails(s, p);
     } else if (sel.type === "satellite") {
-      kind = "Moon of Jupiter";
+      kind =
+        "Moon of <button class='jump' data-select='planet' data-id='Jupiter' title='Look at Jupiter'>Jupiter</button>";
       body = satelliteDetails(s, sel.id);
     } else if (sel.type === "star") {
       kind = starKind(sel.star);
@@ -613,8 +631,8 @@ export function createInfo({
       kind = "Our home planet";
       body = earthDetails(s.earth);
     }
-    // The star's kind links to its constellation, so it's already HTML.
-    const kindHtml = sel.type === "star" ? kind : esc(kind);
+    // A star's kind links to its constellation, and a moon's to its planet, so they're already HTML.
+    const kindHtml = sel.type === "star" || sel.type === "satellite" ? kind : esc(kind);
     return `<h3>${esc(title)}</h3><p class="kind">${kindHtml}</p>${body}
       <div class="info-actions">
         <button class="chip small" data-action="look">Look at it</button>

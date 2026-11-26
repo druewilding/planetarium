@@ -230,10 +230,7 @@ async function main() {
   const planetDiscs = createPlanetDiscs(shared, glsl, PLANETS);
   scene.add(planetDiscs.group);
   // Jupiter's moons: drawn after Jupiter's disc, so the ones in front of it show.
-  // You only see them zoomed in, as through a telescope, which shows fainter things.
-  const satelliteMaterial = createPointsMaterial(shared, glsl, 1000);
-  satelliteMaterial.uniforms.uBoost = { value: 0 };
-  const satellitePoints = createPlanetPoints(JUPITER_MOONS, satelliteMaterial);
+  const satellitePoints = createPlanetPoints(JUPITER_MOONS, planetPoints.points.material);
   satellitePoints.points.renderOrder = 5.3;
   scene.add(satellitePoints.points);
 
@@ -318,7 +315,9 @@ async function main() {
   let locTween = null;
   let layers = {};
   let exposure = 1;
-  let globalLimit = 6;
+  let globalLimit = 6; // the faintest magnitude you can see, by eye
+  // Zoomed in, as through binoculars or a telescope: fainter still (see telescopeGain).
+  const zoomedLimit = () => globalLimit + shared.uBoost.value;
   // Up above the Earth (see Lift off, below).
   const aloft = {
     km: 0,
@@ -1318,6 +1317,8 @@ async function main() {
     info.update(true);
   }
 
+  const LOOK_FOV = 0.1; // degrees: how far Look at it zooms in on a planet or moon
+  const STAR_FOV = 3; // and on a star
   function lookAtSelection() {
     if (selection?.type === "earth") return faceEarth();
     const d = selectionDir();
@@ -1325,7 +1326,12 @@ async function main() {
     let fov = view.state.fov;
     if (selection.type === "moon" || selection.type === "sun") fov = Math.min(fov, 20);
     // A planet is only a point until you're zoomed right in: look at it as through a telescope.
-    if (selection.type === "planet" || selection.type === "satellite") fov = MIN_FOV;
+    // (Close enough for Saturn's rings, or Jupiter with its moons around it. Pluto needs all the zoom there is.)
+    if (selection.type === "planet" || selection.type === "satellite")
+      fov = PLANETS.find((p) => p.id === selection.id)?.dwarf ? MIN_FOV : LOOK_FOV;
+    // A star is a point however close you get: look at it as through binoculars, among its
+    // neighbours (fainter ones show, zoomed in: see telescopeGain).
+    if (selection.type === "star") fov = Math.min(fov, STAR_FOV);
     if (selection.type === "constellation") fov = Math.max(fov, 50);
     const { az } = altAz(d);
     // Behind the ground or the hills: face its direction, just above the skyline.
@@ -1455,7 +1461,11 @@ async function main() {
     { name: "Earth", kind: "Planet · home", shown: isAloft, select: () => select(selectEarth(), { look: true }) },
     { name: "Sun", kind: "Star", select: () => select(selectSun(), { look: true }) },
     { name: "Moon", kind: "Moon", select: () => select(selectMoon(), { look: true }) },
-    ...PLANETS.map((p) => ({ name: p.name, kind: "Planet", select: () => select(selectPlanet(p), { look: true }) })),
+    ...PLANETS.map((p) => ({
+      name: p.name,
+      kind: p.dwarf ? "Dwarf planet" : "Planet",
+      select: () => select(selectPlanet(p), { look: true }),
+    })),
     ...JUPITER_MOONS.map((m) => ({
       name: m.name,
       kind: "Moon of Jupiter",
@@ -1505,7 +1515,7 @@ async function main() {
     // (A little nearer than Jupiter wins: it's the moon you tapped by it.)
     for (const m of satellitesShown) consider(m.dir, 14, 8, () => selectSatellite(m));
     for (const s of catalog.stars) {
-      if (s.mag > globalLimit + 0.5) break; // sorted by magnitude
+      if (s.mag > zoomedLimit() + 0.5) break; // sorted by magnitude
       consider(s.position(sky).dir, 14, Math.max(0, 4 - s.mag) * 1.5, () => selectStar(s));
     }
     if (best) return select(best());
@@ -1606,7 +1616,6 @@ async function main() {
       moons.map((m, i) => (m.behind || m.inFront ? 1 : 1 - apart[i])),
       16
     );
-    satelliteMaterial.uniforms.uBoost.value = telescopeGain(view.state.fov);
     // Names: once they're apart from Jupiter, or crossing its disc once that's big.
     const disc = smooth(SATELLITE_FROM, SATELLITE_TO, shownRadius(jupiter) * perRad);
     // (Not while it's dark in Jupiter's shadow: there's nothing there to name or tap.)
@@ -1657,7 +1666,7 @@ async function main() {
           key: p.id,
           text: p.name,
           dir: p.dir,
-          cls: `body${p.mag > globalLimit ? " dim" : ""}`,
+          cls: `body${p.mag > zoomedLimit() ? " dim" : ""}`,
           priority: 90 - p.mag,
           always: true,
           offset: edgeOffset(p, 8),
@@ -1670,7 +1679,7 @@ async function main() {
           key: m.id,
           text: m.name,
           dir: m.dir,
-          cls: `body small${m.mag > globalLimit + telescopeGain(view.state.fov) ? " dim" : ""}`,
+          cls: `body small${m.mag > zoomedLimit() ? " dim" : ""}`,
           priority: 80 - m.mag,
           offset: [6, -6],
           pick: () => selectSatellite(m),
@@ -1679,7 +1688,7 @@ async function main() {
     }
     const zoomBoost = Math.max(0, Math.log2(70 / view.state.fov)) * 1.2;
     if (layers.starNames) {
-      const limit = Math.min(globalLimit, 2.2 + zoomBoost);
+      const limit = Math.min(zoomedLimit(), 2.2 + zoomBoost);
       for (const s of catalog.named) {
         if (s.mag > limit) break;
         const d = s.position(sky).dir;
@@ -2020,6 +2029,8 @@ async function main() {
       overlays.layers.constellations.material.uniforms.uOpacity.value = 0.14 + 0.24 * night;
     }
     globalLimit = 7.93 - 5 * Math.log10(1 + 63 * Math.sqrt(zenith));
+    // Stars, planets and moons alike (see the points' shader).
+    shared.uBoost.value = telescopeGain(view.state.fov);
     updateGlow(now, atm, lights, ambient);
 
     updateSkyline(dt);

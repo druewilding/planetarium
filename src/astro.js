@@ -79,6 +79,18 @@ export const PLANETS = [
     albedo: 0.44,
     flattening: 0.017,
   },
+  // A dwarf planet since 2006, and far too faint for the eye: only zoomed right in, as
+  // through a big telescope (see telescopeGain), and never more than a point.
+  {
+    id: "Pluto",
+    name: "Pluto",
+    dwarf: true,
+    radiusKm: 1188.3,
+    color: [1.0, 0.9, 0.8],
+    surface: [0.85, 0.75, 0.65],
+    albedo: 0.52,
+    rocky: true,
+  },
 ];
 
 /**

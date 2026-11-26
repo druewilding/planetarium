@@ -45,9 +45,18 @@ describe("computeSky", () => {
     }
   });
 
-  test("includes the seven other planets", () => {
+  test("includes the seven other planets, and Pluto", () => {
     const { planets } = computeSky(Date.now(), oslo);
-    expect(planets.map((p) => p.name)).toEqual(["Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune"]);
+    expect(planets.map((p) => p.name)).toEqual([
+      "Mercury",
+      "Venus",
+      "Mars",
+      "Jupiter",
+      "Saturn",
+      "Uranus",
+      "Neptune",
+      "Pluto",
+    ]);
   });
 });
 
@@ -138,5 +147,17 @@ describe("computeSky from above the Earth", () => {
     const high = computeSky(ms, oslo, above(100000));
     expect((low.moon.dir.angleTo(high.moon.dir) * 180) / Math.PI).toBeGreaterThan(5);
     expect((low.sun.dir.angleTo(high.sun.dir) * 180) / Math.PI).toBeLessThan(0.05);
+  });
+});
+
+describe("Pluto", () => {
+  test("is a dwarf planet far out, faint and tiny", () => {
+    const pluto = computeSky(Date.parse("2026-11-26T20:00Z"), oslo).planets.find((p) => p.id === "Pluto");
+    expect(pluto.dist).toBeGreaterThan(35);
+    expect(pluto.dist).toBeLessThan(37);
+    expect(pluto.mag).toBeGreaterThan(14.2);
+    expect(pluto.mag).toBeLessThan(14.9);
+    // About a tenth of a second of arc across.
+    expect(pluto.angularRadius * 2 * (180 / Math.PI) * 3600).toBeCloseTo(0.1, 1);
   });
 });
