@@ -222,7 +222,10 @@ async function main() {
   const milkyWay = createMilkyWay(shared, glsl, milkyWayTex);
   overlays.eqj.add(milkyWay);
   overlays.eqj.add(createStars(starData, starMaterial));
-  const planetPoints = createPlanetPoints(PLANETS, createPointsMaterial(shared, glsl, 1000));
+  // Zoomed in, the planets show as faint as a telescope would (see telescopeGain): Neptune, and Pluto.
+  const planetMaterial = createPointsMaterial(shared, glsl, 1000);
+  planetMaterial.uniforms.uBoost = { value: 0 };
+  const planetPoints = createPlanetPoints(PLANETS, planetMaterial);
   // Orbits (shown from up above the Earth), in the same J2000 frame as the stars.
   const orbits = createOrbits(shared, glsl);
   overlays.eqj.add(orbits.group);
@@ -1318,6 +1321,7 @@ async function main() {
     info.update(true);
   }
 
+  const LOOK_FOV = 0.1; // degrees: how far Look at it zooms in on a planet or moon
   function lookAtSelection() {
     if (selection?.type === "earth") return faceEarth();
     const d = selectionDir();
@@ -1325,7 +1329,9 @@ async function main() {
     let fov = view.state.fov;
     if (selection.type === "moon" || selection.type === "sun") fov = Math.min(fov, 20);
     // A planet is only a point until you're zoomed right in: look at it as through a telescope.
-    if (selection.type === "planet" || selection.type === "satellite") fov = MIN_FOV;
+    // (Close enough for Saturn's rings, or Jupiter with its moons around it. Pluto needs all the zoom there is.)
+    if (selection.type === "planet" || selection.type === "satellite")
+      fov = PLANETS.find((p) => p.id === selection.id)?.dwarf ? MIN_FOV : LOOK_FOV;
     if (selection.type === "constellation") fov = Math.max(fov, 50);
     const { az } = altAz(d);
     // Behind the ground or the hills: face its direction, just above the skyline.
@@ -1455,7 +1461,11 @@ async function main() {
     { name: "Earth", kind: "Planet · home", shown: isAloft, select: () => select(selectEarth(), { look: true }) },
     { name: "Sun", kind: "Star", select: () => select(selectSun(), { look: true }) },
     { name: "Moon", kind: "Moon", select: () => select(selectMoon(), { look: true }) },
-    ...PLANETS.map((p) => ({ name: p.name, kind: "Planet", select: () => select(selectPlanet(p), { look: true }) })),
+    ...PLANETS.map((p) => ({
+      name: p.name,
+      kind: p.dwarf ? "Dwarf planet" : "Planet",
+      select: () => select(selectPlanet(p), { look: true }),
+    })),
     ...JUPITER_MOONS.map((m) => ({
       name: m.name,
       kind: "Moon of Jupiter",
@@ -2061,6 +2071,7 @@ async function main() {
       },
     });
     planetPoints.update(sky.planets, discs);
+    planetMaterial.uniforms.uBoost.value = telescopeGain(view.state.fov);
     satellitesShown = updateSatellites();
     overlays.updateFrames(sky);
     updatePlaceLayers(km);

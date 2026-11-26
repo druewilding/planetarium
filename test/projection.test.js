@@ -54,6 +54,14 @@ describe("telescopeGain", () => {
   test("shows fainter things the further you zoom in, up to a limit", () => {
     expect(telescopeGain(2.3)).toBeCloseTo(2.5);
     expect(telescopeGain(0.4)).toBeGreaterThan(4);
-    expect(telescopeGain(0.01)).toBe(6);
+    expect(telescopeGain(0.01)).toBe(9);
+  });
+});
+
+describe("telescopeGain at the closest zoom", () => {
+  test("is about the 29 cm telescope it takes to just see Pluto from a dark site", () => {
+    // A dark sky lets the eye see about magnitude 6.5; Pluto is 14.4 to 14.6.
+    expect(6.5 + telescopeGain(0.04)).toBeGreaterThan(14.7);
+    expect(6.5 + telescopeGain(0.04)).toBeLessThan(15.2);
   });
 });

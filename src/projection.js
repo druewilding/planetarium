@@ -45,15 +45,24 @@ export function eyeScale(fovDeg) {
   return MathUtils.clamp(squeeze, 1, MAX_EYE_SCALE);
 }
 
-const MAX_GAIN = 6; // magnitudes
+const MAX_GAIN = 9; // magnitudes
+const PUPIL_MM = 7; // a dark-adapted eye's
 
 /**
  * How many magnitudes fainter you can see, zoomed in: as with sizes, a view
  * narrower than the screen is like looking through binoculars or a telescope,
- * which gather more light the more they magnify (roughly). 0 for wider views.
+ * and each zoom gets the one that suits its magnification. 0 for wider views.
  */
 export function telescopeGain(fovDeg) {
-  return Math.min(MAX_GAIN, 2.5 * Math.log10(Math.max(1, SCREEN_ANGLE / fovDeg)));
+  const m = Math.max(1, SCREEN_ANGLE / fovDeg); // how many times it magnifies
+  // Binoculars: roughly 2½ magnitudes for every tenfold.
+  const binoculars = 2.5 * Math.log10(m);
+  // A telescope is used up to about twice its aperture in mm, so this one is m/2 mm
+  // across: it gathers (m/2 ÷ 7 mm)² times the light your pupil does, and magnifying
+  // darkens the sky around a star (+0.3). At the closest zoom that's a 29 cm
+  // telescope, which just shows Pluto from a dark site.
+  const telescope = 5 * Math.log10(m / 2 / PUPIL_MM) + 0.3;
+  return Math.min(MAX_GAIN, Math.max(0, binoculars, telescope));
 }
 
 /** Angle θ whose screen radius is r (r is monotonic in θ, so bisect). */

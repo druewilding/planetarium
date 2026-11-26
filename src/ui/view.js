@@ -10,7 +10,7 @@ import { Euler, MathUtils, Quaternion, Vector3 } from "three";
 
 import { altAz } from "../astro.js";
 
-export const MIN_FOV = 0.1; // close enough to see Saturn's rings and Jupiter's belts
+export const MIN_FOV = 0.04; // as through a big telescope: close enough to pick out Pluto
 const MAX_FOV = 180; // wide views switch to a stereographic projection (see projection.js)
 
 /**

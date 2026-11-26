@@ -36,6 +36,7 @@ const PERIOD = {
   Saturn: 10759.22,
   Uranus: 30688.5,
   Neptune: 60182,
+  Pluto: 90560,
 };
 const MOON_MONTH = 27.3217; // days
 const MOON_STEP = 2 * 3600000; // between the Moon's positions
@@ -50,6 +51,7 @@ export const ORBIT_COLORS = {
   Saturn: "#d8c070",
   Uranus: "#8fe3e6",
   Neptune: "#7d96ff",
+  Pluto: "#c9a98f",
 };
 
 /**

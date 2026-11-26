@@ -595,7 +595,7 @@ export function createInfo({
       body = moonDetails(s, true);
     } else if (sel.type === "planet") {
       const p = s.sky.planets.find((x) => x.id === sel.id);
-      kind = "Planet";
+      kind = PLANETS.find((x) => x.id === sel.id).dwarf ? "Dwarf planet" : "Planet";
       body = planetDetails(s, p);
     } else if (sel.type === "satellite") {
       kind = "Moon of Jupiter";

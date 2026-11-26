@@ -33,7 +33,7 @@ sky with no connection (the hills and place names need one the first time you vi
   and lit from the Sun's direction, as through a telescope: Venus and Mercury go through phases, Mars is gibbous,
   Jupiter is striped and squashed at the poles, and Saturn has its rings, tilted the way they are that year (nearly
   edge-on in 2025–26, wide open by 2029), with the globe's shadow across them. **Look at it** on a planet zooms right in
-  (to 0.1°); in a transit, Mercury or Venus crosses the Sun as a black dot.
+  (to 0.1°, or further by hand); in a transit, Mercury or Venus crosses the Sun as a black dot.
 - **Jupiter's moons:** Io, Europa, Ganymede and Callisto, where they really are round Jupiter (as they were when the
   light we see left them, 33 to 54 minutes ago). Too faint and too close to Jupiter to pick out by eye, they appear once
   you zoom in far enough to tell them apart from it, as through binoculars or a telescope, which also shows fainter
@@ -41,6 +41,10 @@ sky with no connection (the hills and place names need one the first time you vi
   against the clouds, dark Callisto shows as a grey smudge), cast small black shadows on its clouds, and fade out for a
   couple of hours in its shadow. Tap one, or search for it, for how far it is from Jupiter, how long it takes to go
   round, and when its next shadow, crossing, eclipse and disappearance behind Jupiter are: tap one to go there.
+- **Pluto:** a dwarf planet, and far too faint for the eye (magnitude 14½). Zoomed in, the planets and moons show as
+  faint as the binoculars or telescope that zoom stands for would show them: about 2½ magnitudes fainter at a few
+  degrees, and at the closest zoom (0.04°) about 8, like a 30 cm telescope. That's just enough for Pluto, a tiny point
+  even then, from a dark site with Pluto high up. **Look at it** on Pluto zooms all the way in.
 - **Eclipses:** in a solar eclipse the Moon covers the Sun and the sky darkens with it. Even with most of the Sun
   covered, what's left still dazzles, so **Eclipse glasses** appear: like the real thing, they black out everything
   but the Sun, and the Moon's bite finally shows (in totality they show nothing, which is your cue to take them off). In a lunar eclipse the Earth's
@@ -225,7 +229,7 @@ planetarium/
 3. Fly-to travel between bodies, orbit trails
 4. Standing on the Moon: Earth's phases, the two-week day
 5. Planets and moons: ✅ discs with phases and Saturn's rings, ✅ Jupiter's four big moons, their shadows and
-   eclipses; still to come: Titan, Mars' moons
+   eclipses, ✅ Pluto; still to come: Titan, Mars' moons
 6. The Martian sky, with its blue sunset
 7. ✅ Eclipses: find them and jump to them, the red Moon, the Moon's shadow on the Earth
 8. ✅ Shareable links (place, time, view in the URL)
