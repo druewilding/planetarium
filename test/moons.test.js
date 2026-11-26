@@ -1,8 +1,9 @@
 import * as THREE from "three";
 import { describe, expect, test } from "vitest";
 
-import { A, AU_KM, computeSky, insideDisc, JUPITER_MOONS, jupiterMoons, R2D } from "../src/astro.js";
+import { A, AU_KM, computeSky, R2D } from "../src/astro.js";
 import { readLink, writeLink } from "../src/link.js";
+import { insideDisc, JUPITER_MOONS, jupiterMoons, searchMoonEvents, sunlightPast } from "../src/satellites.js";
 
 const oslo = { lat: 59.91, lon: 10.75, tz: "Europe/Oslo" };
 const START = Date.parse("2026-11-27T00:00Z");
@@ -109,5 +110,79 @@ describe("links to a moon of Jupiter", () => {
   test("keep it chosen", () => {
     const link = readLink(`#${writeLink({ place: oslo, selection: { type: "satellite", id: "Io" } })}`);
     expect(link.selection).toEqual({ type: "satellite", id: "Io" });
+  });
+});
+
+const MINUTE = 60000;
+const near = (ms, iso, minutes = 2) => expect(Math.abs(ms - Date.parse(iso))).toBeLessThan(minutes * MINUTE);
+
+describe("Jupiter's moons and its shadow", () => {
+  test("find Io's shadow on Jupiter when the almanacs do", () => {
+    // Published times (University of Granada and ASSA tables).
+    near(searchMoonEvents("Io", Date.parse("2025-12-20T12:00Z")).shadow.start, "2025-12-21T03:35Z");
+    near(searchMoonEvents("Io", Date.parse("2025-03-01T12:00Z")).shadow.start, "2025-03-02T08:35Z");
+  });
+
+  test("show Io and its shadow on Jupiter together, as they were on 21 December 2025", () => {
+    const sky = computeSky(Date.parse("2025-12-21T04:40Z"), oslo);
+    const io = moon(sky, "Io");
+    expect(io.inFront).toBe(true);
+    expect(io.shadowOnPlanet).toBe(true);
+    expect(moon(sky, "Europa").shadowOnPlanet).toBe(false);
+  });
+
+  test("fade Io out over a few minutes as it goes into Jupiter's shadow", () => {
+    const io = (iso) => moon(computeSky(Date.parse(iso), oslo), "Io");
+    expect(io("2025-12-22T00:50Z").light).toBe(1);
+    const fading = io("2025-12-22T00:55Z");
+    expect(fading.light).toBeGreaterThan(0.2);
+    expect(fading.light).toBeLessThan(0.9);
+    expect(io("2025-12-22T01:00Z").light).toBeLessThan(0.001);
+    expect(io("2025-12-22T01:00Z").mag).toBeGreaterThan(12);
+  });
+
+  test("say when something is happening now, and when it began", () => {
+    const events = searchMoonEvents("Io", Date.parse("2025-12-21T04:40Z"));
+    near(events.shadow.start, "2025-12-21T03:35Z");
+    expect(events.transit.start).toBeLessThan(Date.parse("2025-12-21T04:40Z"));
+    expect(events.transit.end).toBeGreaterThan(Date.parse("2025-12-21T04:40Z"));
+  });
+
+  test("work from anywhere: from Mars, the same shadow, by Mars' own light time", () => {
+    const helio = (body, time) => {
+      const v = A.HelioVector(body, time);
+      return new THREE.Vector3(v.x, v.y, v.z);
+    };
+    // (Light time is applied to Jupiter, as GeoVector does from the Earth.)
+    const fromMars = (time) => {
+      const mars = helio(A.Body.Mars, time);
+      let planet = helio(A.Body.Jupiter, time).sub(mars);
+      planet = helio(A.Body.Jupiter, time.AddDays(-(planet.length() * AU_KM) / 299792.458 / 86400)).sub(mars);
+      return { planet, sun: mars.negate() };
+    };
+    const from = Date.parse("2025-12-20T12:00Z");
+    const earth = searchMoonEvents("Io", from).shadow.start;
+    const mars = searchMoonEvents("Io", from, { seenFrom: fromMars }).shadow.start;
+    const time = A.MakeTime(new Date(earth));
+    const lightMs = (v) => ((v.length() * AU_KM) / 299792.458) * 1000;
+    const jupiter = helio(A.Body.Jupiter, time);
+    const difference =
+      lightMs(jupiter.clone().sub(helio(A.Body.Mars, time))) - lightMs(jupiter.clone().sub(helio(A.Body.Earth, time)));
+    expect(Math.abs(mars - earth - difference)).toBeLessThan(2 * MINUTE);
+  });
+});
+
+describe("sunlightPast", () => {
+  const sun = new THREE.Vector3(0, 0, 5);
+  test("is full sunlight with nothing in the way", () => {
+    expect(sunlightPast(new THREE.Vector3(), sun, new THREE.Vector3(1, 0, 1), 0.001)).toBe(1);
+  });
+  test("is dark behind a body that looks bigger than the Sun", () => {
+    expect(sunlightPast(new THREE.Vector3(), sun, new THREE.Vector3(0, 0, 0.01), 0.001)).toBe(0);
+  });
+  test("is a thin ring of sunlight behind one that looks smaller", () => {
+    const light = sunlightPast(new THREE.Vector3(), sun, new THREE.Vector3(0, 0, 1), 0.0001);
+    expect(light).toBeGreaterThan(0.5);
+    expect(light).toBeLessThan(1);
   });
 });

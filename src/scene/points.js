@@ -144,14 +144,16 @@ export function createPlanetPoints(planetDefs, material) {
 
   /**
    * fade: how far each one's point has faded out (0 to 1): a planet's as it turns into a disc
-   * (see planets.js), a moon's while it's too close to its planet to tell apart.
+   * (see planets.js), a moon's while it's too close to its planet to tell apart. span: how
+   * many magnitudes fainter it is half way (1 hides it altogether).
    */
-  function update(planets, fade = []) {
+  function update(planets, fade = [], span = 8) {
     const pos = geom.attributes.position;
     const mag = geom.attributes.aMag;
     planets.forEach((p, i) => {
       pos.setXYZ(i, p.trueDir.x, p.trueDir.y, p.trueDir.z);
-      mag.setX(i, p.mag + 8 * (fade[i] ?? 0));
+      const f = fade[i] ?? 0;
+      mag.setX(i, f >= 1 ? 99 : p.mag + span * f);
     });
     pos.needsUpdate = true;
     mag.needsUpdate = true;

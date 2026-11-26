@@ -89,8 +89,10 @@ export function writeLink({ body = DEFAULT_BODY, place, time, view, selection, u
   }
   if (time != null) p.set("t", isoSeconds(time));
   if (view) {
-    p.set("az", view.az.toFixed(1));
-    p.set("alt", view.alt.toFixed(1));
+    // Precise enough to land on what you were looking at, even zoomed right in.
+    const places = view.fov < 1 ? 4 : view.fov < 10 ? 2 : 1;
+    p.set("az", view.az.toFixed(places));
+    p.set("alt", view.alt.toFixed(places));
     p.set("fov", view.fov < 10 ? view.fov.toFixed(2) : view.fov.toFixed(1));
     if (up && Math.abs(view.roll ?? 0) >= 0.05) p.set("roll", view.roll.toFixed(1));
   }

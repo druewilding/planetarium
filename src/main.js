@@ -10,8 +10,6 @@ import {
   dirFromAltAz,
   eqVector,
   horizonFrame,
-  JUPITER_MOONS,
-  jupiterMoons,
   PLANETS,
   R2D,
   refract,
@@ -21,6 +19,7 @@ import { Clock } from "./clock.js";
 import { EARTH_RADIUS_KM } from "./constants.js";
 import { DEFAULT_BODY, readLink, writeLink } from "./link.js";
 import { createProjection, eyeScale, telescopeGain } from "./projection.js";
+import { JUPITER_MOONS, jupiterMoons } from "./satellites.js";
 import {
   ATMOSPHERES,
   averageSkyLuminance,
@@ -537,6 +536,11 @@ async function main() {
     onClear: () => select(null),
     onGo: () => selection?.type === "feature" && flyTo(selection.feature),
     onEclipse: (body, ms, place) => goToEclipse(body, ms, place),
+    // (Look once the sky has caught up with the new time.)
+    onWhen: (ms) => {
+      clock.set(ms, { animate: false });
+      lookWhenThere = true;
+    },
     placeName: (lat, lon) => location.fromPoint(lat, lon).name,
     onSelect: (type, id) => {
       if (type === "sun") select(selectSun(), { look: true });
@@ -1573,6 +1577,7 @@ async function main() {
   const SATELLITE_TO = 16; // and where they're fully there
   const SATELLITE_REACH_KM = 1.9e6; // Callisto is never further than this from Jupiter
   let satellitesShown = [];
+  let lookWhenThere = false; // after jumping to a moon's next event (see onWhen)
 
   /** Place the moons' points, and return the ones you can see (for names and tapping). */
   function updateSatellites() {
@@ -1590,12 +1595,18 @@ async function main() {
     if (!satellitePoints.points.visible) return [];
     const moons = jupiterMoons(sky);
     const perRad = pxPerRad();
-    const hide = moons.map((m) =>
-      m.behind ? 1 : 1 - smooth(SATELLITE_FROM, SATELLITE_TO, m.trueDir.angleTo(jupiter.trueDir) * perRad)
+    const apart = moons.map((m) => smooth(SATELLITE_FROM, SATELLITE_TO, m.trueDir.angleTo(jupiter.trueDir) * perRad));
+    // (Crossing Jupiter, it's drawn on the disc instead: see planets.js. Zoomed in, so
+    // much more shows that fading out has to cover more magnitudes.)
+    satellitePoints.update(
+      moons,
+      moons.map((m, i) => (m.behind || m.inFront ? 1 : 1 - apart[i])),
+      16
     );
-    satellitePoints.update(moons, hide);
     satelliteMaterial.uniforms.uBoost.value = telescopeGain(view.state.fov);
-    return moons.filter((m, i) => hide[i] < 0.5);
+    // Names: once they're apart from Jupiter, or crossing its disc once that's big.
+    const disc = smooth(SATELLITE_FROM, SATELLITE_TO, shownRadius(jupiter) * perRad);
+    return moons.filter((m, i) => !m.behind && (m.inFront ? disc : apart[i]) > 0.5);
   }
 
   // Put a disc's label just outside its edge, however far you zoom in.
@@ -1898,6 +1909,10 @@ async function main() {
 
     updateAloft(dt);
     sky = computeSky(clock.ms, loc, abovePoint());
+    if (lookWhenThere) {
+      lookWhenThere = false;
+      lookAtSelection();
+    }
     followSun();
     // Rising, you look out through less and less air: from about 100 km up, none.
     const km = isAloft() ? aloft.km : 0;
@@ -2036,6 +2051,8 @@ async function main() {
         return {
           shown: through || isAloft() || p.alt > -3,
           transmit: transmittance(atm, through ? ZENITH : p.trueDir),
+          // Its moons' shadows on it, and the moons crossing in front of it.
+          casters: p.id === "Jupiter" ? jupiterMoons(sky) : undefined,
         };
       },
     });

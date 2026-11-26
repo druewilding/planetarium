@@ -37,8 +37,10 @@ sky with no connection (the hills and place names need one the first time you vi
 - **Jupiter's moons:** Io, Europa, Ganymede and Callisto, where they really are round Jupiter (as they were when the
   light we see left them, 33 to 54 minutes ago). Too faint and too close to Jupiter to pick out by eye, they appear once
   you zoom in far enough to tell them apart from it, as through binoculars or a telescope, which also shows fainter
-  things than your eyes can. They hide behind Jupiter as they go round. Tap one, or search for it, for how far it is
-  from Jupiter and how long it takes to go round.
+  things than your eyes can. They hide behind Jupiter as they go round, cross in front of it (bright Io almost vanishes
+  against the clouds, dark Callisto shows as a grey smudge), cast small black shadows on its clouds, and fade out for a
+  couple of hours in its shadow. Tap one, or search for it, for how far it is from Jupiter, how long it takes to go
+  round, and when its next shadow, crossing, eclipse and disappearance behind Jupiter are: tap one to go there.
 - **Eclipses:** in a solar eclipse the Moon covers the Sun and the sky darkens with it. Even with most of the Sun
   covered, what's left still dazzles, so **Eclipse glasses** appear: like the real thing, they black out everything
   but the Sun, and the Moon's bite finally shows (in totality they show nothing, which is your cue to take them off). In a lunar eclipse the Earth's
@@ -165,6 +167,7 @@ planetarium/
 ├── src/
 │   ├── main.js            # app setup, render loop, eye adaptation, picking, labels
 │   ├── astro.js           # astronomy-engine wrapper → horizon (world) frame
+│   ├── satellites.js      # Jupiter's moons: positions, shadows, eclipses, next events (from anywhere)
 │   ├── climb.js           # how high you are, second by second, rising and landing
 │   ├── clock.js           # simulated time, rates, smooth jumps
 │   ├── timezone.js        # wall-clock time for any location
@@ -221,8 +224,8 @@ planetarium/
    still to come: rising far enough to see the solar system from outside, true-scale sizes
 3. Fly-to travel between bodies, orbit trails
 4. Standing on the Moon: Earth's phases, the two-week day
-5. Planets and moons: ✅ discs with phases and Saturn's rings, ✅ Jupiter's four big moons; still to come: their
-   shadows on Jupiter and eclipses, Titan, Mars' moons
+5. Planets and moons: ✅ discs with phases and Saturn's rings, ✅ Jupiter's four big moons, their shadows and
+   eclipses; still to come: Titan, Mars' moons
 6. The Martian sky, with its blue sunset
 7. ✅ Eclipses: find them and jump to them, the red Moon, the Moon's shadow on the Earth
 8. ✅ Shareable links (place, time, view in the URL)
