@@ -30,8 +30,8 @@ const FEATURE_KIND = {
   mast: "Mast",
 };
 const NO_PLANETS = "<p class=note>None above the horizon right now.</p>";
-const DIM_TIP =
-  "<p class=note>Slide <strong>Sunlight</strong> down to see the stars and planets that are up there right now.</p>";
+const STARS_TIP =
+  "<p class=note>Turn off the <strong>Atmosphere</strong> layer to see the stars and planets that are up there right now.</p>";
 
 const YEAR_MS = 365.25 * 86400000;
 /** A number rounded to `digits` significant figures, with English separators like the rest of the panel. */
@@ -487,7 +487,7 @@ export function createInfo({ container, getState, onLook, onClear, onSelect, onG
       <div class="section"><h4><button class="jump" data-select="moon" title="Look at the Moon">Moon</button></h4>${moonDetails(s, false)}</div>
       <div class="section"><h4>Planets up now</h4>${visible ? `<dl>${visible}</dl>` : NO_PLANETS}</div>
       ${eclipseOverview(s)}
-      ${sunUp ? DIM_TIP : ""}
+      ${sunUp ? STARS_TIP : ""}
       <p class="note">Tap anything to look at it.</p>`;
   }
 

@@ -20,8 +20,6 @@ sky with no connection (the hills and place names need one the first time you vi
   sky is behind them (Schaefer's limiting-magnitude relation), and they dim near the horizon through atmospheric
   extinction.
 - **Real brightness:** everything is computed in cd/m² and lux, then an "eye" adapts its exposure the way yours does.
-- **Sunlight dimmer:** a linear slider that dims the Sun to show what's in the sky right now, even at noon. The
-  daytime sky is so bright that stars only appear in the last percent or so; **Night sky** jumps straight to 0%.
 - **The Milky Way:** NASA's all-sky map of its glow, dust lanes and Magellanic Clouds included. Like the stars, it
   shows only where it stands out from the sky, so it's at its best on dark, moonless nights and washes out under a
   bright Moon or twilight.

@@ -1,7 +1,7 @@
 // Point-like light sources (stars, planets). Each point's visibility is decided
 // in the vertex shader from its magnitude, atmospheric extinction and the
 // brightness of the sky behind it, using Schaefer's naked-eye limiting-magnitude
-// relation. So stars fade out naturally at dawn and come back when you dim the Sun.
+// relation. So stars fade out naturally at dawn and come back at dusk.
 
 import * as THREE from "three";
 

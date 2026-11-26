@@ -87,7 +87,7 @@ export function createSun(shared, glsl) {
   mesh.renderOrder = 6;
   mesh.frustumCulled = false;
 
-  /** sky: computeSky().sun, transmit: RGB, dim: 0..1, exposure: current */
+  /** sky: computeSky().sun, transmit: RGB, exposure: current */
   /**
    * `throughEarth`: seen through see-through ground, as a plain disc with no glare.
    * `glasses`: through eclipse glasses, an orange disc.
@@ -95,7 +95,6 @@ export function createSun(shared, glsl) {
   function update(
     sun,
     transmit,
-    dim,
     exposure,
     camera,
     uncovered = 1,
@@ -112,12 +111,10 @@ export function createSun(shared, glsl) {
     faceViewer(mesh, camera);
     mesh.scale.setScalar(discRadius * 2 * glareScale);
     uniforms.uDiscFraction.value = 1 / glareScale;
-    // Keep a faint disc visible even when the Sun is fully dimmed, so you can still find it.
-    const level = Math.max(dim, 2e-9);
-    const L = SUN_LUMINANCE * level;
+    const L = SUN_LUMINANCE;
     uniforms.uSunL.value.set(transmit[0] * L, transmit[1] * L, transmit[2] * L);
     uniforms.uDiscExposure.value = Math.min(exposure, 4 / L);
-    const E = (sun.illuminance * dim * uncovered * (transmit[0] + transmit[1] + transmit[2])) / 3;
+    const E = (sun.illuminance * uncovered * (transmit[0] + transmit[1] + transmit[2])) / 3;
     uniforms.uGlare.value = throughEarth ? 0 : 0.8 * (1 - Math.exp(-E * exposure * 0.02));
     // (Up above the Earth there's no horizon to set behind: the Earth itself hides it.)
     mesh.visible = throughEarth || aloft || sun.alt > -2;

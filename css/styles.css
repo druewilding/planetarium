@@ -631,7 +631,7 @@ input[type="number"]:focus {
   right: var(--gutter);
   bottom: calc(var(--gutter) + var(--safe-b));
   display: grid;
-  grid-template-columns: 252px minmax(0, 1fr) 170px;
+  grid-template-columns: 252px minmax(0, 1fr);
   align-items: center;
   gap: 18px;
   padding: 10px 16px;
@@ -890,47 +890,6 @@ input[type="number"]:focus {
   font-size: 12px;
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
-}
-
-.dimmer {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-
-#night-sky {
-  align-self: flex-start;
-}
-
-#night-sky[aria-pressed="true"] {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.dimmer label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--text-dim);
-}
-
-.dimmer svg {
-  width: 18px;
-  height: 18px;
-  color: var(--accent);
-  stroke: currentColor;
-}
-
-.dimmer output {
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-}
-
-input[type="range"] {
-  width: 100%;
-  accent-color: var(--accent);
 }
 
 /* ---------- Labels ---------- */
@@ -1250,20 +1209,6 @@ body:not(.aloft) #look-up {
 
   #time-clock {
     font-size: 22px;
-  }
-
-  .dimmer {
-    flex-direction: row;
-    align-items: center;
-    gap: 10px;
-  }
-
-  #night-sky {
-    align-self: center;
-  }
-
-  .dimmer label {
-    flex: none;
   }
 
   .search {
