@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.1](https://github.com/druewilding/planetarium/compare/v1.5.0...v1.5.1) (2026-11-26)
+
+
+### Bug Fixes
+
+* Stop the atmosphere dimming the sky high above the Earth ([#62](https://github.com/druewilding/planetarium/issues/62)) ([e199105](https://github.com/druewilding/planetarium/commit/e199105da0ca5980fa2e91b46d83ffa88cd7b8de))
+
 ## [1.5.0](https://github.com/druewilding/planetarium/compare/v1.4.1...v1.5.0) (2026-11-26)
 
 
