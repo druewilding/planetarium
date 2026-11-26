@@ -87,4 +87,18 @@ describe("Clock", () => {
     expect(clock.ms).toBe(NOW);
     expect(clock.following).toBe(true);
   });
+
+  test("goes back to real speed, keeping the time, and stays paused if paused", () => {
+    const clock = new Clock();
+    clock.faster();
+    clock.faster();
+    clock.set(NOW + 86400000, { animate: false });
+    clock.realSpeed();
+    expect(clock.rate).toBe(1);
+    expect(clock.ms).toBe(NOW + 86400000);
+    clock.faster();
+    clock.togglePlay();
+    clock.realSpeed();
+    expect(clock.rateLabel).toBe("Paused");
+  });
 });

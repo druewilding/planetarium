@@ -3,7 +3,7 @@
 
 import { A, AU_KM, Body, compassPoint, PLANETS, R2D } from "../astro.js";
 import { lunarEclipsesFrom, nextTotalSolarEclipse, solarEclipsesFrom } from "../eclipses.js";
-import { jupiterMoons, searchMoonEvents } from "../satellites.js";
+import { jupiterMoons, moonEventsBetween, nextMoonEvents } from "../satellites.js";
 import { seasonAt } from "../season.js";
 import { bodyPosition, distanceAU, LIGHT_SPEED_KM_S, LIGHT_YEAR_AU, LIGHT_YEAR_KM, starPosition } from "../space.js";
 import { skylineAt, spansAboveSkyline } from "../terrain.js";
@@ -396,18 +396,22 @@ export function createInfo({
       ${elong < 15 ? `<p class="note">${esc(p.name)} is too close to the Sun to see right now.</p>` : ""}</div>`;
   }
 
-  // When a moon next crosses Jupiter, casts its shadow on it, and so on: kept
-  // until one of them is over, or you go back before it was worked out.
+  // When a moon next crosses Jupiter, casts its shadow on it, and so on. Every
+  // event from a few days back to three weeks ahead is worked out at once (tens of
+  // milliseconds), so scrubbing back and forth through time doesn't search again.
+  const DAY = 86400000;
+  const MOON_DAYS = 20;
   const moonMemo = new Map();
   function moonEvents(id, ms) {
-    const m = moonMemo.get(id);
-    if (m && ms >= m.from && ms < m.until) return m.events;
-    const events = searchMoonEvents(id, ms);
-    const ends = Object.values(events)
-      .filter(Boolean)
-      .map((e) => e.end);
-    moonMemo.set(id, { from: ms, until: Math.min(ms + 86400000, ...ends), events });
-    return events;
+    let m = moonMemo.get(id);
+    // (A day back from the window's start finds when one going on began.)
+    if (!m || ms < m.from + DAY || ms > m.until - MOON_DAYS * DAY) {
+      const from = ms - 3 * DAY;
+      const until = ms + (MOON_DAYS + 3) * DAY;
+      m = { from, until, all: moonEventsBetween(id, from, until) };
+      moonMemo.set(id, m);
+    }
+    return nextMoonEvents(m.all, ms, MOON_DAYS);
   }
 
   const MOON_EVENTS = [
@@ -444,9 +448,9 @@ export function createInfo({
       ? "Hidden behind Jupiter"
       : m.inFront
         ? "Crossing in front of Jupiter"
-        : m.light < 0.02
-          ? "In Jupiter’s shadow, dark"
-          : `${sep < 1 ? `${(sep * 60).toFixed(0)}″` : `${sep.toFixed(1)}′`} ${side} of Jupiter${m.light < 0.98 ? ", going into its shadow" : ""}`;
+        : m.light < 0.5
+          ? `In Jupiter’s shadow${m.light < 0.02 ? ", dark" : m.entering ? ", fading out" : ", lighting up"}`
+          : `${sep < 1 ? `${(sep * 60).toFixed(0)}″` : `${sep.toFixed(1)}′`} ${side} of Jupiter${m.light < 0.98 ? (m.entering ? ", going into its shadow" : ", coming out of its shadow") : ""}`;
     const whole = Math.floor(def.periodDays);
     const hours = Math.round((def.periodDays - whole) * 24);
     const period = `${whole} day${whole === 1 ? "" : "s"} ${hours} hours`;

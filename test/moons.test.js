@@ -3,7 +3,15 @@ import { describe, expect, test } from "vitest";
 
 import { A, AU_KM, computeSky, R2D } from "../src/astro.js";
 import { readLink, writeLink } from "../src/link.js";
-import { insideDisc, JUPITER_MOONS, jupiterMoons, searchMoonEvents, sunlightPast } from "../src/satellites.js";
+import {
+  insideDisc,
+  JUPITER_MOONS,
+  jupiterMoons,
+  moonEventsBetween,
+  nextMoonEvents,
+  searchMoonEvents,
+  sunlightPast,
+} from "../src/satellites.js";
 
 const oslo = { lat: 59.91, lon: 10.75, tz: "Europe/Oslo" };
 const START = Date.parse("2026-11-27T00:00Z");
@@ -184,5 +192,41 @@ describe("sunlightPast", () => {
     const light = sunlightPast(new THREE.Vector3(), sun, new THREE.Vector3(0, 0, 1), 0.0001);
     expect(light).toBeGreaterThan(0.5);
     expect(light).toBeLessThan(1);
+  });
+});
+
+describe("going into Jupiter's shadow, and coming out", () => {
+  test("before opposition, Io fades going in; after it, Io lights up coming out", () => {
+    const fading = moon(computeSky(Date.parse("2025-12-22T00:55Z"), oslo), "Io");
+    expect(fading.light).toBeLessThan(0.98);
+    expect(fading.entering).toBe(true);
+    const vancouver = { lat: 49.28, lon: -123.12 };
+    const events = searchMoonEvents("Io", Date.parse("2026-03-01T03:00Z"));
+    const lighting = moon(computeSky(events.eclipse.end, vancouver), "Io");
+    expect(lighting.light).toBeGreaterThan(0.02);
+    expect(lighting.light).toBeLessThan(0.98);
+    expect(lighting.entering).toBe(false);
+  });
+});
+
+describe("a moon's events, worked out once for a while", () => {
+  const from = Date.parse("2025-12-18T00:00Z");
+  const all = moonEventsBetween("Io", from, from + 10 * 86400000);
+
+  test("lists every crossing, about one an orbit", () => {
+    expect(all.transit.length).toBeGreaterThanOrEqual(5);
+    expect(all.transit.length).toBeLessThanOrEqual(6);
+    for (const e of all.transit) expect(e.end - e.start).toBeGreaterThan(100 * MINUTE);
+  });
+
+  test("gives the same next events as searching from that moment", () => {
+    for (const iso of ["2025-12-21T04:40Z", "2025-12-22T12:00Z"]) {
+      const ms = Date.parse(iso);
+      const next = nextMoonEvents(all, ms, 3);
+      const searched = searchMoonEvents("Io", ms, { days: 3 });
+      for (const kind of ["transit", "shadow", "eclipse", "hidden"]) {
+        expect(Math.abs(next[kind].start - searched[kind].start)).toBeLessThan(MINUTE);
+      }
+    }
   });
 });

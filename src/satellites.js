@@ -60,11 +60,17 @@ export const JUPITER_MOONS = [
 const JUPITER = PLANETS.find((p) => p.id === "Jupiter");
 const LIGHT_DAYS_PER_AU = AU_KM / 299792.458 / 86400;
 
-/** Where each moon is from Jupiter's centre at `time` (J2000 equator, AU), keyed by id. */
+/**
+ * Where each moon is from Jupiter's centre at `time`, and which way it's going:
+ * { pos (AU), vel (AU/day) }, J2000 equator, keyed by id.
+ */
 function jupiterOffsets(time) {
   const found = A.JupiterMoons(time);
   return Object.fromEntries(
-    JUPITER_MOONS.map((m) => [m.id, new Vector3(found[m.key].x, found[m.key].y, found[m.key].z)])
+    JUPITER_MOONS.map((m) => {
+      const st = found[m.key];
+      return [m.id, { pos: new Vector3(st.x, st.y, st.z), vel: new Vector3(st.vx, st.vy, st.vz) }];
+    })
   );
 }
 
@@ -113,9 +119,10 @@ const ACROSS_WEIGHT = ACROSS.reduce((sum, [, w]) => sum + w, 0);
  * the planet's pole `pole` (a unit vector in that frame) and `def` the planet's
  * PLANETS entry. { behind, inFront: hidden by its disc or crossing it, as you see
  * them; shadowOnPlanet: its shadow falls on the planet; light: the share of
- * sunlight reaching it, out of the planet's shadow }.
+ * sunlight reaching it, out of the planet's shadow; entering: heading into the
+ * shadow rather than out of it (given its `velocity`, in the same frame) }.
  */
-export function satelliteGeometry(offset, radiusKm, planet, sun, pole, def) {
+export function satelliteGeometry(offset, radiusKm, planet, sun, pole, def, velocity = null) {
   const R = def.radiusKm / AU_KM;
   const f = def.flattening ?? 0;
   const look = planet.clone().normalize();
@@ -142,7 +149,13 @@ export function satelliteGeometry(offset, radiusKm, planet, sun, pole, def) {
     }
     light /= ACROSS_WEIGHT;
   }
-  return { behind: !nearer && onDisc, inFront: nearer && onDisc, shadowOnPlanet, light };
+  // Getting nearer the shadow's middle line, or further from it?
+  let entering = false;
+  if (velocity) {
+    const across = offset.clone().addScaledVector(sunward, -offset.dot(sunward));
+    entering = across.dot(velocity.clone().addScaledVector(sunward, -velocity.dot(sunward))) < 0;
+  }
+  return { behind: !nearer && onDisc, inFront: nearer && onDisc, shadowOnPlanet, light, entering };
 }
 
 const cache = new WeakMap();
@@ -161,14 +174,15 @@ export function jupiterMoons(sky) {
   const offsets = jupiterOffsets(sky.time.AddDays(-jupiter.dist * LIGHT_DAYS_PER_AU));
   const pole = planetPole("Jupiter", sky);
   moons = JUPITER_MOONS.map((m) => {
-    const offsetAU = offsets[m.id].applyMatrix4(sky.eqjToWorld);
+    const offsetAU = offsets[m.id].pos.applyMatrix4(sky.eqjToWorld);
+    const velocity = offsets[m.id].vel.applyMatrix4(sky.eqjToWorld);
     const vecAU = jupiter.vecAU.clone().add(offsetAU);
     const dist = vecAU.length();
     const trueDir = vecAU.clone().divideScalar(dist);
     // Bent by the air just as Jupiter is (they're only minutes of arc apart).
     const dir = trueDir.clone().sub(jupiter.trueDir).add(jupiter.dir).normalize();
     const fromSun = vecAU.distanceTo(sky.sun.vecAU);
-    const geometry = satelliteGeometry(offsetAU, m.radiusKm, jupiter.vecAU, sky.sun.vecAU, pole, JUPITER);
+    const geometry = satelliteGeometry(offsetAU, m.radiusKm, jupiter.vecAU, sky.sun.vecAU, pole, JUPITER, velocity);
     return {
       id: m.id,
       name: m.name,
@@ -198,22 +212,26 @@ const fromEarth = (time) => ({
 const vec = (v) => new Vector3(v.x, v.y, v.z);
 
 const STEP_MS = 10 * 60000;
+const DAY_MS = 86400000;
+export const MOON_EVENT_KINDS = ["transit", "shadow", "eclipse", "hidden"];
 
 /**
- * The next times a moon crosses in front of Jupiter (`transit`), casts its shadow
- * on it (`shadow`), goes dark in its shadow (`eclipse`) or hides behind it
- * (`hidden`), as you'd see them: each { start, end } in ms (start may be before
- * `fromMs` if it's happening now), or null if not within `days`.
+ * Every time between `fromMs` and `untilMs` that a moon crosses in front of
+ * Jupiter (`transit`), casts its shadow on it (`shadow`), is in its shadow
+ * (`eclipse`, from when it's half faded) or hides behind it (`hidden`), as you'd
+ * see them: { transit: [{ start, end }, …], … } in ms. (One already going on at
+ * `fromMs` is left out: when it began isn't known.)
  * `seenFrom(time)` gives { planet, sun } from you (J2000 equator, AU); the
  * Earth's centre is near enough for anywhere on or above the Earth.
  */
-export function searchMoonEvents(id, fromMs, { days = 20, seenFrom = fromEarth } = {}) {
+export function moonEventsBetween(id, fromMs, untilMs, { seenFrom = fromEarth } = {}) {
+  const radiusKm = JUPITER_MOONS.find((m) => m.id === id).radiusKm;
   const state = (ms) => {
     const time = A.MakeTime(new Date(ms));
     const { planet, sun } = seenFrom(time);
-    const offset = jupiterOffsets(time.AddDays(-planet.length() * LIGHT_DAYS_PER_AU))[id];
+    const offset = jupiterOffsets(time.AddDays(-planet.length() * LIGHT_DAYS_PER_AU))[id].pos;
     const n = A.RotationAxis(A.Body.Jupiter, time).north;
-    const g = satelliteGeometry(offset, 0, planet, sun, vec(n), JUPITER);
+    const g = satelliteGeometry(offset, radiusKm, planet, sun, vec(n), JUPITER);
     return { transit: g.inFront, shadow: g.shadowOnPlanet, eclipse: g.light < 0.5, hidden: g.behind };
   };
   // To the nearest half minute, between a time it wasn't and one it was (or the other way).
@@ -226,28 +244,43 @@ export function searchMoonEvents(id, fromMs, { days = 20, seenFrom = fromEarth }
     }
     return Math.round((a + b) / 2);
   };
-  const found = { transit: null, shadow: null, eclipse: null, hidden: null };
+  const found = Object.fromEntries(MOON_EVENT_KINDS.map((k) => [k, []]));
   const open = {};
   let prevMs = fromMs;
   let prev = state(fromMs);
-  // Already happening: look back for when it began.
-  for (const key of Object.keys(found)) {
-    if (!prev[key]) continue;
-    let back = fromMs;
-    while (state(back - STEP_MS)[key] && fromMs - back < 86400000) back -= STEP_MS;
-    open[key] = edge(key, back - STEP_MS, back);
-  }
-  const until = fromMs + days * 86400000;
-  for (let ms = fromMs + STEP_MS; ms <= until; ms += STEP_MS) {
+  for (let ms = fromMs + STEP_MS; ms <= untilMs; ms += STEP_MS) {
     const now = state(ms);
-    for (const key of Object.keys(found)) {
-      if (found[key] || now[key] === prev[key]) continue;
+    for (const key of MOON_EVENT_KINDS) {
+      if (now[key] === prev[key]) continue;
       if (now[key]) open[key] = edge(key, prevMs, ms);
-      else if (open[key] != null) found[key] = { start: open[key], end: edge(key, prevMs, ms) };
+      else if (open[key] != null) {
+        found[key].push({ start: open[key], end: edge(key, prevMs, ms) });
+        open[key] = null;
+      }
     }
-    if (Object.values(found).every(Boolean)) break;
     prev = now;
     prevMs = ms;
   }
   return found;
+}
+
+/**
+ * From a list of events (see moonEventsBetween), the next of each kind: going on
+ * at `ms`, or starting within `days`. { transit: { start, end } or null, … }.
+ */
+export function nextMoonEvents(all, ms, days = 20) {
+  return Object.fromEntries(
+    MOON_EVENT_KINDS.map((k) => [k, all[k].find((e) => e.end > ms && e.start < ms + days * DAY_MS) ?? null])
+  );
+}
+
+/**
+ * The next times a moon crosses Jupiter, and so on (see moonEventsBetween): each
+ * { start, end } (start may be before `fromMs` if it's happening now), or null
+ * if not within `days`. (None lasts anywhere near a day, so looking back a day
+ * finds when one going on now began.)
+ */
+export function searchMoonEvents(id, fromMs, { days = 20, seenFrom } = {}) {
+  const all = moonEventsBetween(id, fromMs - DAY_MS, fromMs + days * DAY_MS, { seenFrom });
+  return nextMoonEvents(all, fromMs, days);
 }

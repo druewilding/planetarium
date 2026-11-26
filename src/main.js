@@ -538,7 +538,9 @@ async function main() {
     onEclipse: (body, ms, place) => goToEclipse(body, ms, place),
     // (Look once the sky has caught up with the new time.)
     onWhen: (ms) => {
+      // (At real speed, or a two-hour crossing is over before you've seen it.)
       clock.set(ms, { animate: false });
+      clock.realSpeed();
       lookWhenThere = true;
     },
     placeName: (lat, lon) => location.fromPoint(lat, lon).name,
@@ -591,7 +593,8 @@ async function main() {
     glassesBtn.setAttribute("aria-pressed", String(on));
     $("labels").classList.toggle("glasses", on);
     for (const group of overlays.groups) group.visible = !on;
-    planetPoints.points.visible = planetDiscs.group.visible = satellitePoints.points.visible = !on;
+    // (Jupiter's moons are hidden too: see updateSatellites.)
+    planetPoints.points.visible = planetDiscs.group.visible = !on;
     // You put them on to look at the Sun.
     if (on) view.lookAt(sky.sun.dir, Math.min(view.state.fov, 4));
   }
@@ -1606,7 +1609,8 @@ async function main() {
     satelliteMaterial.uniforms.uBoost.value = telescopeGain(view.state.fov);
     // Names: once they're apart from Jupiter, or crossing its disc once that's big.
     const disc = smooth(SATELLITE_FROM, SATELLITE_TO, shownRadius(jupiter) * perRad);
-    return moons.filter((m, i) => !m.behind && (m.inFront ? disc : apart[i]) > 0.5);
+    // (Not while it's dark in Jupiter's shadow: there's nothing there to name or tap.)
+    return moons.filter((m, i) => !m.behind && m.light >= 0.5 && (m.inFront ? disc : apart[i]) > 0.5);
   }
 
   // Put a disc's label just outside its edge, however far you zoom in.
