@@ -1318,6 +1318,7 @@ async function main() {
   }
 
   const LOOK_FOV = 0.1; // degrees: how far Look at it zooms in on a planet or moon
+  const STAR_FOV = 3; // and on a star
   function lookAtSelection() {
     if (selection?.type === "earth") return faceEarth();
     const d = selectionDir();
@@ -1328,6 +1329,9 @@ async function main() {
     // (Close enough for Saturn's rings, or Jupiter with its moons around it. Pluto needs all the zoom there is.)
     if (selection.type === "planet" || selection.type === "satellite")
       fov = PLANETS.find((p) => p.id === selection.id)?.dwarf ? MIN_FOV : LOOK_FOV;
+    // A star is a point however close you get: look at it as through binoculars, among its
+    // neighbours (fainter ones show, zoomed in: see telescopeGain).
+    if (selection.type === "star") fov = Math.min(fov, STAR_FOV);
     if (selection.type === "constellation") fov = Math.max(fov, 50);
     const { az } = altAz(d);
     // Behind the ground or the hills: face its direction, just above the skyline.

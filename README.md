@@ -40,13 +40,14 @@ sky with no connection (the hills and place names need one the first time you vi
   things than your eyes can. They hide behind Jupiter as they go round, cross in front of it (bright Io almost vanishes
   against the clouds, dark Callisto shows as a grey smudge), cast small black shadows on its clouds, and fade out for a
   couple of hours in its shadow. Tap one, or search for it, for how far it is from Jupiter, how long it takes to go
-  round, and when its next shadow, crossing, eclipse and disappearance behind Jupiter are: tap one to go there.
+  round, and when its next shadow, crossing, eclipse and disappearance behind Jupiter are: tap one to go there. Jupiter's own card lists the four, and where each one is now.
 - **Zoom in to see fainter things:** a view narrower than the screen is like looking through binoculars or a
   telescope, and each zoom shows as faint as the one it stands for would: about 2½ magnitudes fainter at a few degrees,
   and at the closest zoom (0.04°) about 8, like a 30 cm telescope. Stars, planets and moons alike: under a bright Moon
   or a city sky, zooming in brings back the stars it hid (the Pleiades, all named, at a few degrees).
 - **Pluto:** a dwarf planet, far too faint for the eye (magnitude 14½), it just shows at the closest zoom, a tiny
-  point, from a dark site with Pluto high up. **Look at it** on Pluto zooms all the way in.
+  point, from a dark site with Pluto high up. **Look at it** on Pluto zooms all the way in, and on a star it zooms in
+  to 3°, as through binoculars: the star among its fainter neighbours.
 - **Eclipses:** in a solar eclipse the Moon covers the Sun and the sky darkens with it. Even with most of the Sun
   covered, what's left still dazzles, so **Eclipse glasses** appear: like the real thing, they black out everything
   but the Sun, and the Moon's bite finally shows (in totality they show nothing, which is your cue to take them off). In a lunar eclipse the Earth's
