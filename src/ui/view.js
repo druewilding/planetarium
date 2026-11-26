@@ -232,6 +232,16 @@ export function createView(camera, canvas, { onClick, unproject, sensor, grab } 
   /** Smoothly turn (and zoom) to a view. `duration` in seconds: a slow drift, or a quick turn. */
   function lookTo({ alt, az, fov = state.fov, roll = 0 }, { duration = 0.9 } = {}) {
     fov = MathUtils.clamp(fov, MIN_FOV, MAX_FOV);
+    // Turning a long way and zooming a long way in (to a planet, say): zoom as you
+    // turn and what you're turning to is off the edge of the narrowing view, as if
+    // heading the wrong way. So turn first, then zoom in.
+    const turning = alt !== undefined && az !== undefined && !sensorOn();
+    if (turning && fov < state.fov / 4 && angleTo(alt, az, roll) > fov) {
+      lookTo({ alt, az, roll }, { duration });
+      const zoom = Math.min(2.5, 0.5 + 0.12 * Math.log2(state.fov / fov));
+      tween.then = () => lookTo({ fov }, { duration: zoom });
+      return;
+    }
     if (free) {
       // Turning to a direction comes back upright; only zooming keeps the turn as it is.
       const keep = alt === undefined && az === undefined;
@@ -265,6 +275,22 @@ export function createView(camera, canvas, { onClick, unproject, sensor, grab } 
     };
   }
 
+  /** How far (degrees) the view would turn to face alt/az. */
+  function angleTo(alt, az, roll) {
+    if (free) return (orient.angleTo(aimFor(alt, az, roll)) * 180) / Math.PI;
+    const r = Math.PI / 180;
+    const c =
+      Math.sin(alt * r) * Math.sin(state.alt * r) +
+      Math.cos(alt * r) * Math.cos(state.alt * r) * Math.cos((az - state.az) * r);
+    return Math.acos(MathUtils.clamp(c, -1, 1)) / r;
+  }
+
+  function finishTween() {
+    const then = tween.then;
+    tween = null;
+    then?.();
+  }
+
   /** Turn the view by this much, including any turn in progress (to follow something that moves). */
   function shift(dAlt, dAz) {
     if (sensorOn() || free) return; // the phone does the aiming (or there's no up in space)
@@ -294,7 +320,7 @@ export function createView(camera, canvas, { onClick, unproject, sensor, grab } 
       if (tween.free) {
         orient.slerpQuaternions(tween.from, tween.aim, k);
         state.fov = tween.fovFrom * (tween.to.fov / tween.fovFrom) ** k;
-        if (tween.t >= 1) tween = null;
+        if (tween.t >= 1) finishTween();
         apply();
         return;
       }
@@ -302,7 +328,7 @@ export function createView(camera, canvas, { onClick, unproject, sensor, grab } 
       if (!following) state.az = MathUtils.lerp(tween.from.az, tween.to.az, k);
       // Zoom geometrically so it feels even.
       state.fov = tween.from.fov * (tween.to.fov / tween.from.fov) ** k;
-      if (tween.t >= 1) tween = null;
+      if (tween.t >= 1) finishTween();
     } else if (free) {
       if (pointers.size === 0 && (spin.yaw || spin.pitch)) {
         turnBy(spin.yaw * dt, spin.pitch * dt);
