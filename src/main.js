@@ -18,7 +18,7 @@ import { climb, GROUND_KM } from "./climb.js";
 import { Clock } from "./clock.js";
 import { EARTH_RADIUS_KM } from "./constants.js";
 import { DEFAULT_BODY, readLink, writeLink } from "./link.js";
-import { createProjection } from "./projection.js";
+import { createProjection, eyeScale } from "./projection.js";
 import {
   ATMOSPHERES,
   averageSkyLuminance,
@@ -1515,19 +1515,13 @@ async function main() {
   }));
   const tmp = new THREE.Vector3();
 
-  // Put a disc's label just outside its edge, however far you zoom in.
-  /**
-   * How much bigger to draw the Sun and Moon. Zoomed out, a true-size Moon is a few
-   * pixels across, far smaller than it looks to the eye (a phone held up covers about
-   * 30° of sky, not the 80° it shows). Zoomed in close, it's drawn true to size.
-   */
+  /** How much bigger to draw the Sun and Moon, so they look the size they do to your eye (see eyeScale). */
   function bodyScale() {
-    if (!layers.bigBodies) return 1;
-    const t = Math.min(1, Math.max(0, (view.state.fov - 3) / (60 - 3)));
-    return 1 + 2.5 * t * t * (3 - 2 * t);
+    return layers.bigBodies ? eyeScale(view.state.fov) : 1;
   }
   const shownRadius = (body) => body.angularRadius * bodyScale();
 
+  // Put a disc's label just outside its edge, however far you zoom in.
   function edgeOffset(body) {
     const px = shownRadius(body) * (canvas.clientHeight / (view.state.fov * (Math.PI / 180)));
     const k = Math.max(12, px * 0.75 + 6);

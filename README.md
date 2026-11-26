@@ -25,8 +25,9 @@ sky with no connection (the hills and place names need one the first time you vi
   bright Moon or twilight.
 - **The Moon:** a lit 3D sphere with a NASA LRO texture, so its phase, tilt, libration and earthshine all come straight
   from the geometry. On a dark night it glows, the way haze and your own eyes make it dazzle. Zoomed out, the Sun and
-  Moon are drawn up to 3½ times larger, because at true size a wide view shrinks them to a few pixels; zoom in and
-  they're true to size (or turn off **Enlarge Sun & Moon**). The phase icon in the info panel is turned the way the
+  Moon are drawn larger, so they look the size they do to your eye: a wide view squeezes the sky onto a screen that
+  takes up much less of your vision (about 23°), and this undoes that, up to 4 times. Zoom in past that and they're
+  true to size, as if through a telescope (or turn off **Enlarge Sun & Moon**). The phase icon in the info panel is turned the way the
   Moon looks in your sky right now, so near the equator a crescent lies on its back.
 - **Eclipses:** in a solar eclipse the Moon covers the Sun and the sky darkens with it. Even with most of the Sun
   covered, what's left still dazzles, so **Eclipse glasses** appear: like the real thing, they black out everything
