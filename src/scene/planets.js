@@ -8,9 +8,18 @@
 
 import * as THREE from "three";
 
-import { SUN_ILLUMINANCE } from "../astro.js";
+import { planetPole, SUN_ILLUMINANCE } from "../astro.js";
+import { SUN_LUMINANCE } from "./bodies.js";
 
-export const PLANET_DISTANCE = 985; // behind the Moon, in front of the Sun (so transits work)
+const PLANET_DISTANCE = 985; // behind the Moon, so it can pass in front of them
+
+// What's in front of what is decided by drawing order rather than depth: at these
+// sizes, the globe and the far side of Saturn's rings are too close together for
+// the depth buffer to tell apart. The Sun is drawn at 6: a planet nearer than the
+// Sun and close to it on the sky (a transit) goes after it, any other before it.
+const BEHIND_SUN = 5.2;
+const IN_FRONT_OF_SUN = 6.2;
+const NEAR_SUN = 0.05; // radians
 
 // Saturn's rings, in Saturn radii: the faint C ring, the bright B ring, the Cassini
 // division, and the A ring. [inner edge, opacity, brightness]
@@ -20,7 +29,10 @@ const RINGS = [
   [1.95, 0.12, 0.25],
   [2.03, 0.6, 0.5],
 ];
-export const RING_OUTER = 2.27;
+const RING_OUTER = 2.27;
+
+/** How far out a planet's drawing reaches, in its own radii (Saturn's rings reach well beyond its globe). */
+export const discExtent = (def) => (def.rings ? RING_OUTER : 1);
 
 /** Disc radius in pixels at which a planet starts to show as a disc, and where the point has gone. */
 const FADE_FROM = 1.2;
@@ -65,7 +77,7 @@ const RING_SHADOW = /* glsl */ `
 const COMMON = /* glsl */ `
   uniform vec3 uSunLocal;  // towards the Sun, in the planet's frame
   uniform vec3 uViewLocal; // towards you, in the planet's frame
-  uniform vec3 uSurface;   // colour × albedo
+  uniform vec3 uSurface;   // colour, at a luminance of 1 (albedo is in uLit)
   uniform float uLit;      // luminance of a face square-on to the Sun, cd/m²
   uniform vec3 uTransmit;
   uniform float uPlanetExposure;
@@ -78,12 +90,13 @@ export function createPlanetDiscs(shared, glsl, defs) {
   // The rings lie in the planet's equator (its local xz plane).
   const ringGeometry = new THREE.RingGeometry(RINGS[0][0], RING_OUTER, 128, 1).rotateX(-Math.PI / 2);
 
+  const lum = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
   const discs = defs.map((def) => {
     const uniforms = {
       ...shared,
       uSunLocal: { value: new THREE.Vector3() },
       uViewLocal: { value: new THREE.Vector3() },
-      uSurface: { value: new THREE.Vector3() },
+      uSurface: { value: new THREE.Vector3(...def.surface).multiplyScalar(1 / lum(def.surface)) },
       uLit: { value: 0 },
       uTransmit: { value: new THREE.Vector3(1, 1, 1) },
       uPlanetExposure: { value: 1 },
@@ -91,6 +104,8 @@ export function createPlanetDiscs(shared, glsl, defs) {
       uBands: { value: def.bands ?? 0 },
       uRocky: { value: def.rocky ? 1 : 0 },
       uRings: { value: def.rings ? 1 : 0 },
+      uFlattening: { value: def.flattening ?? 0 },
+      uSkyExposure: { value: 1 },
     };
     const globe = new THREE.Mesh(
       sphere,
@@ -104,6 +119,7 @@ export function createPlanetDiscs(shared, glsl, defs) {
           ${RING_SHADOW}
           uniform float uBands;
           uniform float uRocky;
+          uniform float uSkyExposure; // for the sky in front of it (dimmer against the Sun)
           varying vec3 vLocal;
           varying vec3 vPos;
           void main() {
@@ -122,12 +138,12 @@ export function createPlanetDiscs(shared, glsl, defs) {
               + 0.6 * smoothstep(45.0, 70.0, la);
             vec3 tint = mix(vec3(1.0), vec3(0.72, 0.56, 0.42), uBands * belt * 0.6);
             vec3 x = uSurface * tint * uTransmit * uLit * lit * uPlanetExposure;
-            vec3 sky = skyAt(normalize(vPos)) * uExposure;
+            vec3 sky = skyAt(normalize(vPos)) * uSkyExposure;
             gl_FragColor = vec4(linearToSrgb(acesFilm(x + sky)) * uFade, uFade);
           }
         `,
         transparent: true,
-        depthWrite: true,
+        depthWrite: false,
         blending: THREE.CustomBlending,
         blendSrc: THREE.OneFactor,
         blendDst: THREE.OneMinusSrcAlphaFactor,
@@ -135,7 +151,6 @@ export function createPlanetDiscs(shared, glsl, defs) {
     );
     globe.matrixAutoUpdate = false;
     globe.frustumCulled = false;
-    globe.renderOrder = 5;
     globe.visible = false;
     group.add(globe);
 
@@ -150,12 +165,18 @@ export function createPlanetDiscs(shared, glsl, defs) {
             ${glsl.DISPLAY}
             ${COMMON}
             ${RING_SHADOW}
+            uniform float uFlattening;
             varying vec3 vLocal;
             varying vec3 vPos;
             void main() {
               float r = length(vLocal.xz);
               float op = ringOpacity(r);
               if (op <= 0.0) discard;
+              // Hidden behind the globe? (Does the way towards you pass through it?
+              // The globe is squashed at the poles: stretch it back to a sphere.)
+              vec3 v = normalize(uViewLocal * vec3(1.0, 1.0 / (1.0 - uFlattening), 1.0));
+              float bv = dot(vLocal, v);
+              if (bv < 0.0 && bv * bv > dot(vLocal, vLocal) - 1.0) discard;
               vec3 s = uSunLocal;
               // Lit from above or below; seen from the other side, only what shines through.
               float lit = smoothstep(0.0, 0.05, abs(s.y)) * mix(0.25, 1.0, step(0.0, s.y * uViewLocal.y));
@@ -178,7 +199,6 @@ export function createPlanetDiscs(shared, glsl, defs) {
       );
       ring.matrixAutoUpdate = false;
       ring.frustumCulled = false;
-      ring.renderOrder = 5.5;
       ring.visible = false;
       group.add(ring);
     }
@@ -191,15 +211,16 @@ export function createPlanetDiscs(shared, glsl, defs) {
   const z = new THREE.Vector3();
   const pos = new THREE.Vector3();
   const scale = new THREE.Vector3();
-  const lum = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  const pole = new THREE.Vector3();
+  const toSun = new THREE.Vector3();
 
   /**
-   * planets: computeSky().planets. scale: how much bigger than true size to draw
+   * planets: computeSky().planets, of `sky`. scale: how much bigger than true size to draw
    * them (see eyeScale), pxPerRad: the screen's pixels per radian. light(p):
    * { transmit: RGB, shown: bool } for a planet. Returns how far each one has
    * turned from a point into a disc (0 to 1), for fading the points out.
    */
-  function update(planets, { scale: k, pxPerRad, exposure, light }) {
+  function update(planets, sky, { scale: k, pxPerRad, exposure, light }) {
     return planets.map((p, i) => {
       const d = discs[i];
       const angR = p.angularRadius * k;
@@ -210,11 +231,12 @@ export function createPlanetDiscs(shared, glsl, defs) {
       if (!shown) return 0;
 
       // A frame with y up the planet's axis.
-      x.crossVectors(p.axis, p.dir);
-      if (x.lengthSq() < 1e-8) x.set(1, 0, 0).cross(p.axis);
+      planetPole(p.id, sky, pole);
+      x.crossVectors(pole, p.dir);
+      if (x.lengthSq() < 1e-8) x.set(1, 0, 0).cross(pole);
       x.normalize();
-      z.crossVectors(x, p.axis);
-      basis.makeBasis(x, p.axis, z);
+      z.crossVectors(x, pole);
+      basis.makeBasis(x, pole, z);
       toLocal.copy(basis).transpose();
       const r = Math.tan(angR) * PLANET_DISTANCE;
       pos.copy(p.dir).multiplyScalar(PLANET_DISTANCE);
@@ -228,19 +250,24 @@ export function createPlanetDiscs(shared, glsl, defs) {
           .setPosition(pos);
         d.ring.matrixWorldNeedsUpdate = true;
       }
+      const transit = p.dist < sky.sun.dist && p.dir.angleTo(sky.sun.dir) < NEAR_SUN;
+      d.globe.renderOrder = transit ? IN_FRONT_OF_SUN : BEHIND_SUN;
+      if (d.ring) d.ring.renderOrder = d.globe.renderOrder + 0.1;
 
       const u = d.uniforms;
-      u.uSunLocal.value.copy(p.sunDir).applyMatrix4(toLocal);
+      toSun.copy(sky.sun.vecAU).sub(p.vecAU);
+      const sunDist = toSun.length();
+      u.uSunLocal.value.copy(toSun).divideScalar(sunDist).applyMatrix4(toLocal);
       u.uViewLocal.value.copy(p.dir).negate().applyMatrix4(toLocal);
-      const c = d.def.surface;
-      u.uSurface.value.set(...c).multiplyScalar(1 / lum(c));
       // A face square-on to the Sun: albedo × sunlight there ÷ π.
-      const L = (d.def.albedo * SUN_ILLUMINANCE) / (p.sunDist * p.sunDist) / Math.PI;
+      const L = (d.def.albedo * SUN_ILLUMINANCE) / (sunDist * sunDist) / Math.PI;
       u.uLit.value = L;
       u.uTransmit.value.fromArray(transmit);
       // As with the Moon, the eye adapts to the bright disc it's looking at.
       u.uPlanetExposure.value = Math.min(exposure, 0.9 / L);
       u.uFade.value = fade;
+      // In front of the Sun, it's seen against the dazzling disc (exposed as in createSun), so it's black.
+      u.uSkyExposure.value = transit ? Math.min(exposure, 4 / SUN_LUMINANCE) : exposure;
       return fade;
     });
   }

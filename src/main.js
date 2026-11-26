@@ -36,7 +36,7 @@ import { setFade } from "./scene/lines.js";
 import { createMilkyWay } from "./scene/milkyway.js";
 import { createOrbits } from "./scene/orbits.js";
 import { createOverlays } from "./scene/overlays.js";
-import { createPlanetDiscs, RING_OUTER } from "./scene/planets.js";
+import { createPlanetDiscs, discExtent } from "./scene/planets.js";
 import { createPlanetPoints, createPointsMaterial, createStars } from "./scene/points.js";
 import { earthAxes, latLonOf, surfaceDirection } from "./space.js";
 import {
@@ -1457,10 +1457,10 @@ async function main() {
       const score = d - bonus;
       if (score < bestScore) [bestScore, best] = [score, make];
     };
-    const pxPerRad = canvas.clientHeight / (view.state.fov * (Math.PI / 180));
-    consider(sky.sun.dir, Math.max(20, shownRadius(sky.sun) * pxPerRad + 6), 10, selectSun);
-    consider(sky.moon.dir, Math.max(20, shownRadius(sky.moon) * pxPerRad + 6), 10, selectMoon);
-    for (const p of sky.planets) consider(p.dir, Math.max(18, shownExtent(p) * pxPerRad + 6), 6, () => selectPlanet(p));
+    const perRad = pxPerRad();
+    consider(sky.sun.dir, Math.max(20, shownRadius(sky.sun) * perRad + 6), 10, selectSun);
+    consider(sky.moon.dir, Math.max(20, shownRadius(sky.moon) * perRad + 6), 10, selectMoon);
+    for (const p of sky.planets) consider(p.dir, Math.max(18, shownExtent(p) * perRad + 6), 6, () => selectPlanet(p));
     for (const s of catalog.stars) {
       if (s.mag > globalLimit + 0.5) break; // sorted by magnitude
       consider(s.position(sky).dir, 14, Math.max(0, 4 - s.mag) * 1.5, () => selectStar(s));
@@ -1524,11 +1524,14 @@ async function main() {
   }
   const shownRadius = (body) => body.angularRadius * bodyScale();
   /** How far out a body reaches on the sky, as drawn: Saturn's rings reach well beyond its globe. */
-  const shownExtent = (body) => shownRadius(body) * (body.def?.rings ? RING_OUTER : 1);
+  const planetDef = Object.fromEntries(PLANETS.map((p) => [p.id, p]));
+  const shownExtent = (body) => shownRadius(body) * (body.id in planetDef ? discExtent(planetDef[body.id]) : 1);
+  /** The screen's pixels per radian of sky, at its middle. */
+  const pxPerRad = () => canvas.clientHeight / (view.state.fov * D2R);
 
   // Put a disc's label just outside its edge, however far you zoom in.
   function edgeOffset(body, least = 12) {
-    const px = shownExtent(body) * (canvas.clientHeight / (view.state.fov * (Math.PI / 180)));
+    const px = shownExtent(body) * pxPerRad();
     const k = Math.max(least, px * 0.75 + 6);
     return [k, -k];
   }
@@ -1675,7 +1678,7 @@ async function main() {
             : selection.type === "planet"
               ? shownExtent(sky.planets.find((p) => p.id === selection.id))
               : 0;
-      const px = angR * (canvas.clientHeight / (view.state.fov * (Math.PI / 180)));
+      const px = angR * pxPerRad();
       if (px < 14)
         items.push({
           key: "sel",
@@ -1943,9 +1946,9 @@ async function main() {
 
     sun.update(sky.sun, tSun, exposure, camera, eclipse, bodyScale(), sunThrough, glasses, isAloft());
     moon.update(sky.moon, sky, tMoon, exposure, camera, bodyScale(), moonThrough, isAloft());
-    const discs = planetDiscs.update(sky.planets, {
+    const discs = planetDiscs.update(sky.planets, sky, {
       scale: bodyScale(),
-      pxPerRad: canvas.clientHeight / (view.state.fov * D2R),
+      pxPerRad: pxPerRad(),
       exposure,
       light: (p) => {
         const through = throughEarth(p);

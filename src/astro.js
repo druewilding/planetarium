@@ -236,17 +236,16 @@ export function computeSky(ms, loc, above = null) {
     s.mag = ill.mag;
     s.phaseFraction = ill.phase_fraction;
     s.angularRadius = Math.asin(p.radiusKm / (s.dist * AU_KM));
-    // For drawing its disc: which way the Sun is from it, how far, and its north pole.
-    const toSun = sun.vecAU.clone().sub(s.vecAU);
-    s.sunDist = toSun.length();
-    s.sunDir = toSun.normalize();
-    const n = A.RotationAxis(Body[p.id], time).north;
-    s.axis = new Vector3(n.x, n.y, n.z).applyMatrix4(eqjToWorld).normalize();
-    s.def = p;
     return s;
   });
 
   return { ms, time, obs, eqjToWorld, eqdToWorld, sun, moon, planets };
+}
+
+/** A planet's north pole, as a world direction (for drawing its disc: only worked out when it's shown). */
+export function planetPole(id, sky, out = new Vector3()) {
+  const n = A.RotationAxis(Body[id], sky.time).north;
+  return out.set(n.x, n.y, n.z).applyMatrix4(sky.eqjToWorld).normalize();
 }
 
 /** Fraction of the solar disc not covered by the Moon (discs of angular radius rs, rm, centres d apart). */
