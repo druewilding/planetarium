@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.5.0](https://github.com/druewilding/planetarium/compare/v1.4.1...v1.5.0) (2026-11-26)
+
+
+### Features
+
+* Add Pluto, zoom in like a telescope, and link Jupiter with its moons ([#60](https://github.com/druewilding/planetarium/issues/60)) ([bf6c100](https://github.com/druewilding/planetarium/commit/bf6c1003b075b526fc5acf0dd6b4bdf97d7e763b))
+* Keep looking where you were when you lift off ([#56](https://github.com/druewilding/planetarium/issues/56)) ([bff5b1a](https://github.com/druewilding/planetarium/commit/bff5b1a80d11850ae0d2cf47e34913116a94d519))
+* Remove the Sunlight dimmer ([#57](https://github.com/druewilding/planetarium/issues/57)) ([5bd8abd](https://github.com/druewilding/planetarium/commit/5bd8abd1979cf84bd38ec617f075ff1885ec767d))
+* Show Jupiter's four big moons, their shadows, crossings and eclipses ([#59](https://github.com/druewilding/planetarium/issues/59)) ([cf843d4](https://github.com/druewilding/planetarium/commit/cf843d4c4b47721b33cbffdf7d72a41471f8b26a))
+* Show the planets as discs when zoomed in, with zoom controls in orbit ([#58](https://github.com/druewilding/planetarium/issues/58)) ([a73d5f4](https://github.com/druewilding/planetarium/commit/a73d5f42b658989f485b5de53b98673e4a7114f2))
+
 ## [1.4.1](https://github.com/druewilding/planetarium/compare/v1.4.0...v1.4.1) (2026-11-25)
 
 
