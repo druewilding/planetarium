@@ -971,6 +971,11 @@ body:not(.aloft) #look-up {
   color: #ffe2a8;
 }
 
+.label.body.small {
+  font-size: 11px;
+  font-weight: 500;
+}
+
 .label.sun {
   color: #ffd27a;
 }

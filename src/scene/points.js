@@ -129,7 +129,7 @@ export function createStars(catalog, material) {
   return points;
 }
 
-/** Planets as points (positions/magnitudes updated every frame, already in world space). */
+/** Planets (or moons) as points (positions/magnitudes updated every frame, already in world space). */
 export function createPlanetPoints(planetDefs, material) {
   const n = planetDefs.length;
   const geom = new THREE.BufferGeometry();
@@ -142,13 +142,16 @@ export function createPlanetPoints(planetDefs, material) {
   points.frustumCulled = false;
   points.renderOrder = 4;
 
-  /** discs: how far each planet has turned into a disc (see planets.js); its point fades out as it does. */
-  function update(planets, discs = []) {
+  /**
+   * fade: how far each one's point has faded out (0 to 1): a planet's as it turns into a disc
+   * (see planets.js), a moon's while it's too close to its planet to tell apart.
+   */
+  function update(planets, fade = []) {
     const pos = geom.attributes.position;
     const mag = geom.attributes.aMag;
     planets.forEach((p, i) => {
       pos.setXYZ(i, p.trueDir.x, p.trueDir.y, p.trueDir.z);
-      mag.setX(i, p.mag + 8 * (discs[i] ?? 0));
+      mag.setX(i, p.mag + 8 * (fade[i] ?? 0));
     });
     pos.needsUpdate = true;
     mag.needsUpdate = true;

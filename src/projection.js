@@ -45,6 +45,17 @@ export function eyeScale(fovDeg) {
   return MathUtils.clamp(squeeze, 1, MAX_EYE_SCALE);
 }
 
+const MAX_GAIN = 6; // magnitudes
+
+/**
+ * How many magnitudes fainter you can see, zoomed in: as with sizes, a view
+ * narrower than the screen is like looking through binoculars or a telescope,
+ * which gather more light the more they magnify (roughly). 0 for wider views.
+ */
+export function telescopeGain(fovDeg) {
+  return Math.min(MAX_GAIN, 2.5 * Math.log10(Math.max(1, SCREEN_ANGLE / fovDeg)));
+}
+
 /** Angle θ whose screen radius is r (r is monotonic in θ, so bisect). */
 export function thetaFor(r, s) {
   let lo = 0;

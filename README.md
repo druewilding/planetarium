@@ -34,6 +34,11 @@ sky with no connection (the hills and place names need one the first time you vi
   Jupiter is striped and squashed at the poles, and Saturn has its rings, tilted the way they are that year (nearly
   edge-on in 2025–26, wide open by 2029), with the globe's shadow across them. **Look at it** on a planet zooms right in
   (to 0.1°); in a transit, Mercury or Venus crosses the Sun as a black dot.
+- **Jupiter's moons:** Io, Europa, Ganymede and Callisto, where they really are round Jupiter (as they were when the
+  light we see left them, 33 to 54 minutes ago). Too faint and too close to Jupiter to pick out by eye, they appear once
+  you zoom in far enough to tell them apart from it, as through binoculars or a telescope, which also shows fainter
+  things than your eyes can. They hide behind Jupiter as they go round. Tap one, or search for it, for how far it is
+  from Jupiter and how long it takes to go round.
 - **Eclipses:** in a solar eclipse the Moon covers the Sun and the sky darkens with it. Even with most of the Sun
   covered, what's left still dazzles, so **Eclipse glasses** appear: like the real thing, they black out everything
   but the Sun, and the Moon's bite finally shows (in totality they show nothing, which is your cue to take them off). In a lunar eclipse the Earth's
@@ -120,7 +125,7 @@ sky with no connection (the hills and place names need one the first time you vi
 
 Every part is optional; whatever a link leaves out stays as it is (here and now, the usual view). `body` is the world
 you're standing on, so `lat` and `lon` will mean the same thing on the Moon or Mars. `sel` is `sun`, `moon`,
-`planet:Mars`, `star:Sirius` (or a Hipparcos number, `star:32349`) or `con:Ori`. Editing the address in place jumps
+`planet:Mars`, `satellite:Io` (Jupiter's moons), `star:Sirius` (or a Hipparcos number, `star:32349`) or `con:Ori`. Editing the address in place jumps
 there.
 
 From the browser console, `planetarium.clock.set(Date.parse("2027-08-02T10:00Z"))` jumps to any instant.
@@ -216,7 +221,8 @@ planetarium/
    still to come: rising far enough to see the solar system from outside, true-scale sizes
 3. Fly-to travel between bodies, orbit trails
 4. Standing on the Moon: Earth's phases, the two-week day
-5. Planets and moons: ✅ discs with phases and Saturn's rings; still to come: Jupiter's Galilean moons, Titan, Mars' moons
+5. Planets and moons: ✅ discs with phases and Saturn's rings, ✅ Jupiter's four big moons; still to come: their
+   shadows on Jupiter and eclipses, Titan, Mars' moons
 6. The Martian sky, with its blue sunset
 7. ✅ Eclipses: find them and jump to them, the red Moon, the Moon's shadow on the Earth
 8. ✅ Shareable links (place, time, view in the URL)
