@@ -904,6 +904,7 @@ input[type="number"]:focus {
 /* Up above the Earth, pointing your phone at the real sky, the compass and
    looking up no longer make sense (the zoom stays, under the height) */
 body:not(.aloft) #orient-btn,
+body:not(.aloft) #reset-zoom,
 body.aloft #sensor-btn,
 body.aloft #look-up,
 body.aloft .compass-widget {
@@ -920,6 +921,7 @@ body.aloft .compass-widget {
 
 body.aloft .altitude,
 body.aloft #orient-btn,
+body.aloft #reset-zoom,
 body:not(.aloft) .compass-widget,
 body:not(.aloft) #look-up {
   animation: appear 0.5s ease;

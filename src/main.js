@@ -478,12 +478,16 @@ async function main() {
     const fovOff = Math.abs(view.state.fov - DEFAULT_FOV) > 2;
     if (sensor.active) return fovOff;
     // (Up above: facing the Earth, any way round, zoomed out as Face the Earth leaves it.)
-    if (isAloft()) return earthSeen().angleTo(MIDDLE) > 4 * D2R || Math.abs(view.state.fov - faceFov()) > 1;
+    if (isAloft()) return earthSeen().angleTo(MIDDLE) > 4 * D2R || zoomedAway();
     const d = defaultView(sky);
     const azOff = Math.abs(((view.state.az - d.az + 540) % 360) - 180) > 4;
     return fovOff || azOff || Math.abs(view.state.alt - d.alt) > 4;
   }
   resetBtn.addEventListener("click", resetView);
+  // Up above, Face the Earth turns you as well: this only zooms back out (as far as Face the Earth would).
+  const resetZoomBtn = $("reset-zoom");
+  const zoomedAway = () => Math.abs(view.state.fov - faceFov()) > 1;
+  resetZoomBtn.addEventListener("click", () => view.lookTo({ fov: faceFov() }));
   window.addEventListener("keydown", (e) => {
     if (e.key === "0" && !e.target.closest("input, textarea, select, dialog, [role=slider]")) resetView();
   });
@@ -1978,6 +1982,8 @@ async function main() {
     const up = lookingUp();
     const changed = up || awayFromDefault();
     if (resetBtn.disabled === changed) resetBtn.disabled = !changed;
+    const zoomed = isAloft() && zoomedAway();
+    if (resetZoomBtn.disabled === zoomed) resetZoomBtn.disabled = !zoomed;
     if (up !== (lookUpBtn.getAttribute("aria-pressed") === "true")) {
       lookUpBtn.setAttribute("aria-pressed", String(up));
       lookUpBtn.querySelector("span").textContent = up ? "Back to horizon" : "Look up";
