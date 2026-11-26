@@ -306,7 +306,6 @@ async function main() {
   let loc = null; // current (possibly mid-animation) location
   let locTween = null;
   let layers = {};
-  let sunLevel = 1;
   let exposure = 1;
   let globalLimit = 6;
   // Up above the Earth (see Lift off, below).
@@ -543,31 +542,6 @@ async function main() {
     infoPanel.classList.add("collapsed");
     $("info-btn").setAttribute("aria-pressed", "false");
   }
-
-  // Sunlight dimmer: linear. (The daytime sky is so bright that stars only show
-  // through in the last percent or so; the Night sky button jumps straight there.)
-  const slider = $("sun-level");
-  const nightBtn = $("night-sky");
-  let levelBeforeNight = 100;
-  const updateSunLevel = () => {
-    const pct = parseFloat(slider.value);
-    sunLevel = pct / 100;
-    $("sun-level-out").textContent = pct >= 10 || pct === 0 ? `${pct.toFixed(0)}%` : `${pct.toFixed(1)}%`;
-    nightBtn.setAttribute("aria-pressed", String(pct === 0));
-    nightBtn.textContent = pct === 0 ? "Daylight" : "Night sky";
-  };
-  slider.addEventListener("input", updateSunLevel);
-  nightBtn.addEventListener("click", () => {
-    const pct = parseFloat(slider.value);
-    if (pct > 0) {
-      levelBeforeNight = pct;
-      slider.value = "0";
-    } else {
-      slider.value = String(levelBeforeNight || 100);
-    }
-    updateSunLevel();
-  });
-  updateSunLevel();
 
   // ---- Compass ----
   const compass = createCompass($("compass"), {
@@ -1855,8 +1829,7 @@ async function main() {
     // During an eclipse only the uncovered part of the Sun lights the sky. Even in
     // totality some light reaches us from beyond the Moon's shadow, so keep a little.
     const eclipse = sky.sun.visibleFraction < 1 ? Math.max(sky.sun.visibleFraction, 1e-5) : 1;
-    const fullSunE = sky.sun.illuminance * eclipse;
-    const sunE = fullSunE * sunLevel;
+    const sunE = sky.sun.illuminance * eclipse;
     // Skylight illuminance for the multiple-scattering term (from last frame's sky).
     const ambient = layers.atmosphere ? Math.PI * lastAverage : 0;
     const moonE = sky.moon.illuminance;
@@ -1890,16 +1863,10 @@ async function main() {
     // through sunset, rather than switching between the two.
     const adaptTo = (avg, pk) => avg + 0.25 * pk;
     let adapt = adaptTo(average, peak);
-    if (sunLevel < 1 && fullSunE > 0) {
-      // The dimmer only partly adapts, so sliding it down always makes the scene darker.
-      const full = averageSkyLuminance(atm, [{ dir: sky.sun.trueDir, e: fullSunE * skyFade }, lights[1]], ambient);
-      adapt = adaptTo(full.average, full.peak) ** 0.4 * adapt ** 0.6;
-    }
     // With no atmosphere the sky is black, so the eye adapts to the sunlit ground
     // instead, which would otherwise glare white. It shows a mid grey, as on the Moon.
     if (!layers.atmosphere && layers.ground) {
-      let groundL = (GROUND_ALBEDO * groundE) / Math.PI;
-      if (sunLevel < 1) groundL = ((GROUND_ALBEDO * groundLight(fullSunE)) / Math.PI) ** 0.4 * groundL ** 0.6;
+      const groundL = (GROUND_ALBEDO * groundE) / Math.PI;
       adapt = Math.max(adapt, 3 * groundL);
     }
     // Up high, the eye adapts to the sunlit Earth as much of it as fills the view
@@ -1933,8 +1900,8 @@ async function main() {
         : "Take glasses off";
     if (glassesLabel.textContent !== glassesText) glassesLabel.textContent = glassesText;
     // Through the glasses the eye adapts to the Sun's disc itself; everything else is black.
-    // (Floored, so a Sun that has set, or been dimmed right down, can't send it soaring.)
-    if (glasses) exposure = 1.5 / (SUN_LUMINANCE * Math.max(sunLevel, 1e-3) * Math.max(mean(tSun), 1e-3));
+    // (Floored, so a Sun that has set can't send it soaring.)
+    if (glasses) exposure = 1.5 / (SUN_LUMINANCE * Math.max(mean(tSun), 1e-3));
     shared.uExposure.value = exposure;
     shared.uScotopic.value = 0.6 * (1 - smooth(0.005, 1, average + earthLight));
     // Labels and figures recede in daylight, like a printed overlay on a bright sky.
@@ -1968,7 +1935,7 @@ async function main() {
     // (and the sky below the level shows the air's glow, not the dark of see-through ground).
     shared.uSeeThrough.value = layers.ground || isAloft() ? 0 : 1;
 
-    sun.update(sky.sun, tSun, sunLevel, exposure, camera, eclipse, bodyScale(), sunThrough, glasses, isAloft());
+    sun.update(sky.sun, tSun, exposure, camera, eclipse, bodyScale(), sunThrough, glasses, isAloft());
     moon.update(sky.moon, sky, tMoon, exposure, camera, bodyScale(), moonThrough, isAloft());
     planetPoints.update(sky.planets);
     overlays.updateFrames(sky);
