@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { limitFor, radiusFor, stereoAmount, thetaFor } from "../src/projection.js";
+import { eyeScale, limitFor, radiusFor, stereoAmount, thetaFor } from "../src/projection.js";
 
 describe("projection", () => {
   test("is ordinary perspective when zoomed in, and stereographic when zoomed right out", () => {
@@ -24,5 +24,23 @@ describe("projection", () => {
 
   test("draws further from the centre the more stereographic it is", () => {
     expect(limitFor(1)).toBeGreaterThan(limitFor(0));
+  });
+});
+
+describe("eyeScale", () => {
+  test("is true size once the view is narrower than the screen is in your vision", () => {
+    expect(eyeScale(0.5)).toBe(1);
+    expect(eyeScale(20)).toBe(1);
+  });
+
+  test("grows as the view widens, so the Sun and Moon look the size they feel", () => {
+    expect(eyeScale(40)).toBeGreaterThan(1);
+    expect(eyeScale(70)).toBeCloseTo(3.4, 1);
+    expect(eyeScale(40)).toBeLessThan(eyeScale(60));
+  });
+
+  test("stops growing for whole-sky views", () => {
+    expect(eyeScale(120)).toBe(4);
+    expect(eyeScale(180)).toBe(4);
   });
 });

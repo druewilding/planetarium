@@ -18,7 +18,7 @@ import { climb, GROUND_KM } from "./climb.js";
 import { Clock } from "./clock.js";
 import { EARTH_RADIUS_KM } from "./constants.js";
 import { DEFAULT_BODY, readLink, writeLink } from "./link.js";
-import { createProjection } from "./projection.js";
+import { createProjection, eyeScale } from "./projection.js";
 import {
   ATMOSPHERES,
   averageSkyLuminance,
@@ -36,6 +36,7 @@ import { setFade } from "./scene/lines.js";
 import { createMilkyWay } from "./scene/milkyway.js";
 import { createOrbits } from "./scene/orbits.js";
 import { createOverlays } from "./scene/overlays.js";
+import { createPlanetDiscs, discExtent } from "./scene/planets.js";
 import { createPlanetPoints, createPointsMaterial, createStars } from "./scene/points.js";
 import { earthAxes, latLonOf, surfaceDirection } from "./space.js";
 import {
@@ -54,7 +55,7 @@ import { createLocation } from "./ui/location.js";
 import { createLayersPanel, createSearch } from "./ui/panels.js";
 import { createSensor, sensorSupported } from "./ui/sensor.js";
 import { createTimebar } from "./ui/timebar.js";
-import { createView } from "./ui/view.js";
+import { createView, MIN_FOV } from "./ui/view.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -225,6 +226,8 @@ async function main() {
   const orbits = createOrbits(shared, glsl);
   overlays.eqj.add(orbits.group);
   scene.add(planetPoints.points);
+  const planetDiscs = createPlanetDiscs(shared, glsl, PLANETS);
+  scene.add(planetDiscs.group);
 
   moonTex.texture.colorSpace = THREE.NoColorSpace;
   moonTex.texture.wrapS = THREE.RepeatWrapping;
@@ -474,12 +477,17 @@ async function main() {
   function awayFromDefault() {
     const fovOff = Math.abs(view.state.fov - DEFAULT_FOV) > 2;
     if (sensor.active) return fovOff;
-    if (isAloft()) return earthSeen().angleTo(MIDDLE) > 4 * D2R; // (and any way round)
+    // (Up above: facing the Earth, any way round, zoomed out as Face the Earth leaves it.)
+    if (isAloft()) return earthSeen().angleTo(MIDDLE) > 4 * D2R || zoomedAway();
     const d = defaultView(sky);
     const azOff = Math.abs(((view.state.az - d.az + 540) % 360) - 180) > 4;
     return fovOff || azOff || Math.abs(view.state.alt - d.alt) > 4;
   }
   resetBtn.addEventListener("click", resetView);
+  // Up above, Face the Earth turns you as well: this only zooms back out (as far as Face the Earth would).
+  const resetZoomBtn = $("reset-zoom");
+  const zoomedAway = () => Math.abs(view.state.fov - faceFov()) > 1;
+  resetZoomBtn.addEventListener("click", () => view.lookTo({ fov: faceFov() }));
   window.addEventListener("keydown", (e) => {
     if (e.key === "0" && !e.target.closest("input, textarea, select, dialog, [role=slider]")) resetView();
   });
@@ -569,7 +577,7 @@ async function main() {
     glassesBtn.setAttribute("aria-pressed", String(on));
     $("labels").classList.toggle("glasses", on);
     for (const group of overlays.groups) group.visible = !on;
-    planetPoints.points.visible = !on;
+    planetPoints.points.visible = planetDiscs.group.visible = !on;
     // You put them on to look at the Sun.
     if (on) view.lookAt(sky.sun.dir, Math.min(view.state.fov, 4));
   }
@@ -651,6 +659,9 @@ async function main() {
     aloft.startedAt = performance.now();
     beforeLookUp = null;
     view.setFree(true); // no up or down in space
+    // Zoomed right in (on a planet, say), zoom back out to see the Earth fall away.
+    // (Landing zooms back in, to the view you left.)
+    if (view.state.fov !== faceFov()) view.lookTo({ fov: faceFov() }, { duration: 1 });
     setAloftUi(true);
   }
   function comeDown() {
@@ -1288,6 +1299,8 @@ async function main() {
     if (!d) return;
     let fov = view.state.fov;
     if (selection.type === "moon" || selection.type === "sun") fov = Math.min(fov, 20);
+    // A planet is only a point until you're zoomed right in: look at it as through a telescope.
+    if (selection.type === "planet") fov = MIN_FOV;
     if (selection.type === "constellation") fov = Math.max(fov, 50);
     const { az } = altAz(d);
     // Behind the ground or the hills: face its direction, just above the skyline.
@@ -1454,10 +1467,10 @@ async function main() {
       const score = d - bonus;
       if (score < bestScore) [bestScore, best] = [score, make];
     };
-    const pxPerRad = canvas.clientHeight / (view.state.fov * (Math.PI / 180));
-    consider(sky.sun.dir, Math.max(20, shownRadius(sky.sun) * pxPerRad + 6), 10, selectSun);
-    consider(sky.moon.dir, Math.max(20, shownRadius(sky.moon) * pxPerRad + 6), 10, selectMoon);
-    for (const p of sky.planets) consider(p.dir, 18, 6, () => selectPlanet(p));
+    const perRad = pxPerRad();
+    consider(sky.sun.dir, Math.max(20, shownRadius(sky.sun) * perRad + 6), 10, selectSun);
+    consider(sky.moon.dir, Math.max(20, shownRadius(sky.moon) * perRad + 6), 10, selectMoon);
+    for (const p of sky.planets) consider(p.dir, Math.max(18, shownExtent(p) * perRad + 6), 6, () => selectPlanet(p));
     for (const s of catalog.stars) {
       if (s.mag > globalLimit + 0.5) break; // sorted by magnitude
       consider(s.position(sky).dir, 14, Math.max(0, 4 - s.mag) * 1.5, () => selectStar(s));
@@ -1515,22 +1528,21 @@ async function main() {
   }));
   const tmp = new THREE.Vector3();
 
-  // Put a disc's label just outside its edge, however far you zoom in.
-  /**
-   * How much bigger to draw the Sun and Moon. Zoomed out, a true-size Moon is a few
-   * pixels across, far smaller than it looks to the eye (a phone held up covers about
-   * 30° of sky, not the 80° it shows). Zoomed in close, it's drawn true to size.
-   */
+  /** How much bigger to draw the Sun and Moon, so they look the size they do to your eye (see eyeScale). */
   function bodyScale() {
-    if (!layers.bigBodies) return 1;
-    const t = Math.min(1, Math.max(0, (view.state.fov - 3) / (60 - 3)));
-    return 1 + 2.5 * t * t * (3 - 2 * t);
+    return layers.bigBodies ? eyeScale(view.state.fov) : 1;
   }
   const shownRadius = (body) => body.angularRadius * bodyScale();
+  /** How far out a body reaches on the sky, as drawn: Saturn's rings reach well beyond its globe. */
+  const planetDef = Object.fromEntries(PLANETS.map((p) => [p.id, p]));
+  const shownExtent = (body) => shownRadius(body) * (body.id in planetDef ? discExtent(planetDef[body.id]) : 1);
+  /** The screen's pixels per radian of sky, at its middle. */
+  const pxPerRad = () => canvas.clientHeight / (view.state.fov * D2R);
 
-  function edgeOffset(body) {
-    const px = shownRadius(body) * (canvas.clientHeight / (view.state.fov * (Math.PI / 180)));
-    const k = Math.max(12, px * 0.75 + 6);
+  // Put a disc's label just outside its edge, however far you zoom in.
+  function edgeOffset(body, least = 12) {
+    const px = shownExtent(body) * pxPerRad();
+    const k = Math.max(least, px * 0.75 + 6);
     return [k, -k];
   }
 
@@ -1574,6 +1586,7 @@ async function main() {
           cls: `body${p.mag > globalLimit ? " dim" : ""}`,
           priority: 90 - p.mag,
           always: true,
+          offset: edgeOffset(p, 8),
           pick: () => selectPlanet(p),
         });
       }
@@ -1668,8 +1681,14 @@ async function main() {
     // (A chosen mountain's name is highlighted instead of ringed.)
     if (sd && !["constellation", "feature", "earth"].includes(selection.type)) {
       const angR =
-        selection.type === "moon" ? shownRadius(sky.moon) : selection.type === "sun" ? shownRadius(sky.sun) : 0;
-      const px = angR * (canvas.clientHeight / (view.state.fov * (Math.PI / 180)));
+        selection.type === "moon"
+          ? shownRadius(sky.moon)
+          : selection.type === "sun"
+            ? shownRadius(sky.sun)
+            : selection.type === "planet"
+              ? shownExtent(sky.planets.find((p) => p.id === selection.id))
+              : 0;
+      const px = angR * pxPerRad();
       if (px < 14)
         items.push({
           key: "sel",
@@ -1937,7 +1956,19 @@ async function main() {
 
     sun.update(sky.sun, tSun, exposure, camera, eclipse, bodyScale(), sunThrough, glasses, isAloft());
     moon.update(sky.moon, sky, tMoon, exposure, camera, bodyScale(), moonThrough, isAloft());
-    planetPoints.update(sky.planets);
+    const discs = planetDiscs.update(sky.planets, sky, {
+      scale: bodyScale(),
+      pxPerRad: pxPerRad(),
+      exposure,
+      light: (p) => {
+        const through = throughEarth(p);
+        return {
+          shown: through || isAloft() || p.alt > -3,
+          transmit: transmittance(atm, through ? ZENITH : p.trueDir),
+        };
+      },
+    });
+    planetPoints.update(sky.planets, discs);
     overlays.updateFrames(sky);
     updatePlaceLayers(km);
     if (onGround > 0) updatePaths(now);
@@ -1951,6 +1982,8 @@ async function main() {
     const up = lookingUp();
     const changed = up || awayFromDefault();
     if (resetBtn.disabled === changed) resetBtn.disabled = !changed;
+    const zoomed = isAloft() && zoomedAway();
+    if (resetZoomBtn.disabled === zoomed) resetZoomBtn.disabled = !zoomed;
     if (up !== (lookUpBtn.getAttribute("aria-pressed") === "true")) {
       lookUpBtn.setAttribute("aria-pressed", String(up));
       lookUpBtn.querySelector("span").textContent = up ? "Back to horizon" : "Look up";
@@ -1965,7 +1998,8 @@ async function main() {
       moonAz: sky.moon.az,
       moonAlt: sky.moon.alt,
     });
-    $("fov-label").textContent = `${view.state.fov < 10 ? view.state.fov.toFixed(1) : view.state.fov.toFixed(0)}°`;
+    const fov = view.state.fov;
+    $("fov-label").textContent = `${fov < 1 ? fov.toFixed(2) : fov < 10 ? fov.toFixed(1) : fov.toFixed(0)}°`;
     updateOrientButton();
     if (isAloft()) $("alt-label").textContent = altitudeText(aloft.km);
 

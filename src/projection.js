@@ -26,6 +26,25 @@ export function radiusFor(theta, s) {
 /** Furthest angle from the view axis that is drawn at all. */
 export const limitFor = (s) => 1.5 + (2.6 - 1.5) * s;
 
+// How much of your own vision the screen's height takes up: a phone held in
+// front of you, or a laptop at arm's length, covers roughly this much.
+const SCREEN_ANGLE = 23; // degrees
+const MAX_EYE_SCALE = 4;
+
+/**
+ * How many times bigger to draw something so that it looks the size it does to
+ * your eye. A wide view squeezes the sky onto a screen that covers much less of
+ * your vision, which shrinks everything. This undoes that (it compares sizes at
+ * the middle of the screen) until the view is narrower than the screen, and from
+ * there on it's 1: you're looking through a telescope, and sizes are true.
+ * Capped, so a whole-sky view doesn't blow the Sun up to the size of a fist.
+ */
+export function eyeScale(fovDeg) {
+  const half = (fovDeg / 2) * MathUtils.DEG2RAD;
+  const squeeze = radiusFor(half, stereoAmount(fovDeg)) / Math.tan((SCREEN_ANGLE / 2) * MathUtils.DEG2RAD);
+  return MathUtils.clamp(squeeze, 1, MAX_EYE_SCALE);
+}
+
 /** Angle θ whose screen radius is r (r is monotonic in θ, so bisect). */
 export function thetaFor(r, s) {
   let lo = 0;

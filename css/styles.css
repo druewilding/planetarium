@@ -902,13 +902,12 @@ input[type="number"]:focus {
 }
 
 /* Up above the Earth, pointing your phone at the real sky, the compass and
-   looking up no longer make sense, and the − + set your height instead of the zoom
-   (scroll or pinch still zooms) */
+   looking up no longer make sense (the zoom stays, under the height) */
 body:not(.aloft) #orient-btn,
+body:not(.aloft) #reset-zoom,
 body.aloft #sensor-btn,
 body.aloft #look-up,
-body.aloft .compass-widget,
-body.aloft .zoom {
+body.aloft .compass-widget {
   display: none;
 }
 
@@ -922,7 +921,7 @@ body.aloft .zoom {
 
 body.aloft .altitude,
 body.aloft #orient-btn,
-body:not(.aloft) .zoom,
+body.aloft #reset-zoom,
 body:not(.aloft) .compass-widget,
 body:not(.aloft) #look-up {
   animation: appear 0.5s ease;
