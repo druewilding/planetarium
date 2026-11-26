@@ -36,6 +36,7 @@ import { setFade } from "./scene/lines.js";
 import { createMilkyWay } from "./scene/milkyway.js";
 import { createOrbits } from "./scene/orbits.js";
 import { createOverlays } from "./scene/overlays.js";
+import { createPlanetDiscs, RING_OUTER } from "./scene/planets.js";
 import { createPlanetPoints, createPointsMaterial, createStars } from "./scene/points.js";
 import { earthAxes, latLonOf, surfaceDirection } from "./space.js";
 import {
@@ -225,6 +226,8 @@ async function main() {
   const orbits = createOrbits(shared, glsl);
   overlays.eqj.add(orbits.group);
   scene.add(planetPoints.points);
+  const planetDiscs = createPlanetDiscs(shared, glsl, PLANETS);
+  scene.add(planetDiscs.group);
 
   moonTex.texture.colorSpace = THREE.NoColorSpace;
   moonTex.texture.wrapS = THREE.RepeatWrapping;
@@ -569,7 +572,7 @@ async function main() {
     glassesBtn.setAttribute("aria-pressed", String(on));
     $("labels").classList.toggle("glasses", on);
     for (const group of overlays.groups) group.visible = !on;
-    planetPoints.points.visible = !on;
+    planetPoints.points.visible = planetDiscs.group.visible = !on;
     // You put them on to look at the Sun.
     if (on) view.lookAt(sky.sun.dir, Math.min(view.state.fov, 4));
   }
@@ -1457,7 +1460,7 @@ async function main() {
     const pxPerRad = canvas.clientHeight / (view.state.fov * (Math.PI / 180));
     consider(sky.sun.dir, Math.max(20, shownRadius(sky.sun) * pxPerRad + 6), 10, selectSun);
     consider(sky.moon.dir, Math.max(20, shownRadius(sky.moon) * pxPerRad + 6), 10, selectMoon);
-    for (const p of sky.planets) consider(p.dir, 18, 6, () => selectPlanet(p));
+    for (const p of sky.planets) consider(p.dir, Math.max(18, shownExtent(p) * pxPerRad + 6), 6, () => selectPlanet(p));
     for (const s of catalog.stars) {
       if (s.mag > globalLimit + 0.5) break; // sorted by magnitude
       consider(s.position(sky).dir, 14, Math.max(0, 4 - s.mag) * 1.5, () => selectStar(s));
@@ -1520,11 +1523,13 @@ async function main() {
     return layers.bigBodies ? eyeScale(view.state.fov) : 1;
   }
   const shownRadius = (body) => body.angularRadius * bodyScale();
+  /** How far out a body reaches on the sky, as drawn: Saturn's rings reach well beyond its globe. */
+  const shownExtent = (body) => shownRadius(body) * (body.def?.rings ? RING_OUTER : 1);
 
   // Put a disc's label just outside its edge, however far you zoom in.
-  function edgeOffset(body) {
-    const px = shownRadius(body) * (canvas.clientHeight / (view.state.fov * (Math.PI / 180)));
-    const k = Math.max(12, px * 0.75 + 6);
+  function edgeOffset(body, least = 12) {
+    const px = shownExtent(body) * (canvas.clientHeight / (view.state.fov * (Math.PI / 180)));
+    const k = Math.max(least, px * 0.75 + 6);
     return [k, -k];
   }
 
@@ -1568,6 +1573,7 @@ async function main() {
           cls: `body${p.mag > globalLimit ? " dim" : ""}`,
           priority: 90 - p.mag,
           always: true,
+          offset: edgeOffset(p, 8),
           pick: () => selectPlanet(p),
         });
       }
@@ -1662,7 +1668,13 @@ async function main() {
     // (A chosen mountain's name is highlighted instead of ringed.)
     if (sd && !["constellation", "feature", "earth"].includes(selection.type)) {
       const angR =
-        selection.type === "moon" ? shownRadius(sky.moon) : selection.type === "sun" ? shownRadius(sky.sun) : 0;
+        selection.type === "moon"
+          ? shownRadius(sky.moon)
+          : selection.type === "sun"
+            ? shownRadius(sky.sun)
+            : selection.type === "planet"
+              ? shownExtent(sky.planets.find((p) => p.id === selection.id))
+              : 0;
       const px = angR * (canvas.clientHeight / (view.state.fov * (Math.PI / 180)));
       if (px < 14)
         items.push({
@@ -1931,7 +1943,19 @@ async function main() {
 
     sun.update(sky.sun, tSun, exposure, camera, eclipse, bodyScale(), sunThrough, glasses, isAloft());
     moon.update(sky.moon, sky, tMoon, exposure, camera, bodyScale(), moonThrough, isAloft());
-    planetPoints.update(sky.planets);
+    const discs = planetDiscs.update(sky.planets, {
+      scale: bodyScale(),
+      pxPerRad: canvas.clientHeight / (view.state.fov * D2R),
+      exposure,
+      light: (p) => {
+        const through = throughEarth(p);
+        return {
+          shown: through || isAloft() || p.alt > -3,
+          transmit: transmittance(atm, through ? ZENITH : p.trueDir),
+        };
+      },
+    });
+    planetPoints.update(sky.planets, discs);
     overlays.updateFrames(sky);
     updatePlaceLayers(km);
     if (onGround > 0) updatePaths(now);

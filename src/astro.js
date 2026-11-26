@@ -17,14 +17,68 @@ export const R2D = 180 / Math.PI;
 
 export const SUN_ILLUMINANCE = 127000; // lux at 1 AU, top of atmosphere
 
+// color: the point of light. Zoomed right in they're discs (see scene/planets.js):
+// surface: the colour of the disc, albedo: how much sunlight it sends back (geometric
+// albedo), flattening: how squashed the poles are, bands: how strongly it's striped.
 export const PLANETS = [
-  { id: "Mercury", name: "Mercury", radiusKm: 2439.7, color: [0.9, 0.86, 0.8] },
-  { id: "Venus", name: "Venus", radiusKm: 6051.8, color: [1.0, 0.97, 0.88] },
-  { id: "Mars", name: "Mars", radiusKm: 3389.5, color: [1.0, 0.6, 0.4] },
-  { id: "Jupiter", name: "Jupiter", radiusKm: 69911, color: [1.0, 0.93, 0.8] },
-  { id: "Saturn", name: "Saturn", radiusKm: 58232, color: [1.0, 0.9, 0.68] },
-  { id: "Uranus", name: "Uranus", radiusKm: 25362, color: [0.72, 0.92, 1.0] },
-  { id: "Neptune", name: "Neptune", radiusKm: 24622, color: [0.55, 0.7, 1.0] },
+  {
+    id: "Mercury",
+    name: "Mercury",
+    radiusKm: 2439.7,
+    color: [0.9, 0.86, 0.8],
+    surface: [0.62, 0.58, 0.54],
+    albedo: 0.14,
+    rocky: true,
+  },
+  { id: "Venus", name: "Venus", radiusKm: 6051.8, color: [1.0, 0.97, 0.88], surface: [1.0, 0.95, 0.8], albedo: 0.69 },
+  {
+    id: "Mars",
+    name: "Mars",
+    radiusKm: 3389.5,
+    color: [1.0, 0.6, 0.4],
+    surface: [0.85, 0.48, 0.3],
+    albedo: 0.17,
+    rocky: true,
+  },
+  {
+    id: "Jupiter",
+    name: "Jupiter",
+    radiusKm: 69911,
+    color: [1.0, 0.93, 0.8],
+    surface: [0.95, 0.86, 0.72],
+    albedo: 0.54,
+    flattening: 0.065,
+    bands: 1,
+  },
+  {
+    id: "Saturn",
+    name: "Saturn",
+    radiusKm: 58232,
+    color: [1.0, 0.9, 0.68],
+    surface: [0.95, 0.85, 0.62],
+    albedo: 0.5,
+    flattening: 0.098,
+    bands: 0.35,
+    rings: true,
+  },
+  {
+    id: "Uranus",
+    name: "Uranus",
+    radiusKm: 25362,
+    color: [0.72, 0.92, 1.0],
+    surface: [0.68, 0.88, 0.92],
+    albedo: 0.49,
+    flattening: 0.023,
+  },
+  {
+    id: "Neptune",
+    name: "Neptune",
+    radiusKm: 24622,
+    color: [0.55, 0.7, 1.0],
+    surface: [0.42, 0.58, 0.95],
+    albedo: 0.44,
+    flattening: 0.017,
+  },
 ];
 
 /**
@@ -182,6 +236,13 @@ export function computeSky(ms, loc, above = null) {
     s.mag = ill.mag;
     s.phaseFraction = ill.phase_fraction;
     s.angularRadius = Math.asin(p.radiusKm / (s.dist * AU_KM));
+    // For drawing its disc: which way the Sun is from it, how far, and its north pole.
+    const toSun = sun.vecAU.clone().sub(s.vecAU);
+    s.sunDist = toSun.length();
+    s.sunDir = toSun.normalize();
+    const n = A.RotationAxis(Body[p.id], time).north;
+    s.axis = new Vector3(n.x, n.y, n.z).applyMatrix4(eqjToWorld).normalize();
+    s.def = p;
     return s;
   });
 

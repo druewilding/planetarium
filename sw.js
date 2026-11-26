@@ -53,6 +53,7 @@ const APP_SHELL = [
   "./src/scene/milkyway.js",
   "./src/scene/orbits.js",
   "./src/scene/overlays.js",
+  "./src/scene/planets.js",
   "./src/scene/points.js",
   "./src/ui/compass.js",
   "./src/ui/info.js",

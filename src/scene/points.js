@@ -142,12 +142,13 @@ export function createPlanetPoints(planetDefs, material) {
   points.frustumCulled = false;
   points.renderOrder = 4;
 
-  function update(planets) {
+  /** discs: how far each planet has turned into a disc (see planets.js); its point fades out as it does. */
+  function update(planets, discs = []) {
     const pos = geom.attributes.position;
     const mag = geom.attributes.aMag;
     planets.forEach((p, i) => {
       pos.setXYZ(i, p.trueDir.x, p.trueDir.y, p.trueDir.z);
-      mag.setX(i, p.mag);
+      mag.setX(i, p.mag + 8 * (discs[i] ?? 0));
     });
     pos.needsUpdate = true;
     mag.needsUpdate = true;

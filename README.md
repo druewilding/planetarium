@@ -29,6 +29,10 @@ sky with no connection (the hills and place names need one the first time you vi
   takes up much less of your vision (about 23°), and this undoes that, up to 4 times. Zoom in past that and they're
   true to size, as if through a telescope (or turn off **Enlarge Sun & Moon**). The phase icon in the info panel is turned the way the
   Moon looks in your sky right now, so near the equator a crescent lies on its back.
+- **The planets up close:** to the eye they're points of light, but zoom right in and each becomes a disc, true to size
+  and lit from the Sun's direction, as through a telescope: Venus and Mercury go through phases, Mars is gibbous,
+  Jupiter is striped and squashed at the poles, and Saturn has its rings, tilted the way they are that year (nearly
+  edge-on in 2025–26, wide open by 2029), with the globe's shadow across them.
 - **Eclipses:** in a solar eclipse the Moon covers the Sun and the sky darkens with it. Even with most of the Sun
   covered, what's left still dazzles, so **Eclipse glasses** appear: like the real thing, they black out everything
   but the Sun, and the Moon's bite finally shows (in totality they show nothing, which is your cue to take them off). In a lunar eclipse the Earth's
@@ -170,6 +174,7 @@ planetarium/
 │   │   ├── earth.js       # the Earth seen from above, drawn into the sky
 │   │   ├── bodies.js      # Sun, Moon, ground
 │   │   ├── points.js      # stars and planets as points
+│   │   ├── planets.js     # planets as discs, zoomed right in (phases, Saturn's rings)
 │   │   ├── lines.js       # lines on the sky (refraction-aware)
 │   │   ├── overlays.js    # constellations, grids, paths
 │   │   ├── orbits.js      # the Moon's, the Earth's and the planets' orbits, in perspective
@@ -210,7 +215,7 @@ planetarium/
    still to come: rising far enough to see the solar system from outside, true-scale sizes
 3. Fly-to travel between bodies, orbit trails
 4. Standing on the Moon: Earth's phases, the two-week day
-5. Planets and moons: Jupiter's Galilean moons, Saturn's rings and Titan, Mars' moons
+5. Planets and moons: ✅ discs with phases and Saturn's rings; still to come: Jupiter's Galilean moons, Titan, Mars' moons
 6. The Martian sky, with its blue sunset
 7. ✅ Eclipses: find them and jump to them, the red Moon, the Moon's shadow on the Earth
 8. ✅ Shareable links (place, time, view in the URL)
