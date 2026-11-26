@@ -53,8 +53,8 @@ sky with no connection (the hills and place names need one the first time you vi
   dots: the biggest when zoomed out, more as you zoom in. Dots swell as the pointer comes near, and clicking one stands
   you in that city. Changing location glides smoothly.
 - **Lift off:** rise straight off the ground, still looking the way you were. You're a kilometre up in half a second: the hills, with their names, and the lakes and sea fall away below you as the far land comes into view, then the sky
-  darkens to black as the air thins, and the view turns slowly down until half the Earth rises into the bottom of it:
-  lit by the Sun, with city lights on its night side and your spot marked. The stars, the Moon, the planets and their
+  darkens to black as the air thins. The view tips down a little, as far as it can while what you were looking at stays in sight:
+  turn round (or press Face the Earth) to see the Earth below you, lit by the Sun, with city lights on its night side and your spot marked. The stars, the Moon, the planets and their
   labels stay with you. Up there you float still against the stars, so the sky stops turning and the Earth turns
   beneath you instead, carrying your spot round into the night and back into the day. There's no up or down in
   space, so dragging slides the sky freely under your finger; drag on the Earth instead and it turns like a ball, with the sky turning with it, carrying you round to look down on anywhere. The Moon, being near, shifts against the stars as you

@@ -314,14 +314,14 @@ async function main() {
     km: 0,
     frame: null, // Matrix4, J2000 → view, held still against the stars
     dir: null, // Vector3, where above the Earth you are (J2000, from its centre)
+    startedAt: 0, // when you took off (performance.now())
+    tipped: true, // tipped the view down towards the Earth since taking off? (see tipTowardEarth)
     tween: null, // { to, t (s), duration, and either curve (see climb.js; rise or landing) or from }
     before: null, // the view you had on the ground, to come back to
-    startedAt: 0, // when you took off (performance.now())
     takeoff: 0, // the moment you took off (clock time): with the place, it fixes where you are
     move: null, // gliding round the Earth to a new place: { from, to (frame quaternions), fromDir, toDir, t }
     turned: false, // moved round the Earth by hand since taking off (see grabEarth)
     spin: null, // still turning after you let go of the Earth: { axis (J2000), rate (rad/s) }
-    panned: false, // turned to look down at the Earth yet?
     earthDir: new THREE.Vector3(0, -1, 0), // from you to the Earth's centre (view frame)
     earthRadius: 0, // the Earth's angular radius as you see it, radians
   };
@@ -399,16 +399,26 @@ async function main() {
     return projection.altitudeForHorizonAt(-(y - h / 2) / (h / 2), fov);
   }
   /**
-   * Taking off: where the Earth's centre goes on screen (and your spot, at first),
-   * just above the time bar so half the Earth rises into view as you leave it. As
-   * a direction from the camera, in the camera's own frame.
+   * After taking off: tip the view down towards the Earth, far enough for its
+   * edge to rise into the bottom of the view (above the time bar) once you're
+   * `km` up, but never so far that what you were looking at leaves the top of it.
    */
-  function earthSpot(fov) {
+  const tipAxis = new THREE.Vector3();
+  function tipTowardEarth(km, duration) {
     const h = window.innerHeight;
+    const fov = view.state.fov;
+    const angleAt = (y) => Math.abs(projection.altitudeForHorizonAt(-(y - h / 2) / (h / 2), fov)) * D2R;
     const barTop = document.querySelector(".timebar").getBoundingClientRect().top;
-    const y = barTop - 40;
-    const below = projection.altitudeForHorizonAt(-(y - h / 2) / (h / 2), fov) * D2R; // below the middle
-    return new THREE.Vector3(0, -Math.sin(below), -Math.cos(below));
+    const below = angleAt(barTop - 40); // how far below the middle the Earth's edge should sit
+    const above = angleAt(h * 0.25); // how far above the middle what you were looking at may go
+    const toEarth = earthSeen();
+    const edge = toEarth.angleTo(MIDDLE) - Math.asin(1 / (1 + km / EARTH_RADIUS_KM));
+    const tip = Math.min(Math.max(0, edge - below), above);
+    if (tip < 1 * D2R) return; // (the Earth's already in view)
+    tipAxis.crossVectors(MIDDLE, toEarth).normalize();
+    const turn = new THREE.Quaternion().setFromAxisAngle(tipAxis, tip);
+    faceEuler.setFromQuaternion(camera.quaternion.clone().multiply(turn), "YXZ");
+    view.lookTo({ alt: faceEuler.x * R2D, az: -faceEuler.y * R2D, roll: faceEuler.z * R2D }, { duration });
   }
   const faceFov = () => Math.max(50, Math.min(view.state.fov, 100));
   /** The Earth's direction in the camera's own frame. */
@@ -663,8 +673,8 @@ async function main() {
     aloft.km = GROUND_KM;
     aloft.tween = climbTo(RISE_TO_KM);
     aloft.before = { alt: view.state.alt, az: view.state.az, fov: Math.min(view.state.fov, 100) };
+    aloft.tipped = false;
     aloft.startedAt = performance.now();
-    aloft.panned = false;
     beforeLookUp = null;
     view.setFree(true); // no up or down in space
     setAloftUi(true);
@@ -698,12 +708,10 @@ async function main() {
     aloft.takeoff = from;
     aloft.turned = !!over;
     aloft.spin = null;
-    aloft.panned = true; // the link says where to look
     aloft.move = null;
     if (!wasUp) aloft.before = null;
     if (animate) {
       if (!wasUp) aloft.km = GROUND_KM;
-      aloft.startedAt = performance.now();
       aloft.tween = wasUp ? { from: aloft.km, to: km, t: 0, duration: 1.5 } : climbTo(km);
     } else {
       aloft.km = km;
@@ -926,12 +934,11 @@ async function main() {
   function updateAloft(dt) {
     if (isAloft()) updateMove(dt);
     if (isAloft()) updateSpin(dt);
-    // Once the ground has dropped away, turn slowly to look down at the Earth
-    // (unless you've already started looking around yourself), even if you've
-    // changed height on the way up.
-    if (isAloft() && !aloft.panned && !aloft.tween?.landing && performance.now() - aloft.startedAt > 1200) {
-      aloft.panned = true;
-      if (view.touchedAt() < aloft.startedAt && !sensor.active) faceEarth({ duration: 7, spot: earthSpot(faceFov()) });
+    // Once the ground has dropped away, tip the view down a little so the Earth's
+    // edge comes into view (unless you've started looking around yourself).
+    if (isAloft() && !aloft.tipped && !aloft.tween?.landing && performance.now() - aloft.startedAt > 1200) {
+      aloft.tipped = true;
+      if (view.touchedAt() < aloft.startedAt) tipTowardEarth(aloft.tween?.to ?? aloft.km, 5);
     }
     const tw = aloft.tween;
     if (!isAloft() || !tw) return;
