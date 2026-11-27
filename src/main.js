@@ -1644,11 +1644,10 @@ async function main() {
       });
       // Names: once they're apart from the planet, or crossing its disc once that's big.
       const disc = smooth(from, to, shownRadius(planet) * perRad);
-      // (Not while it's dark in the planet's shadow, or lost in its glare: there's nothing
-      // there to name or tap.)
-      shown.push(
-        ...moons.filter((m, i) => !m.behind && m.light >= 0.5 && m.glare < 4 && (m.inFront ? disc : apart[i]) > 0.5)
-      );
+      // (Not while it's dark in the planet's shadow: there's nothing there to name or tap.
+      // Lost in the planet's glare, or too faint to show, it's still there: its name is
+      // dimmed instead, so you can find it.)
+      shown.push(...moons.filter((m, i) => !m.behind && m.light >= 0.5 && (m.inFront ? disc : apart[i]) > 0.5));
       // Their orbits, once they're big enough on the screen to tell from the planet.
       if (layers.moonOrbits) {
         const pole = planetPole(parent, sky);
