@@ -10,6 +10,7 @@ import {
   sunInConstellation,
 } from "../constellations.js";
 import { lunarEclipsesFrom, nextTotalSolarEclipse, solarEclipsesFrom } from "../eclipses.js";
+import { describeSky } from "../lightpollution.js";
 import { glare, moonEventsBetween, MOONS_OF, moonsOf, nextMoonEvents, SATELLITES } from "../satellites.js";
 import { seasonAt } from "../season.js";
 import { bodyPosition, distanceAU, LIGHT_SPEED_KM_S, LIGHT_YEAR_AU, LIGHT_YEAR_KM, starPosition } from "../space.js";
@@ -1040,6 +1041,22 @@ export function createInfo({
     return `<div class="section"><h4>Next eclipses</h4><dl>${rows.filter(Boolean).join("")}</dl></div>`;
   }
 
+  /** How dark the night sky is here, with the light pollution (once it's worked out). */
+  function darkness(s) {
+    const glow = s.lightPollution;
+    if (!glow) return "";
+    const sky = describeSky(glow.zenith);
+    const way = ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"];
+    const where =
+      sky.bortle > 2 && glow.brightest.contrast > 1.5
+        ? ` The glow is brightest low in the ${way[Math.round(glow.brightest.az / 45) % 8]}.`
+        : "";
+    return `<div class="section"><h4>How dark the night sky is</h4><dl>
+      <dt>Bortle scale</dt><dd>${sky.bortle} of 9</dd>
+      <dt>Sky brightness</dt><dd>${sky.mag.toFixed(1)} mag/arcsec²</dd></dl>
+      <p class="note">${sky.text}.${where}</p></div>`;
+  }
+
   function overview(s) {
     const { sky, loc } = s;
     const visible = sky.planets
@@ -1063,6 +1080,7 @@ export function createInfo({
       <div class="section"><h4><button class="jump" data-select="sun" title="Look at the Sun">Sun</button></h4>${sunDetails(s, false)}</div>
       <div class="section"><h4><button class="jump" data-select="moon" title="Look at the Moon">Moon</button></h4>${moonDetails(s, false)}</div>
       <div class="section"><h4>Planets up now</h4>${visible ? `<dl>${visible}</dl>` : NO_PLANETS}</div>
+      ${darkness(s)}
       ${eclipseOverview(s)}
       ${sunUp ? STARS_TIP : ""}
       <p class="note">Tap anything to look at it.</p>`;
