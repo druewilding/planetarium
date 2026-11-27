@@ -454,6 +454,12 @@ input[type="number"]:focus {
   display: none;
 }
 
+/* Sits in the top corner, with the title wrapping round it. */
+.info-close {
+  float: right;
+  margin: -6px -8px 0 4px;
+}
+
 .info-panel h3 {
   margin: 0 0 2px;
   font-size: 18px;
