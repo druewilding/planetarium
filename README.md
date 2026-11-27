@@ -23,6 +23,13 @@ sky with no connection (the hills and place names need one the first time you vi
 - **The Milky Way:** NASA's all-sky map of its glow, dust lanes and Magellanic Clouds included. Like the stars, it
   shows only where it stands out from the sky, so it's at its best on dark, moonless nights and washes out under a
   bright Moon or twilight.
+- **Light pollution:** the glow of towns and cities, worked out from NASA's Black Marble (the VIIRS satellite's
+  picture of the Earth at night) for 300 km around you. A single-scattering model, like the one behind Falchi's World
+  Atlas of night sky brightness, sends each town's light up into the air and haze and back down to you, so a city
+  turns the whole sky grey and washes out the Milky Way, while from the country you see domes of light over the towns
+  on the horizon. It's fitted to come out near the atlas: about 18 mag/arcsec² in the middle of Oslo, 20.6 ten km
+  outside Hamar, 22 in Jotunheimen. The info panel says where that puts the sky on the Bortle scale, and where the
+  glow is brightest. Turn it off under Layers for the sky with no lights at all. Rising, you leave it below you.
 - **The Moon:** a lit 3D sphere with a NASA LRO texture, so its phase, tilt, libration and earthshine all come straight
   from the geometry. On a dark night it glows, the way haze and your own eyes make it dazzle. Zoomed out, the Sun and
   Moon are drawn larger, so they look the size they do to your eye: a wide view squeezes the sky onto a screen that
@@ -216,6 +223,8 @@ planetarium/
 │   ├── projection.js      # perspective ↔ stereographic projection (JS side)
 │   ├── terrain.js         # elevation tiles → skyline profile, and when bodies clear it
 │   ├── water.js           # map tiles → where the sea, lakes and rivers are
+│   ├── lightpollution.js  # night-lights tiles → the glow of towns on the sky, and the Bortle scale
+│   ├── png.js             # decoding map tiles by hand
 │   ├── cachedfetch.js     # fetch, keeping a copy in Cache Storage
 │   ├── space.js           # positions in space (Sun-centred, J2000), for distances from wherever you stand
 │   ├── stars.js           # more about the stars: names, temperatures, true brightness, pole stars
@@ -253,6 +262,9 @@ planetarium/
 - Moon texture: [NASA SVS CGI Moon Kit](https://svs.gsfc.nasa.gov/4720) (LRO, public domain)
 - Earth by day, its city lights and its seas: NASA's Blue Marble and Earth at Night (public domain), as prepared for
   the [three.js examples](https://github.com/mrdoob/three.js/tree/dev/examples/textures/planets)
+- Light pollution: NASA's [Black Marble](https://earthobservatory.nasa.gov/features/NightLights) night lights (VIIRS,
+  2016, public domain), as tiles from [NASA GIBS](https://www.earthdata.nasa.gov/gibs). The model is fitted to come
+  out near the [World Atlas of Artificial Night Sky Brightness](https://doi.org/10.1126/sciadv.1600377) (Falchi et al. 2016)
 - Coastlines and cities: [Natural Earth](https://www.naturalearthdata.com) (public domain)
 - Mountain, place and landmark names: © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors (ODbL),
   from [planetarium-labels](https://github.com/druewilding/planetarium-labels) (built from
@@ -274,3 +286,14 @@ planetarium/
 6. The Martian sky, with its blue sunset
 7. ✅ Eclipses: find them and jump to them, the red Moon, the Moon's shadow on the Earth
 8. ✅ Shareable links (place, time, view in the URL)
+9. More of the night sky from the ground: ✅ light pollution; still to come:
+   - meteor showers: where each one's radiant is, when it peaks, how many you'd see an hour with the Moon and the
+     radiant where they are, and the odd streak
+   - the deep-sky objects you can see by eye or with binoculars (the Andromeda Galaxy, the Orion Nebula, the Beehive,
+     Omega Centauri…), as faint smudges that fade like the stars do
+   - variable stars that really vary as the clock runs: Algol dimming every 2 days 21 hours, Mira over 11 months
+   - twinkling low down, the Earth's shadow and the Belt of Venus after sunset, and "what's up tonight" in the
+     info panel
+10. The International Space Station: see it cross the sky, flare and vanish into the Earth's shadow, with its next
+    passes, then ride on it, with the Earth close below, its cities' lights drawn from the same night-lights tiles as
+    the light pollution

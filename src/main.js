@@ -18,6 +18,7 @@ import {
 import { climb, GROUND_KM } from "./climb.js";
 import { Clock } from "./clock.js";
 import { EARTH_RADIUS_KM } from "./constants.js";
+import { createLightPollution } from "./lightpollution.js";
 import { DEFAULT_BODY, readLink, writeLink } from "./link.js";
 import { createProjection, eyeScale, telescopeGain } from "./projection.js";
 import { glare, MOON_REACH_KM, MOONS_OF, moonsOf, SATELLITES } from "./satellites.js";
@@ -260,6 +261,20 @@ async function main() {
   const terrain = createTerrain({ onReady: () => info?.update(true) });
   let skyline = null; // the profile the ground is showing
   let skylineFade = 0;
+  // The glow of towns and cities on the night sky, for wherever you're standing.
+  const lightPollution = createLightPollution({ onReady: () => info?.update(true) });
+  let cityGlow = null; // the table the sky is showing
+  let cityFade = 0;
+  /** The glow over where you're standing, once it's worked out (not while gliding to a new place). */
+  const cityGlowHere = () => (locTween ? null : lightPollution.glowFor(loc));
+  function updateCityGlow(dt) {
+    const want = cityGlowHere();
+    if (want !== cityGlow) {
+      // Fade the old glow out, swap, then fade the new one in.
+      cityFade = Math.max(0, cityFade - dt * 2);
+      if (cityFade === 0) cityGlow = want;
+    } else if (cityGlow) cityFade = Math.min(1, cityFade + dt);
+  }
   let flight = null; // a flight across the land: skylines along the way (see flyTo)
   /** Altitude (degrees) of the land's skyline towards an azimuth; 0 for a flat horizon. */
   const skylineAlt = (az) => (skyline && skylineFade > 0.5 ? skylineAt(skyline, az) : 0);
@@ -535,6 +550,7 @@ async function main() {
       canLook: canLookAtSelection(),
       earth: selection?.type === "earth" && isAloft() ? earthFacts() : null,
       skyline: !flight && skylineFade > 0.5 ? skyline : null,
+      lightPollution: cityGlowHere(),
     }),
     onLook: () => lookAtSelection(),
     onClear: () => select(null),
@@ -2029,6 +2045,13 @@ async function main() {
     // (airglow), which goes with the air; the rest, zodiacal light (sunlight off the dust
     // between the planets) and the light of countless faint stars, is there in space too.
     const glow = (airLeft) => ATMOSPHERES.earth.nightGlow.map((g) => g * (SPACE_GLOW + (1 - SPACE_GLOW) * airLeft));
+    // Light pollution lights the air near the ground: rising, you soon leave most of it below.
+    updateCityGlow(dt);
+    const city =
+      layers.atmosphere && layers.lightPollution && cityGlow
+        ? { table: cityGlow, strength: cityFade * Math.exp(-km / 2) }
+        : null;
+    if (city) atmosphere.setCityGlow(city.table);
     const atm = !layers.atmosphere
       ? { ...NONE, nightGlow: glow(0) }
       : km > 0
@@ -2036,8 +2059,9 @@ async function main() {
             ...ATMOSPHERES.earth,
             observerHeight: Math.min(Math.max(km, 0.01), 90),
             nightGlow: glow(skyFade),
+            cityGlow: city,
           }
-        : ATMOSPHERES.earth;
+        : { ...ATMOSPHERES.earth, cityGlow: city };
     atmosphere.setParams(atm);
     shared.uRefract.value = layers.atmosphere && layers.refraction && km < 2 ? 1 : 0;
     shared.uExtK.value = atm.extinctionK * air;

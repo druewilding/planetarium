@@ -25,6 +25,12 @@ export const LAYER_GROUPS = [
         label: "Hills & mountains",
         hint: "The real skyline around you, from elevation maps (Terrain Tiles: SRTM, EU-DEM, Kartverket and others). Needs a connection",
       },
+      {
+        key: "lightPollution",
+        where: "ground",
+        label: "Light pollution",
+        hint: "The glow of towns and cities on the night sky, from NASA’s Black Marble map of the Earth at night. Turn off for the sky as it would be with no lights. Needs a connection",
+      },
       { key: "refraction", where: "ground", label: "Refraction near horizon" },
       {
         key: "bigBodies",
@@ -87,6 +93,7 @@ export const DEFAULT_LAYERS = {
   atmosphere: true,
   ground: true,
   terrain: true,
+  lightPollution: true,
   refraction: true,
   bigBodies: true,
   planetLabels: true,

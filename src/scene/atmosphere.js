@@ -11,6 +11,7 @@
 import * as THREE from "three";
 
 import { EARTH_RADIUS_KM } from "../constants.js";
+import { GLOW_AZ, GLOW_ROWS, glowAt } from "../lightpollution.js";
 
 export const ATMOSPHERES = {
   earth: {
@@ -66,6 +67,8 @@ uniform float uOzoneC;
 uniform float uOzoneW;
 uniform vec3 uGlow;
 uniform float uAmbient; // lux of skylight, re-scattered isotropically (cheap multiple scattering)
+uniform sampler2D uCity; // light pollution: the glow of towns (see lightpollution.js), in mcd/m²
+uniform float uCityScale;
 
 const int N = ${PRIMARY_STEPS};
 const int M = ${LIGHT_STEPS};
@@ -144,7 +147,11 @@ void main() {
       total += uLightE[k] * att * (uBetaR * phR[k] * d.x + uBetaM * phM[k] * d.y);
     }
   }
-  gl_FragColor = vec4(total + uGlow, 1.0);
+  // Light pollution, by azimuth and altitude (rows spaced like this texture's, above the horizon).
+  vec3 city = uCityScale > 0.0
+    ? uCityScale * texture2D(uCity, vec2(vUv.x + 0.5 / ${GLOW_AZ}.0, sqrt(max(alt, 0.0) / (0.5 * PI)))).rgb
+    : vec3(0.0);
+  gl_FragColor = vec4(total + uGlow + city, 1.0);
 }
 `;
 
@@ -190,7 +197,22 @@ export function createAtmosphere(renderer, { coarse = false } = {}) {
     uOzoneW: { value: 15 },
     uGlow: { value: new THREE.Vector3() },
     uAmbient: { value: 0 },
+    uCity: { value: null },
+    uCityScale: { value: 0 },
   };
+  // Light pollution's glow, kept in mcd/m² so half floats hold it well.
+  const city = new THREE.DataTexture(
+    new Uint16Array(GLOW_AZ * GLOW_ROWS * 4),
+    GLOW_AZ,
+    GLOW_ROWS,
+    THREE.RGBAFormat,
+    THREE.HalfFloatType
+  );
+  city.wrapS = THREE.RepeatWrapping;
+  city.wrapT = THREE.ClampToEdgeWrapping;
+  city.magFilter = city.minFilter = THREE.LinearFilter;
+  genUniforms.uCity.value = city;
+  let cityTable = null;
   const genMaterial = new THREE.ShaderMaterial({
     uniforms: genUniforms,
     vertexShader: "varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }",
@@ -218,6 +240,19 @@ export function createAtmosphere(renderer, { coarse = false } = {}) {
     genUniforms.uOzoneC.value = p.ozoneCenter;
     genUniforms.uOzoneW.value = p.ozoneWidth;
     genUniforms.uGlow.value.fromArray(p.nightGlow);
+    genUniforms.uCityScale.value = p.cityGlow && p.cityGlow.table === cityTable ? 1e-3 * p.cityGlow.strength : 0;
+  }
+
+  /** Load a light-pollution table (see lightpollution.js) into the sky. */
+  function setCityGlow(table) {
+    if (!table || table === cityTable) return;
+    cityTable = table;
+    const data = city.image.data;
+    for (let i = 0; i < GLOW_AZ * GLOW_ROWS; i++) {
+      for (let c = 0; c < 3; c++) data[i * 4 + c] = THREE.DataUtils.toHalfFloat(1e3 * table.rgb[i * 3 + c]);
+      data[i * 4 + 3] = THREE.DataUtils.toHalfFloat(1);
+    }
+    city.needsUpdate = true;
   }
 
   function render(sunDir, sunE, moonDir, moonE, ambient = 0) {
@@ -232,7 +267,7 @@ export function createAtmosphere(renderer, { coarse = false } = {}) {
     renderer.setRenderTarget(prev);
   }
 
-  return { texture: target.texture, setParams, render };
+  return { texture: target.texture, setParams, setCityGlow, render };
 }
 
 /** The visible sky dome: samples the sky texture and tone maps it. */
@@ -319,6 +354,10 @@ export function skyRadiance(p, dir, lights, n = 12, m = 6, ambient = 0) {
     if (disc >= 0) tMax = Math.min(tMax, -r0 * dir.y - Math.sqrt(disc));
   }
   const total = [...p.nightGlow];
+  if (p.cityGlow?.strength > 0) {
+    const city = glowAt(p.cityGlow.table, dir);
+    for (let c = 0; c < 3; c++) total[c] += p.cityGlow.strength * city[c];
+  }
   const g = p.mieG;
   const g2 = g * g;
   const ph = lights.map((L) => {
