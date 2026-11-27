@@ -1,7 +1,7 @@
 // Info panel: an overview of today (Sun, Moon, visible planets) or details for
 // whatever is selected. Expensive searches are cached per local day.
 
-import { A, AU_KM, Body, compassPoint, PLANETS, R2D } from "../astro.js";
+import { A, AU_KM, Body, compassPoint, planetPole, PLANETS, R2D } from "../astro.js";
 import { lunarEclipsesFrom, nextTotalSolarEclipse, solarEclipsesFrom } from "../eclipses.js";
 import { glare, moonEventsBetween, MOONS_OF, moonsOf, nextMoonEvents } from "../satellites.js";
 import { seasonAt } from "../season.js";
@@ -393,8 +393,37 @@ export function createInfo({
         <dt>Angle from Sun</dt><dd>${elong.toFixed(0)}°</dd>
         <dt>In</dt><dd>${esc(con.name)}</dd>
       </dl>
-      ${elong < 15 ? `<p class="note">${esc(p.name)} is too close to the Sun to see right now.</p>` : ""}</div>
+      ${elong < 15 ? `<p class="note">${esc(p.name)} is too close to the Sun to see right now.</p>` : ""}
+      ${p.id === "Uranus" ? uranusNote(s, p) : ""}</div>
       ${p.id in MOONS_OF ? moonsSection(s, p) : ""}`;
+  }
+
+  /**
+   * Uranus spins on its side, and its moons go round its equator, so how we see their
+   * orbits changes over its 84-year year: as circles round a solstice (2030), as lines
+   * at an equinox (2007, 2049).
+   */
+  function uranusNote(s, p) {
+    // How far its pole points towards us (or away): 1 straight at us, 0 side-on.
+    const towards = Math.abs(planetPole("Uranus", s.sky).dot(p.trueDir));
+    const seen =
+      towards > 0.8
+        ? "Its pole points nearly our way just now, so we see its moons’ orbits almost face-on, as circles"
+        : towards < 0.3
+          ? "Its side faces us just now, so we see its moons’ orbits almost edge-on, as lines"
+          : "Just now we see its moons’ orbits at a slant, as ovals";
+    // Told from the year you're looking at.
+    const year = new Date(s.ms).getUTCFullYear();
+    const at = (y, what) =>
+      year < y
+        ? `we’ll see them ${what} in ${y}`
+        : year > y
+          ? `we saw them ${what} in ${y}`
+          : `this year they’re ${what}`;
+    const when = [at(2007, "edge-on"), at(2030, "face-on"), at(2049, "edge-on")]
+      .join(", ")
+      .replace(/, ([^,]*)$/, ", and $1");
+    return `<p class="note">Uranus spins on its side, tipped over by 98°, perhaps by a giant collision long ago, and its moons go round its equator, tipped over with it. ${seen}. That changes over its 84 years round the Sun: ${when}.</p>`;
   }
 
   // When a moon next crosses its planet, casts its shadow on it, and so on. Every

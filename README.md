@@ -56,7 +56,8 @@ sky with no connection (the hills and place names need one the first time you vi
   kept every 512 days, and are moved on from there by Jupiter's and the Sun's pull (within 600 km).
 - **Lost in the glare:** a faint moon right beside its bright planet doesn't show, as through a telescope. The
   closer in and the fainter, the harder: Amalthea and Thebe are lost beside Jupiter, and Phobos only shows when
-  it's out at the far side of its little orbit, near one of Mars's close oppositions.
+  it's out at the far side of its little orbit, near one of Mars's close oppositions. Its name still shows, dimmed,
+  so you know where to look.
 - **Moons' orbits:** each moon's path round its planet, drawn true to size once you zoom in close enough to see it:
   edge-on lines across Jupiter, Saturn's tipped ovals, Uranus' near-circles (it lies on its side). Behind the
   planet they're hidden, and Saturn's rings pass in front of them. Turn them off in Layers.
