@@ -1340,6 +1340,11 @@ body:not(.aloft) #look-up {
   text-decoration-color: currentColor;
 }
 
+/* A name and the ’s after it, kept on one line */
+.nowrap {
+  white-space: nowrap;
+}
+
 button.info-head {
   width: 100%;
   margin: 0 -6px;

@@ -156,7 +156,8 @@ export function phaseIcon(angle, southern, litAngle) {
 
 /**
  * Turn mentions in a note's HTML into links: of the things in `targets` ([{ name,
- * type, id }], the first of any name winning; longer names tried first). `self`
+ * type, id }], the first of any name winning; longer names tried first), each only
+ * the first time it's mentioned. `self`
  * ({ type, id }) isn't linked to itself. Text already inside a button is left as it is.
  */
 export function linkMentions(html, targets, self = null) {
@@ -166,7 +167,9 @@ export function linkMentions(html, targets, self = null) {
   const names = [...byName.keys()]
     .sort((a, b) => b.length - a.length)
     .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  const re = new RegExp(String.raw`(?<![\p{L}\d])(?:${names.join("|")})(?![\p{L}\d])`, "gu");
+  // (With any possessive after it, to keep on the same line.)
+  const re = new RegExp(String.raw`(?<![\p{L}\d])(${names.join("|")})(?![\p{L}\d])([’']s?(?![\p{L}\d]))?`, "gu");
+  const linked = new Set(); // (each thing only once)
   let inButton = 0;
   return html
     .split(/(<[^>]+>)/)
@@ -177,10 +180,13 @@ export function linkMentions(html, targets, self = null) {
         return part;
       }
       if (inButton) return part;
-      return part.replace(re, (name) => {
+      return part.replace(re, (m, name, possessive = "") => {
         const t = byName.get(name);
-        if (self && t.type === self.type && String(t.id) === String(self.id)) return name;
-        return `<button class="jump" data-select="${t.type}" data-id="${esc(String(t.id))}" title="Look at ${esc(name)}">${name}</button>`;
+        const key = `${t.type}:${t.id}`;
+        if (linked.has(key) || (self && t.type === self.type && String(t.id) === String(self.id))) return m;
+        linked.add(key);
+        const button = `<button class="jump" data-select="${t.type}" data-id="${esc(String(t.id))}" title="Look at ${esc(name)}">${name}</button>`;
+        return possessive ? `<span class="nowrap">${button}${possessive}</span>` : button;
       });
     })
     .join("");

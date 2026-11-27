@@ -113,6 +113,14 @@ describe("linkMentions", () => {
     expect(out).toMatch(/data-select="star" data-id="91262"/);
   });
 
+  test("links each thing only once, keeping its ’s on the same line", () => {
+    const out = link("Jupiter’s moon goes against Jupiter’s spin, found just after Jupiter.");
+    expect(out.match(/<button/g)).toHaveLength(1);
+    expect(out).toMatch(
+      /^<span class="nowrap"><button [^>]*>Jupiter<\/button>’s<\/span> moon goes against Jupiter’s spin/
+    );
+  });
+
   test("doesn't link a name inside a longer word, or the thing the card is about", () => {
     expect(link("Before the Titans, Iota and Jupiterian things")).not.toContain("<button");
     expect(link("Vega shines", { type: "star", id: 91262 })).toBe("Vega shines");
