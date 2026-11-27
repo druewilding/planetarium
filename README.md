@@ -147,16 +147,17 @@ sky with no connection (the hills and place names need one the first time you vi
 
 ### Controls
 
-| Action           | Mouse / touch                | Keyboard   |
-| ---------------- | ---------------------------- | ---------- |
-| Look around      | Drag the sky, or the compass | Arrow keys |
-| Zoom             | Scroll / pinch / − + buttons | `+` / `-`  |
-| Select an object | Click / tap                  |            |
-| Point at sky     | Point at sky button (phones) |            |
-| Reset view       | Reset view button            | `0`        |
-| Play / pause     | ▶ button                     | Space      |
-| Faster / slower  | ⏩ / ⏪                      | `]` / `[`  |
-| Back to now      | Now                          | `n`        |
+| Action           | Mouse / touch                | Keyboard        |
+| ---------------- | ---------------------------- | --------------- |
+| Look around      | Drag the sky, or the compass | Arrow keys      |
+| Zoom             | Scroll / pinch / − + buttons | `+` / `-`       |
+| Select an object | Click / tap                  |                 |
+| Find an object   | The Find box                 | `⌘K` / `Ctrl+K` |
+| Point at sky     | Point at sky button (phones) |                 |
+| Reset view       | Reset view button            | `0`             |
+| Play / pause     | ▶ button                     | Space           |
+| Faster / slower  | ⏩ / ⏪                      | `]` / `[`       |
+| Back to now      | Now                          | `n`             |
 
 ### Link format
 

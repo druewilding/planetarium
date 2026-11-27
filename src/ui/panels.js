@@ -261,6 +261,14 @@ export function createSearch(items) {
       input.blur();
     }
   });
+  // Cmd-K (Ctrl-K off a Mac), from anywhere: straight to the box.
+  window.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      input.focus();
+      input.select();
+    }
+  });
   input.addEventListener("blur", () => setTimeout(() => (list.hidden = true), 150));
   input.addEventListener("focus", () => render());
 }
