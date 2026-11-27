@@ -118,14 +118,9 @@ describe("linkMentions", () => {
     expect(link("Vega shines", { type: "star", id: 91262 })).toBe("Vega shines");
   });
 
-  test("links exact years, to 1 January that year", () => {
-    expect(link("Found in 1610, and in 2019–20.")).toMatch(
-      /^Found in <button class="jump" data-year="1610" title="Go to 1 January 1610">1610<\/button>, and in <button class="jump" data-year="2019" title="Go to 1 January 2019">2019<\/button>–20\.$/
-    );
-  });
-
-  test("leaves rounded, far-off and other numbers alone", () => {
+  test("leaves years and other numbers alone", () => {
     for (const text of [
+      "Found in 1610",
       "around 2100",
       "about 1500",
       "2800 BCE",

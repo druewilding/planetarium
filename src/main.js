@@ -546,14 +546,6 @@ async function main() {
       clock.realSpeed();
       lookWhenThere = true;
     },
-    // A year in a note: 1 January that year, at the same time of day, still looking
-    // at what you'd chosen.
-    onYear: (year) => {
-      const d = new Date(clock.ms);
-      d.setUTCFullYear(year, 0, 1);
-      clock.set(d.getTime(), { animate: false });
-      keepLookingWhenThere = true;
-    },
     placeName: (lat, lon) => location.fromPoint(lat, lon).name,
     onSelect: (type, id) => {
       if (type === "sun") select(selectSun(), { look: true });
@@ -1612,7 +1604,6 @@ async function main() {
   const SPLIT = { Pluto: 1 / 3 };
   let satellitesShown = [];
   let lookWhenThere = false; // after jumping to a moon's next event (see onWhen)
-  let keepLookingWhenThere = false; // after jumping to a year: the same thing, at the same zoom (see onYear)
   const HIDDEN = { mag: 99, trueDir: new THREE.Vector3(0, 1, 0) };
 
   /** Place the moons' points, and return the ones you can see (for names and tapping). */
@@ -2005,11 +1996,6 @@ async function main() {
     if (lookWhenThere) {
       lookWhenThere = false;
       lookAtSelection();
-    }
-    if (keepLookingWhenThere) {
-      keepLookingWhenThere = false;
-      const d = selection && selection.type !== "earth" && selectionDir();
-      if (d) view.lookAt(d, view.state.fov);
     }
     followSun();
     // Rising, you look out through less and less air: from about 100 km up, none.

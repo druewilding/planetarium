@@ -155,10 +155,8 @@ export function phaseIcon(angle, southern, litAngle) {
 
 /**
  * Turn mentions in a note's HTML into links: of the things in `targets` ([{ name,
- * type, id }], the first of any name winning; longer names tried first), and of years, which jump to 1 January that
- * year. Only exact years, 1000 to 2999: not one said to be "around" or "about"
- * (rounded), or written with BCE or CE (far off). `self` ({ type, id }) isn't
- * linked to itself. Text already inside a button is left as it is.
+ * type, id }], the first of any name winning; longer names tried first). `self`
+ * ({ type, id }) isn't linked to itself. Text already inside a button is left as it is.
  */
 export function linkMentions(html, targets, self = null) {
   // (The first of any name wins.)
@@ -167,8 +165,7 @@ export function linkMentions(html, targets, self = null) {
   const names = [...byName.keys()]
     .sort((a, b) => b.length - a.length)
     .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  const year = String.raw`(?<!(?:around|about) )([12]\d{3})(?!\d|[.,]\d|\s?(?:BCE|CE|km|light|times|years?|days?|hours?|minutes?|million|trillion|square)\b|[°″′%])`;
-  const re = new RegExp(String.raw`(?<![\p{L}\d.,])(?:${year}|(${names.join("|")})(?![\p{L}\d]))`, "gu");
+  const re = new RegExp(String.raw`(?<![\p{L}\d])(?:${names.join("|")})(?![\p{L}\d])`, "gu");
   let inButton = 0;
   return html
     .split(/(<[^>]+>)/)
@@ -179,11 +176,10 @@ export function linkMentions(html, targets, self = null) {
         return part;
       }
       if (inButton) return part;
-      return part.replace(re, (m, y, name) => {
-        if (y) return `<button class="jump" data-year="${y}" title="Go to 1 January ${y}">${y}</button>`;
+      return part.replace(re, (name) => {
         const t = byName.get(name);
-        if (self && t.type === self.type && String(t.id) === String(self.id)) return m;
-        return `<button class="jump" data-select="${t.type}" data-id="${esc(String(t.id))}" title="Look at ${esc(name)}">${m}</button>`;
+        if (self && t.type === self.type && String(t.id) === String(self.id)) return name;
+        return `<button class="jump" data-select="${t.type}" data-id="${esc(String(t.id))}" title="Look at ${esc(name)}">${name}</button>`;
       });
     })
     .join("");
@@ -198,7 +194,6 @@ export function createInfo({
   onGo,
   onEclipse,
   onWhen,
-  onYear,
   placeName,
   catalog,
 }) {
@@ -1155,8 +1150,6 @@ export function createInfo({
     if (jump) onSelect(jump.dataset.select, jump.dataset.id);
     const when = e.target.closest("[data-when]")?.dataset.when;
     if (when) onWhen?.(+when);
-    const year = e.target.closest("[data-year]")?.dataset.year;
-    if (year) onYear?.(+year);
     const eclipse = e.target.closest("[data-eclipse]")?.dataset;
     if (eclipse) {
       const place = eclipse.lat != null ? { lat: +eclipse.lat, lon: +eclipse.lon } : null;
