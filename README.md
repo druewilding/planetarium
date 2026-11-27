@@ -107,7 +107,10 @@ sky with no connection (the hills and place names need one the first time you vi
   and the brightest stars in each constellation. Stars have distances too, from their Hipparcos parallaxes: in
   kilometres, in years of light travel (light-years), and the year the light you see left them. Distant stars are hard
   to measure, so those say "about" or give a range, and what was happening on the Earth when that light set off
-  ("14 years before Columbus sailed to America"). Each planet's card gives its size, whether it's going backwards
+  ("14 years before Columbus sailed to America"). A star's card also gives how hot it is (from its colour), how much
+  light it really gives out (from its distance), how near the poles of the sky come to it as they slowly circle every
+  26,000 years (Thuban was the North Star in 2800 BCE, Vega will be around 13,800 CE), how far you'd have to go to see
+  one that never rises here, and, for 45 famous stars, what the name means and something to know. Each planet's card gives its size, whether it's going backwards
   against the stars, and when it's next best to see (opposite the Sun, or for Mercury and Venus furthest from it),
   with a note about it, much of it about right now: Venus's phase, how far open Saturn's rings are, how late Jupiter's
   light makes Io's eclipses (Ole Rømer's speed of light), how far round the Sun Pluto has got since it was found.
@@ -212,6 +215,7 @@ planetarium/
 │   ├── water.js           # map tiles → where the sea, lakes and rivers are
 │   ├── cachedfetch.js     # fetch, keeping a copy in Cache Storage
 │   ├── space.js           # positions in space (Sun-centred, J2000), for distances from wherever you stand
+│   ├── stars.js           # more about the stars: names, temperatures, true brightness, pole stars
 │   ├── eclipses.js        # the Earth's shadow on the Moon, and finding eclipses
 │   ├── constants.js       # sizes and distances shared by the astronomy and the drawing
 │   ├── constellations.js  # the constellations: sizes, stories, who drew them, the Sun’s real dates

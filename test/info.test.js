@@ -89,7 +89,7 @@ describe("lightLeftNote", () => {
 
   test("says 'about' for a distance that isn't known so well, and copes with long ago", () => {
     expect(lightLeftNote(-20000, true)).toBe(
-      "The light you’re seeing set off about 10,300 years before the end of the last ice age."
+      "The light you’re seeing set off about 10,000 years before the end of the last ice age."
     );
   });
 });

@@ -13,6 +13,7 @@ import { lunarEclipsesFrom, nextTotalSolarEclipse, solarEclipsesFrom } from "../
 import { glare, moonEventsBetween, MOONS_OF, moonsOf, nextMoonEvents } from "../satellites.js";
 import { seasonAt } from "../season.js";
 import { bodyPosition, distanceAU, LIGHT_SPEED_KM_S, LIGHT_YEAR_AU, LIGHT_YEAR_KM, starPosition } from "../space.js";
+import { poleNearness, starFacts, starLuminosity, starTemperature } from "../stars.js";
 import { skylineAt, spansAboveSkyline } from "../terrain.js";
 import {
   formatDateTime,
@@ -85,6 +86,7 @@ export function starDistance(s, star) {
     short: `${about ? "~" : ""}${sig(ly, digits)} ly`,
     left,
     about: !!about,
+    ly,
   };
 }
 
@@ -108,7 +110,9 @@ const HISTORY = [
 /** "It set off 14 years before Columbus sailed to America." For light that left in `left`. */
 export function lightLeftNote(left, about) {
   const [y, what] = HISTORY.reduce((a, b) => (Math.abs(b[0] - left) < Math.abs(a[0] - left) ? b : a));
-  const gap = Math.abs(left - y);
+  // (A distance known only roughly gives a rough gap: to two figures.)
+  const exact = Math.abs(left - y);
+  const gap = about && exact >= 10 ? Number(exact.toPrecision(2)) : exact;
   const years = (n) => `${n.toLocaleString("en-GB")} year${n === 1 ? "" : "s"}`;
   const when =
     gap === 0 ? `the year ${what}` : `${about ? "about " : ""}${years(gap)} ${left < y ? "before" : "after"} ${what}`;
@@ -778,10 +782,85 @@ export function createInfo({
       <div class="section"><h4>Facts</h4><dl>
         <dt>Brightness</dt><dd>mag ${star.mag.toFixed(2)}</dd>
         ${starDistance(s, star).rows}
+        ${starNatureRows(s, star)}
         <dt>Colour (B−V)</dt><dd>${star.bv.toFixed(2)}</dd>
         <dt>RA / Dec</dt><dd>${(star.ra / 15).toFixed(2)}h / ${star.dec.toFixed(1)}°</dd>
         <dt>Catalogue</dt><dd>HIP ${star.hip}</dd>
-      </dl>${starLightNote(s, star)}</div>`;
+      </dl>${[starAboutNote(star), poleNote(s, star, pos), starLightNote(s, star), neverRisesNote(s, star, always, rs)].join("")}</div>`;
+  }
+
+  /** How hot it is, from its colour, and how much light it really gives out, from its distance. */
+  function starNatureRows(s, star) {
+    const t = starTemperature(star.bv);
+    const d = starDistance(s, star);
+    let rows = `<dt>Surface</dt><dd>about ${sig(t.celsius, 2)} °C · ${t.colour}</dd>`;
+    if (d.ly) {
+      const l = starLuminosity(star.mag, d.ly);
+      const amount = l >= 1 ? `${sig(l, 2)} times the Sun’s` : `${sig(l, 1)} of the Sun’s`;
+      rows += `<dt>Gives out</dt><dd>${d.about ? "about " : ""}${amount} light</dd>`;
+    }
+    return rows;
+  }
+
+  /** What its name means, and something to know about it, for the famous ones. */
+  function starAboutNote(star) {
+    const f = star.proper && starFacts(star.proper);
+    if (!f) return "";
+    return `<p class="note">${f.name ?? `${esc(star.proper)} means ${f.meaning}.`} ${f.fact}</p>`;
+  }
+
+  /** Near a pole of the sky now, or one day (or once), as the poles slowly circle round. */
+  function poleNote(s, star, pos) {
+    const now = new Date(s.ms).getUTCFullYear();
+    const p = poleNearness(star.ra, star.dec, now);
+    const deg = (d) => (d < 1 ? d.toFixed(1) : d.toFixed(0));
+    const parts = [];
+    if (p.now.deg < 2) {
+      parts.push(
+        `Right now it’s only ${deg(p.now.deg)}° from the ${p.now.pole} pole of the sky, so as the Earth turns it hardly moves, while everything else circles round it.`
+      );
+      // Its height above the horizon is your latitude: how sailors found theirs.
+      if ((p.now.pole === "north") === s.loc.lat > 0 && pos.alt > 0)
+        parts.push(
+          `From here it’s ${pos.alt.toFixed(0)}° up, almost the same as your latitude: sailors used it to find theirs.`
+        );
+    } else if (p.now.deg < 10) {
+      parts.push(
+        `It’s ${deg(p.now.deg)}° from the ${p.now.pole} pole of the sky, so it circles close round the pole each night.`
+      );
+    }
+    const n = p.nearest;
+    if (n.deg < 5) {
+      const when = yearText(n.year);
+      if (Math.abs(n.year - now) <= 150) {
+        parts.push(
+          n.year > now
+            ? `The pole is still creeping closer: it’ll be nearest, ${deg(n.deg)}° away, around ${when}.`
+            : `The pole was nearest it, ${deg(n.deg)}° away, around ${when}, and is now creeping away.`
+        );
+      } else {
+        parts.push(
+          `The poles of the sky slowly circle round over 26,000 years (precession), and the ${n.pole} pole ${n.year > now ? "will pass" : "passed"} about ${deg(n.deg)}° from it around ${when}: ${n.year > now ? "it will be" : "it was"} the ${n.pole === "north" ? "North" : "South"} Star then.`
+        );
+      }
+    }
+    return parts.length ? `<p class="note">${parts.join(" ")}</p>` : "";
+  }
+
+  /** "2100", "2830 BCE", "13,800 CE": rounded to the century when it's far off. */
+  function yearText(y) {
+    // (The sums are good to a few decades: more exact would be pretending.)
+    const gap = Math.abs(y - new Date().getUTCFullYear());
+    const round = (v) => Math.round(v / (gap > 1000 ? 100 : 50)) * (gap > 1000 ? 100 : 50);
+    if (y <= 0) return `${round(1 - y)} BCE`;
+    return y > 9999 ? `${round(y).toLocaleString("en-GB")} CE` : String(round(y));
+  }
+
+  /** For a star that never rises here: how far you'd have to go to see it. */
+  function neverRisesNote(s, star, always, rs) {
+    if (!always || rs.transit.hor.altitude > 0) return "";
+    const v = fromLatitude([star.dec], s.loc.lat);
+    return v.all === "rises" ? `<p class="note">To see it, you’d have to go ${v.toward} of ${v.seeFrom}.</p>` : "";
   }
 
   /** When the star's light set off, set against history (if its distance is known well enough). */

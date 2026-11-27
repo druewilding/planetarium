@@ -43,6 +43,7 @@ const APP_SHELL = [
   "./src/main.js",
   "./src/projection.js",
   "./src/season.js",
+  "./src/stars.js",
   "./src/space.js",
   "./src/terrain.js",
   "./src/timezone.js",
