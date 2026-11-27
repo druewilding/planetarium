@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.6.0](https://github.com/druewilding/planetarium/compare/v1.5.1...v1.6.0) (2026-11-27)
+
+
+### Features
+
+* Add a close button to the info panel ([#66](https://github.com/druewilding/planetarium/issues/66)) ([dd4c3ba](https://github.com/druewilding/planetarium/commit/dd4c3ba38b88cb936ca67f754aefacccd00cdf17))
+* Add light pollution from NASA's night lights to the sky ([#65](https://github.com/druewilding/planetarium/issues/65)) ([581dc24](https://github.com/druewilding/planetarium/commit/581dc248072bc159b6b3f0ef7f1d10e0075beb85))
+* Add the other planets' moons, and fill the info panel with facts and links ([#64](https://github.com/druewilding/planetarium/issues/64)) ([24af6d2](https://github.com/druewilding/planetarium/commit/24af6d29d4bd01a3dcc7c367a1abc786d246a458))
+
 ## [1.5.1](https://github.com/druewilding/planetarium/compare/v1.5.0...v1.5.1) (2026-11-26)
 
 
