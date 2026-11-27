@@ -41,6 +41,14 @@ sky with no connection (the hills and place names need one the first time you vi
   against the clouds, dark Callisto shows as a grey smudge), cast small black shadows on its clouds, and fade out for a
   couple of hours in its shadow. Tap one, or search for it, for how far it is from Jupiter, how long it takes to go
   round, and when its next shadow, crossing, eclipse and disappearance behind Jupiter are: tap one to go there. Jupiter's own card lists the four, and where each one is now.
+- **Mars' and Saturn's moons:** little Phobos and Deimos round Mars, and Saturn's six brightest: Titan, Rhea,
+  Iapetus, Dione, Tethys and Enceladus. They work just like Jupiter's (shadows, crossings, eclipses, next events), but
+  they're placed by an average orbit for each one, fitted to JPL's ephemerides for 1950 to 2100: within about 100 km
+  for Phobos and a thousand for Titan (13,000 for far-out Iapetus, still only 2″ from the Earth). Each moon's card
+  says how far out it can be. Iapetus is two-toned, snow-bright on one side and coal-dark on the other, so it's much
+  brighter west of Saturn than east of it. Titan's shadow only crosses Saturn in the years round Saturn's equinoxes
+  (2024–2025, then 2038–2039), when we see its rings edge-on. **Look at it** on something too faint to show at 0.1°, like
+  Phobos or Pluto, zooms all the way in.
 - **Zoom in to see fainter things:** a view narrower than the screen is like looking through binoculars or a
   telescope, and each zoom shows as faint as the one it stands for would: about 2½ magnitudes fainter at a few degrees,
   and at the closest zoom (0.04°) about 8, like a 30 cm telescope. Stars, planets and moons alike: under a bright Moon
@@ -134,7 +142,7 @@ sky with no connection (the hills and place names need one the first time you vi
 
 Every part is optional; whatever a link leaves out stays as it is (here and now, the usual view). `body` is the world
 you're standing on, so `lat` and `lon` will mean the same thing on the Moon or Mars. `sel` is `sun`, `moon`,
-`planet:Mars`, `satellite:Io` (Jupiter's moons), `star:Sirius` (or a Hipparcos number, `star:32349`) or `con:Ori`. Editing the address in place jumps
+`planet:Mars`, `satellite:Io` (a planet's moon), `star:Sirius` (or a Hipparcos number, `star:32349`) or `con:Ori`. Editing the address in place jumps
 there.
 
 From the browser console, `planetarium.clock.set(Date.parse("2027-08-02T10:00Z"))` jumps to any instant.
@@ -174,7 +182,7 @@ planetarium/
 ├── src/
 │   ├── main.js            # app setup, render loop, eye adaptation, picking, labels
 │   ├── astro.js           # astronomy-engine wrapper → horizon (world) frame
-│   ├── satellites.js      # Jupiter's moons: positions, shadows, eclipses, next events (from anywhere)
+│   ├── satellites.js      # moons of Mars, Jupiter and Saturn: positions, shadows, eclipses, next events (from anywhere)
 │   ├── climb.js           # how high you are, second by second, rising and landing
 │   ├── clock.js           # simulated time, rates, smooth jumps
 │   ├── timezone.js        # wall-clock time for any location
@@ -232,7 +240,7 @@ planetarium/
 3. Fly-to travel between bodies, orbit trails
 4. Standing on the Moon: Earth's phases, the two-week day
 5. Planets and moons: ✅ discs with phases and Saturn's rings, ✅ Jupiter's four big moons, their shadows and
-   eclipses, ✅ Pluto; still to come: Titan, Mars' moons
+   eclipses, ✅ Pluto, ✅ Mars' moons and Saturn's six brightest; maybe later: Uranus' and Neptune's big moons, Charon
 6. The Martian sky, with its blue sunset
 7. ✅ Eclipses: find them and jump to them, the red Moon, the Moon's shadow on the Earth
 8. ✅ Shareable links (place, time, view in the URL)

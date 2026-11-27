@@ -3,7 +3,7 @@
 
 import { A, AU_KM, Body, compassPoint, PLANETS, R2D } from "../astro.js";
 import { lunarEclipsesFrom, nextTotalSolarEclipse, solarEclipsesFrom } from "../eclipses.js";
-import { jupiterMoons, moonEventsBetween, nextMoonEvents } from "../satellites.js";
+import { moonEventsBetween, MOONS_OF, moonsOf, nextMoonEvents } from "../satellites.js";
 import { seasonAt } from "../season.js";
 import { bodyPosition, distanceAU, LIGHT_SPEED_KM_S, LIGHT_YEAR_AU, LIGHT_YEAR_KM, starPosition } from "../space.js";
 import { skylineAt, spansAboveSkyline } from "../terrain.js";
@@ -394,10 +394,10 @@ export function createInfo({
         <dt>In</dt><dd>${esc(con.name)}</dd>
       </dl>
       ${elong < 15 ? `<p class="note">${esc(p.name)} is too close to the Sun to see right now.</p>` : ""}</div>
-      ${p.id === "Jupiter" ? jupiterMoonsSection(s, p) : ""}`;
+      ${p.id in MOONS_OF ? moonsSection(s, p) : ""}`;
   }
 
-  // When a moon next crosses Jupiter, casts its shadow on it, and so on. Every
+  // When a moon next crosses its planet, casts its shadow on it, and so on. Every
   // event from a few days back to three weeks ahead is worked out at once (tens of
   // milliseconds), so scrubbing back and forth through time doesn't search again.
   const DAY = 86400000;
@@ -415,11 +415,11 @@ export function createInfo({
     return nextMoonEvents(m.all, ms, MOON_DAYS);
   }
 
-  const MOON_EVENTS = [
-    ["shadow", "Its shadow on Jupiter"],
-    ["transit", "Crosses Jupiter"],
-    ["eclipse", "In Jupiter’s shadow"],
-    ["hidden", "Behind Jupiter"],
+  const moonEventLabels = (planet) => [
+    ["shadow", `Its shadow on ${planet}`],
+    ["transit", `Crosses ${planet}`],
+    ["eclipse", `In ${planet}’s shadow`],
+    ["hidden", `Behind ${planet}`],
   ];
 
   function moonEventRow(key, label, e, s) {
@@ -432,62 +432,110 @@ export function createInfo({
     return `<dt>${label}</dt><dd><button class="jump" data-when="${mid}" title="Go there and look">${formatShortDate(e.start, loc)}, ${span}</button></dd>`;
   }
 
-  /** Where a moon of Jupiter is, as you see it: "1.0′ east of Jupiter", "Hidden behind Jupiter", … */
-  function moonWhere(m, jupiter, sky) {
-    // Which side of Jupiter it's on, on the sky: east is the way the Earth turns.
-    const sep = m.trueDir.angleTo(jupiter.trueDir) * R2D * 60;
-    const ra = (jupiter.ra * 15) / R2D;
+  /** Where a moon is, as you see it: "1.0′ east of Jupiter", "Hidden behind Jupiter", … */
+  function moonWhere(m, planet, sky) {
+    // Which side of the planet it's on, on the sky: east is the way the Earth turns.
+    const sep = m.trueDir.angleTo(planet.trueDir) * R2D * 60;
+    const ra = (planet.ra * 15) / R2D;
     const eqj = m.offsetAU.clone().applyMatrix4(sky.eqjToWorld.clone().transpose());
     const side = -eqj.x * Math.sin(ra) + eqj.y * Math.cos(ra) >= 0 ? "east" : "west";
-    if (m.behind) return "Hidden behind Jupiter";
-    if (m.inFront) return "Crossing in front of Jupiter";
+    const name = planet.name;
+    if (m.behind) return `Hidden behind ${name}`;
+    if (m.inFront) return `Crossing in front of ${name}`;
     if (m.light < 0.5)
-      return `In Jupiter’s shadow${m.light < 0.02 ? ", dark" : m.entering ? ", fading out" : ", lighting up"}`;
+      return `In ${name}’s shadow${m.light < 0.02 ? ", dark" : m.entering ? ", fading out" : ", lighting up"}`;
     const shadow = m.light < 0.98 ? (m.entering ? ", going into its shadow" : ", coming out of its shadow") : "";
-    return `${sep < 1 ? `${(sep * 60).toFixed(0)}″` : `${sep.toFixed(1)}′`} ${side} of Jupiter${shadow}`;
+    return `${sep < 1 ? `${(sep * 60).toFixed(sep < 0.1 ? 1 : 0)}″` : `${sep.toFixed(1)}′`} ${side} of ${name}${shadow}`;
   }
 
-  /** Jupiter's four big moons, each a link, and where they are now. */
-  function jupiterMoonsSection(s, jupiter) {
-    const rows = jupiterMoons(s.sky)
+  // How many moons each planet has, and why only these few are here.
+  const MOONS_NOTE = {
+    Mars: "Mars has just these two little moons. They’re so small, and so close to bright Mars, that they’re hard to see even in a big telescope.",
+    Jupiter:
+      "Jupiter has nearly a hundred known moons. Only the four big Galilean moons are in the planetarium: the rest are small, and far too faint to see without a big telescope.",
+    Saturn:
+      "Saturn has nearly three hundred known moons. Only the six brightest are in the planetarium: the rest are small and faint, or lost in the glare of Saturn and its rings.",
+  };
+
+  /** A planet's moons, each a link, and where they are now. */
+  function moonsSection(s, planet) {
+    const rows = moonsOf(s.sky, planet.id)
       .map(
         (m) =>
-          `<dt><button class="jump" data-select="satellite" data-id="${m.id}" title="Look at ${m.name}">${m.name}</button></dt><dd>${moonWhere(m, jupiter, s.sky)}</dd>`
+          `<dt><button class="jump" data-select="satellite" data-id="${m.id}" title="Look at ${m.name}">${m.name}</button></dt><dd>${moonWhere(m, planet, s.sky)}</dd>`
       )
       .join("");
     return `<div class="section"><h4>Moons</h4><dl>${rows}</dl>
-      <p class="note">Jupiter has nearly a hundred known moons. Only the four big Galilean moons are in the planetarium: the rest are small, and far too faint to see without a big telescope.</p></div>`;
+      <p class="note">${MOONS_NOTE[planet.id]}</p></div>`;
   }
 
-  /** One of Jupiter's moons. */
-  function satelliteDetails(s, id) {
+  const GALILEAN = "One of the four big moons Galileo found in 1610. Zoom in close to Jupiter to see them.";
+  const MOON_ABOUT = {
+    Io: GALILEAN,
+    Europa: GALILEAN,
+    Ganymede: GALILEAN,
+    Callisto: GALILEAN,
+    Phobos:
+      "Mars’ bigger moon, a lumpy rock found by Asaph Hall in 1877. It goes round faster than Mars turns, so seen from Mars it rises in the west, and it’s slowly spiralling in.",
+    Deimos: "Mars’ smaller, outer moon, found by Asaph Hall six days before Phobos, in 1877.",
+    Enceladus:
+      "One of the whitest things in the Solar System: fresh snow from geysers at its south pole. William Herschel found it in 1789.",
+    Tethys: "Found by Giovanni Cassini in 1684, with Dione.",
+    Dione: "Found by Giovanni Cassini in 1684, with Tethys.",
+    Rhea: "Saturn’s second biggest moon, found by Giovanni Cassini in 1672.",
+    Titan:
+      "Saturn’s biggest moon, bigger than the planet Mercury, wrapped in thick orange haze. Christiaan Huygens found it in 1655.",
+    Iapetus:
+      "One side is as bright as snow, the side it leads with as dark as coal, so it’s much brighter west of Saturn, going away from you, than east of it. Found by Giovanni Cassini in 1671.",
+  };
+
+  /** "1 day 18 hours", or "7 hours 39 minutes". */
+  function periodText(days) {
+    const hoursAll = days * 24;
+    if (hoursAll < 24) {
+      const h = Math.floor(hoursAll);
+      return `${h} hours ${Math.round((hoursAll - h) * 60)} minutes`;
+    }
+    const whole = Math.floor(days);
+    const hours = Math.round((days - whole) * 24);
+    return `${whole} day${whole === 1 ? "" : "s"} ${hours} hours`;
+  }
+
+  /** One of the planets' moons. */
+  function satelliteDetails(s, id, parent) {
     const { sky } = s;
-    const m = jupiterMoons(sky).find((x) => x.id === id);
+    const m = moonsOf(sky, parent).find((x) => x.id === id);
     const def = m.def;
-    const jupiter = sky.planets.find((p) => p.id === "Jupiter");
-    const jupiterKm = PLANETS.find((p) => p.id === "Jupiter").radiusKm;
-    const fromJupiterKm = m.offsetAU.length() * AU_KM;
-    const where = moonWhere(m, jupiter, sky);
-    const whole = Math.floor(def.periodDays);
-    const hours = Math.round((def.periodDays - whole) * 24);
-    const period = `${whole} day${whole === 1 ? "" : "s"} ${hours} hours`;
+    const planet = sky.planets.find((p) => p.id === parent);
+    const planetKm = PLANETS.find((p) => p.id === parent).radiusKm;
+    const fromPlanetKm = m.offsetAU.length() * AU_KM;
+    const where = moonWhere(m, planet, sky);
     const lightMin = (m.dist * AU_KM) / LIGHT_SPEED_KM_S / 60;
     const events = moonEvents(id, s.ms);
+    // Placed by its average orbit: say how far out that can be, here and in seconds of arc from you.
+    let accuracy = "";
+    if (def.fitKm) {
+      const arcsec = (def.fitKm / (m.dist * AU_KM)) * R2D * 3600;
+      const year = new Date(s.ms).getUTCFullYear();
+      accuracy = `<p class="note">Its place is worked out from its average orbit, which keeps it within about ${sig(def.fitKm, 2)} km (${arcsec < 0.1 ? arcsec.toFixed(2) : arcsec.toFixed(1)}″ from here) of where it really is${year < 1950 || year >= 2100 ? " between 1950 and 2100. This far from them, it may be further out" : ""}.</p>`;
+    }
     return `<dl>${position(m, s.skyline)}
         <dt>Seen from here</dt><dd>${where}</dd>
-        ${m.shadowOnPlanet ? "<dt>Its shadow</dt><dd>On Jupiter’s clouds</dd>" : ""}</dl>
+        ${m.shadowOnPlanet ? `<dt>Its shadow</dt><dd>On ${planet.name}${parent === "Mars" ? "" : "’s clouds"}</dd>` : ""}</dl>
       <div class="section"><h4>Coming up</h4><dl>
-        ${MOON_EVENTS.map(([key, label]) => moonEventRow(key, label, events[key], s)).join("")}
+        ${moonEventLabels(planet.name)
+          .map(([key, label]) => moonEventRow(key, label, events[key], s))
+          .join("")}
       </dl></div>
       <div class="section"><h4>Facts</h4><dl>
         <dt>Brightness</dt><dd>mag ${m.mag.toFixed(1)}</dd>
-        <dt>From Jupiter</dt><dd>${sig(fromJupiterKm, 3)} km · ${(fromJupiterKm / jupiterKm).toFixed(1)} Jupiter radii</dd>
-        <dt>Goes round in</dt><dd>${period}</dd>
+        <dt>From ${planet.name}</dt><dd>${sig(fromPlanetKm, 3)} km · ${(fromPlanetKm / planetKm).toFixed(1)} ${planet.name} radii</dd>
+        <dt>Goes round in</dt><dd>${periodText(def.periodDays)}</dd>
         <dt>Size</dt><dd>${sig(def.radiusKm * 2, 4)} km across</dd>
         <dt>Distance</dt><dd>${m.dist.toFixed(3)} AU · ${((m.dist * AU_KM) / 1e6).toFixed(0)} M km</dd>
         <dt>Light travel time</dt><dd>${lightMin < 60 ? `${lightMin.toFixed(1)} min` : formatDuration(lightMin)}</dd>
       </dl>
-      <p class="note">One of the four big moons Galileo found in 1610. Zoom in close to Jupiter to see them.</p></div>`;
+      <p class="note">${MOON_ABOUT[id]}</p>${accuracy}</div>`;
   }
 
   function starDetails(s, star) {
@@ -615,9 +663,8 @@ export function createInfo({
       kind = PLANETS.find((x) => x.id === sel.id).dwarf ? "Dwarf planet" : "Planet";
       body = planetDetails(s, p);
     } else if (sel.type === "satellite") {
-      kind =
-        "Moon of <button class='jump' data-select='planet' data-id='Jupiter' title='Look at Jupiter'>Jupiter</button>";
-      body = satelliteDetails(s, sel.id);
+      kind = `Moon of <button class='jump' data-select='planet' data-id='${sel.parent}' title='Look at ${sel.parent}'>${sel.parent}</button>`;
+      body = satelliteDetails(s, sel.id, sel.parent);
     } else if (sel.type === "star") {
       kind = starKind(sel.star);
       body = starDetails(s, sel.star);

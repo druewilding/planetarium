@@ -19,7 +19,7 @@ import { Clock } from "./clock.js";
 import { EARTH_RADIUS_KM } from "./constants.js";
 import { DEFAULT_BODY, readLink, writeLink } from "./link.js";
 import { createProjection, eyeScale, telescopeGain } from "./projection.js";
-import { JUPITER_MOONS, jupiterMoons } from "./satellites.js";
+import { MOON_REACH_KM, MOONS_OF, moonsOf, SATELLITES } from "./satellites.js";
 import {
   ATMOSPHERES,
   averageSkyLuminance,
@@ -229,8 +229,8 @@ async function main() {
   scene.add(planetPoints.points);
   const planetDiscs = createPlanetDiscs(shared, glsl, PLANETS);
   scene.add(planetDiscs.group);
-  // Jupiter's moons: drawn after Jupiter's disc, so the ones in front of it show.
-  const satellitePoints = createPlanetPoints(JUPITER_MOONS, planetPoints.points.material);
+  // Moons of the planets: drawn after their discs, so the ones in front show.
+  const satellitePoints = createPlanetPoints(SATELLITES, planetPoints.points.material);
   satellitePoints.points.renderOrder = 5.3;
   scene.add(satellitePoints.points);
 
@@ -547,7 +547,7 @@ async function main() {
       if (type === "sun") select(selectSun(), { look: true });
       else if (type === "moon") select(selectMoon(), { look: true });
       else if (type === "planet") select(selectPlanet(PLANETS.find((p) => p.id === id)), { look: true });
-      else if (type === "satellite") select(selectSatellite(JUPITER_MOONS.find((m) => m.id === id)), { look: true });
+      else if (type === "satellite") select(selectSatellite(SATELLITES.find((m) => m.id === id)), { look: true });
       else if (type === "star") {
         const star = catalog.stars.find((st) => String(st.hip) === id);
         if (star) select(selectStar(star), { look: true });
@@ -592,7 +592,7 @@ async function main() {
     glassesBtn.setAttribute("aria-pressed", String(on));
     $("labels").classList.toggle("glasses", on);
     for (const group of overlays.groups) group.visible = !on;
-    // (Jupiter's moons are hidden too: see updateSatellites.)
+    // (The planets' moons are hidden too: see updateSatellites.)
     planetPoints.points.visible = planetDiscs.group.visible = !on;
     // You put them on to look at the Sun.
     if (on) view.lookAt(sky.sun.dir, Math.min(view.state.fov, 4));
@@ -1171,7 +1171,7 @@ async function main() {
         return p ? selectPlanet(p) : null;
       }
       case "satellite": {
-        const m = JUPITER_MOONS.find((mm) => mm.id.toLowerCase() === id);
+        const m = SATELLITES.find((mm) => mm.id.toLowerCase() === id);
         return m ? selectSatellite(m) : null;
       }
       case "star": {
@@ -1292,7 +1292,7 @@ async function main() {
       case "planet":
         return sky.planets.find((p) => p.id === selection.id).dir;
       case "satellite":
-        return jupiterMoons(sky).find((m) => m.id === selection.id).dir;
+        return moonsOf(sky, selection.parent).find((m) => m.id === selection.id).dir;
       case "star":
         return selection.star.position(sky).dir;
       case "constellation":
@@ -1319,6 +1319,7 @@ async function main() {
 
   const LOOK_FOV = 0.1; // degrees: how far Look at it zooms in on a planet or moon
   const STAR_FOV = 3; // and on a star
+  const FAINT_MAG = 13; // fainter than this, it only shows zoomed in all the way (see telescopeGain)
   function lookAtSelection() {
     if (selection?.type === "earth") return faceEarth();
     const d = selectionDir();
@@ -1326,9 +1327,15 @@ async function main() {
     let fov = view.state.fov;
     if (selection.type === "moon" || selection.type === "sun") fov = Math.min(fov, 20);
     // A planet is only a point until you're zoomed right in: look at it as through a telescope.
-    // (Close enough for Saturn's rings, or Jupiter with its moons around it. Pluto needs all the zoom there is.)
-    if (selection.type === "planet" || selection.type === "satellite")
-      fov = PLANETS.find((p) => p.id === selection.id)?.dwarf ? MIN_FOV : LOOK_FOV;
+    // (Close enough for Saturn's rings, or Jupiter with its moons around it. Something as
+    // faint as Pluto or Mars' moons needs all the zoom there is to show.)
+    if (selection.type === "planet" || selection.type === "satellite") {
+      const body =
+        selection.type === "planet"
+          ? sky.planets.find((p) => p.id === selection.id)
+          : moonsOf(sky, selection.parent).find((m) => m.id === selection.id);
+      fov = body.mag > FAINT_MAG ? MIN_FOV : LOOK_FOV;
+    }
     // A star is a point however close you get: look at it as through binoculars, among its
     // neighbours (fainter ones show, zoomed in: see telescopeGain).
     if (selection.type === "star") fov = Math.min(fov, STAR_FOV);
@@ -1381,7 +1388,7 @@ async function main() {
   const selectEarth = () => ({ type: "earth", name: "Earth" });
   const selectMoon = () => ({ type: "moon", name: "Moon" });
   const selectPlanet = (p) => ({ type: "planet", id: p.id, name: p.name });
-  const selectSatellite = (m) => ({ type: "satellite", id: m.id, name: m.name, parent: "Jupiter" });
+  const selectSatellite = (m) => ({ type: "satellite", id: m.id, name: m.name, parent: m.parent });
   const selectStar = (s) => ({ type: "star", name: s.name, star: s });
   const selectConstellation = (c) => ({ type: "constellation", name: c.name, constellation: c });
   const selectFeature = (f) => ({ type: "feature", name: f.name, feature: f });
@@ -1466,9 +1473,9 @@ async function main() {
       kind: p.dwarf ? "Dwarf planet" : "Planet",
       select: () => select(selectPlanet(p), { look: true }),
     })),
-    ...JUPITER_MOONS.map((m) => ({
+    ...SATELLITES.map((m) => ({
       name: m.name,
-      kind: "Moon of Jupiter",
+      kind: `Moon of ${m.parent}`,
       select: () => select(selectSatellite(m), { look: true }),
     })),
     ...catalog.named.map((s) => ({
@@ -1512,7 +1519,7 @@ async function main() {
     consider(sky.sun.dir, Math.max(20, shownRadius(sky.sun) * perRad + 6), 10, selectSun);
     consider(sky.moon.dir, Math.max(20, shownRadius(sky.moon) * perRad + 6), 10, selectMoon);
     for (const p of sky.planets) consider(p.dir, Math.max(18, shownExtent(p) * perRad + 6), 6, () => selectPlanet(p));
-    // (A little nearer than Jupiter wins: it's the moon you tapped by it.)
+    // (A little nearer than its planet wins: it's the moon you tapped by it.)
     for (const m of satellitesShown) consider(m.dir, 14, 8, () => selectSatellite(m));
     for (const s of catalog.stars) {
       if (s.mag > zoomedLimit() + 0.5) break; // sorted by magnitude
@@ -1582,44 +1589,54 @@ async function main() {
   /** The screen's pixels per radian of sky, at its middle. */
   const pxPerRad = () => canvas.clientHeight / (view.state.fov * D2R);
 
-  // ---- Jupiter's moons ----
+  // ---- The planets' moons ----
   // They're there all the time, but only zoomed in far enough to split them from
-  // Jupiter on the screen can you see them, as through binoculars or a telescope.
-  // (Only worked out then, too.) Their distances from Jupiter are true to life.
-  const SATELLITE_FROM = 8; // pixels from Jupiter's centre where they start to show
+  // their planet on the screen can you see them, as through binoculars or a
+  // telescope. (Only worked out then, too.) Their distances from it are true to life.
+  const SATELLITE_FROM = 8; // pixels from the planet's centre where they start to show
   const SATELLITE_TO = 16; // and where they're fully there
-  const SATELLITE_REACH_KM = 1.9e6; // Callisto is never further than this from Jupiter
   let satellitesShown = [];
   let lookWhenThere = false; // after jumping to a moon's next event (see onWhen)
+  const HIDDEN = { mag: 99, trueDir: new THREE.Vector3(0, 1, 0) };
 
   /** Place the moons' points, and return the ones you can see (for names and tapping). */
   function updateSatellites() {
-    const jupiter = sky.planets.find((p) => p.id === "Jupiter");
-    // (In pixels: from wherever you are, so from nearer, as from Mars, they spread wider.)
-    const reach = (SATELLITE_REACH_KM / (jupiter.dist * AU_KM)) * pxPerRad();
-    const at = screenOf(jupiter.dir);
-    const near =
-      at &&
-      at[0] > -reach &&
-      at[1] > -reach &&
-      at[0] < canvas.clientWidth + reach &&
-      at[1] < canvas.clientHeight + reach;
-    satellitePoints.points.visible = !glasses && reach >= SATELLITE_FROM && near;
-    if (!satellitePoints.points.visible) return [];
-    const moons = jupiterMoons(sky);
     const perRad = pxPerRad();
-    const apart = moons.map((m) => smooth(SATELLITE_FROM, SATELLITE_TO, m.trueDir.angleTo(jupiter.trueDir) * perRad));
-    // (Crossing Jupiter, it's drawn on the disc instead: see planets.js. Zoomed in, so
-    // much more shows that fading out has to cover more magnitudes.)
-    satellitePoints.update(
-      moons,
-      moons.map((m, i) => (m.behind || m.inFront ? 1 : 1 - apart[i])),
-      16
-    );
-    // Names: once they're apart from Jupiter, or crossing its disc once that's big.
-    const disc = smooth(SATELLITE_FROM, SATELLITE_TO, shownRadius(jupiter) * perRad);
-    // (Not while it's dark in Jupiter's shadow: there's nothing there to name or tap.)
-    return moons.filter((m, i) => !m.behind && m.light >= 0.5 && (m.inFront ? disc : apart[i]) > 0.5);
+    const shown = [];
+    const points = [];
+    const fades = [];
+    for (const [parent, defs] of Object.entries(MOONS_OF)) {
+      const planet = sky.planets.find((p) => p.id === parent);
+      // (In pixels: from wherever you are, so from nearer, as from Mars, they spread wider.)
+      const reach = (MOON_REACH_KM[parent] / (planet.dist * AU_KM)) * perRad;
+      const at = screenOf(planet.dir);
+      const near =
+        at &&
+        at[0] > -reach &&
+        at[1] > -reach &&
+        at[0] < canvas.clientWidth + reach &&
+        at[1] < canvas.clientHeight + reach;
+      if (glasses || reach < SATELLITE_FROM || !near) {
+        points.push(...defs.map(() => HIDDEN));
+        fades.push(...defs.map(() => 1));
+        continue;
+      }
+      const moons = moonsOf(sky, parent);
+      const apart = moons.map((m) => smooth(SATELLITE_FROM, SATELLITE_TO, m.trueDir.angleTo(planet.trueDir) * perRad));
+      // (Crossing the planet, it's drawn on the disc instead: see planets.js. Zoomed in, so
+      // much more shows that fading out has to cover more magnitudes.)
+      moons.forEach((m, i) => {
+        points.push(m);
+        fades.push(m.behind || m.inFront ? 1 : 1 - apart[i]);
+      });
+      // Names: once they're apart from the planet, or crossing its disc once that's big.
+      const disc = smooth(SATELLITE_FROM, SATELLITE_TO, shownRadius(planet) * perRad);
+      // (Not while it's dark in the planet's shadow: there's nothing there to name or tap.)
+      shown.push(...moons.filter((m, i) => !m.behind && m.light >= 0.5 && (m.inFront ? disc : apart[i]) > 0.5));
+    }
+    satellitePoints.points.visible = fades.some((f) => f < 1);
+    if (satellitePoints.points.visible) satellitePoints.update(points, fades, 16);
+    return shown;
   }
 
   // Put a disc's label just outside its edge, however far you zoom in.
@@ -2095,7 +2112,7 @@ async function main() {
           shown: through || isAloft() || p.alt > -3,
           transmit: throughAir(atm, through ? ZENITH : p.trueDir),
           // Its moons' shadows on it, and the moons crossing in front of it.
-          casters: p.id === "Jupiter" ? jupiterMoons(sky) : undefined,
+          casters: p.id in MOONS_OF ? moonsOf(sky, p.id) : undefined,
         };
       },
     });
