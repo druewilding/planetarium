@@ -1,9 +1,10 @@
 import { deflateSync } from "node:zlib";
 
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
   AZ_BINS,
+  createLightPollution,
   describeSky,
   GLOW_AZ,
   GLOW_ROWS,
@@ -77,9 +78,57 @@ describe("glowAt", () => {
     expect(look(-180 / GLOW_AZ)).toBeCloseTo((g(j, 0) + g(j, GLOW_AZ - 1)) / 2, 10);
   });
 
-  test("gives the horizon's glow below the horizon", () => {
-    const below = glowAt(table, { x: 0, y: -0.5, z: -Math.sqrt(0.75) })[1];
-    expect(below).toBeCloseTo(g(0, 0), 10);
+  test("fades below the horizon", () => {
+    const down = (deg) => {
+      const a = (deg * Math.PI) / 180;
+      return glowAt(table, { x: 0, y: Math.sin(a), z: -Math.cos(a) })[1];
+    };
+    expect(down(0)).toBeCloseTo(g(0, 0), 10);
+    expect(down(-1) / down(0)).toBeCloseTo(Math.exp(-1), 6);
+    expect(down(-30) / down(0)).toBeLessThan(1e-12);
+  });
+});
+
+describe("createLightPollution", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  /** Offline: every tile fails. Resolves once `n` places have been tried. */
+  function offline(n) {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const fetched = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"));
+    const tried = [];
+    let finish;
+    const all = new Promise((resolve) => (finish = resolve));
+    const lp = createLightPollution({
+      onReady: (table) => {
+        tried.push(table);
+        if (tried.length === n) finish();
+      },
+    });
+    return { lp, fetched, tried, all };
+  }
+
+  test("works out only the latest of the places asked for while it's busy", async () => {
+    const { lp, tried, all } = offline(2);
+    for (const lat of [10, 20, 30]) expect(lp.glowFor({ lat, lon: 0 })).toBeNull();
+    await all;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(tried).toEqual([null, null]); // the first place and the last, not the middle one
+  });
+
+  test("tries again after a while when the tiles didn't load", async () => {
+    const { lp, fetched, all } = offline(1);
+    const here = { lat: 59.91, lon: 10.74 };
+    lp.glowFor(here);
+    await all;
+    const calls = fetched.mock.calls.length;
+    lp.glowFor(here);
+    expect(fetched.mock.calls.length).toBe(calls);
+    const later = Date.now() + 61_000;
+    vi.spyOn(Date, "now").mockReturnValue(later);
+    lp.glowFor(here);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(fetched.mock.calls.length).toBeGreaterThan(calls);
   });
 });
 

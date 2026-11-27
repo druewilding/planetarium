@@ -11,7 +11,7 @@
 import * as THREE from "three";
 
 import { EARTH_RADIUS_KM } from "../constants.js";
-import { GLOW_AZ, GLOW_ROWS, glowAt } from "../lightpollution.js";
+import { BELOW_HORIZON_FADE, GLOW_AZ, GLOW_ROWS, glowAt } from "../lightpollution.js";
 
 export const ATMOSPHERES = {
   earth: {
@@ -147,9 +147,11 @@ void main() {
       total += uLightE[k] * att * (uBetaR * phR[k] * d.x + uBetaM * phM[k] * d.y);
     }
   }
-  // Light pollution, by azimuth and altitude (rows spaced like this texture's, above the horizon).
+  // Light pollution, by azimuth and altitude (rows spaced like this texture's, above
+  // the horizon; below it, seen from up high, fading a little way down).
   vec3 city = uCityScale > 0.0
     ? uCityScale * texture2D(uCity, vec2(vUv.x + 0.5 / ${GLOW_AZ}.0, sqrt(max(alt, 0.0) / (0.5 * PI)))).rgb
+      * exp(min(alt, 0.0) / ${((BELOW_HORIZON_FADE * Math.PI) / 180).toFixed(5)})
     : vec3(0.0);
   gl_FragColor = vec4(total + uGlow + city, 1.0);
 }

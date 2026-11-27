@@ -9,6 +9,7 @@
 // to canvas pixels).
 
 import { cachedFetch } from "./cachedfetch.js";
+import { mercX, mercY } from "./tiles.js";
 
 const TILEJSON = "https://tiles.openfreemap.org/planet";
 // Saved under a fixed address: the real one names this week's build of the map.
@@ -303,12 +304,6 @@ function distanceTo(mask, target) {
 }
 
 // ---- Rings of tiles around a place ----
-
-const mercX = (lon, z) => ((lon + 180) / 360) * 2 ** z;
-function mercY(lat, z) {
-  const p = (lat * Math.PI) / 180;
-  return ((1 - Math.log(Math.tan(p) + 1 / Math.cos(p)) / Math.PI) / 2) * 2 ** z;
-}
 
 /**
  * Load the water tiles reaching `reachKm` around a point, at about

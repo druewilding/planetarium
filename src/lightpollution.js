@@ -22,6 +22,7 @@
 import { cachedFetch } from "./cachedfetch.js";
 import { EARTH_RADIUS_KM } from "./constants.js";
 import { decodePNG } from "./png.js";
+import { latOf, mercX, mercY } from "./tiles.js";
 
 const TILE_URL = (z, x, y) =>
   `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_Night_Lights/default/2016-01-01/GoogleMapsCompatible_Level8/${z}/${y}/${x}.png`;
@@ -32,6 +33,7 @@ export const AZ_BINS = 144; // 2.5° each
 export const RINGS = 30;
 const INNER_KM = 0.3;
 export const REACH_KM = 300;
+const RETRY_MS = 60_000; // when tiles didn't load
 const ringEdge = (k) => INNER_KM * (REACH_KM / INNER_KM) ** (k / RINGS);
 // The nearest ring holds everything inside INNER_KM too.
 const ringKm = (k) => (k === 0 ? 0.6 * INNER_KM : Math.sqrt(ringEdge(k) * ringEdge(k + 1)));
@@ -45,6 +47,8 @@ function ringOf(km) {
 // texture's (finely near the horizon, where distant towns' glow sits).
 export const GLOW_AZ = AZ_BINS;
 export const GLOW_ROWS = 24;
+// Below the horizon (seen from a little way up) the glow fades, by e every this many degrees.
+export const BELOW_HORIZON_FADE = 1;
 export const rowAltitude = (j) => ((j + 0.5) / GLOW_ROWS) ** 2 * 90; // degrees
 
 // The air the light crosses (per km, at 550 nm), and how the lamps send it out.
@@ -146,12 +150,15 @@ function ringKernel(k) {
   return out;
 }
 
-let kernel = null;
-/** The kernel for every ring (worked out the first time it's needed: about a tenth of a second). */
-export function glowKernel() {
-  kernel ??= Array.from({ length: RINGS }, (_, k) => ringKernel(k));
-  return kernel;
-}
+// Each ring's kernel, worked out the first time it's needed (all of them take
+// about a tenth of a second).
+const kernel = [];
+const kernelFor = (k) => (kernel[k] ??= ringKernel(k));
+/** The kernel for every ring. */
+export const glowKernel = () => Array.from({ length: RINGS }, (_, k) => kernelFor(k));
+
+/** A pause, letting the page draw a frame before a long job goes on. */
+const pause = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 /**
  * The sky's glow from a set of sources ([ring][azimuth bin] of brightness × km²):
@@ -159,11 +166,18 @@ export function glowKernel() {
  * of azimuth (row-major from the horizon up), in the sources' units.
  */
 export function skyGlow(sources) {
-  const K = glowKernel();
-  const half = AZ_BINS / 2;
   const out = new Float32Array(GLOW_ROWS * GLOW_AZ * 2);
+  const steps = glowSteps(sources, out);
+  while (!steps.next().done);
+  return out;
+}
+
+/** skyGlow, a ring at a time (pausing between them, if it's run that way). */
+function* glowSteps(sources, out) {
+  const half = AZ_BINS / 2;
   for (let k = 0; k < RINGS; k++) {
-    const ker = K[k];
+    if (!sources.subarray(k * AZ_BINS, (k + 1) * AZ_BINS).some(Boolean)) continue;
+    const ker = kernelFor(k);
     for (let a = 0; a < AZ_BINS; a++) {
       const P = sources[k * AZ_BINS + a];
       if (!P) continue;
@@ -178,8 +192,8 @@ export function skyGlow(sources) {
         }
       }
     }
+    yield;
   }
-  return out;
 }
 
 // ---- From the tiles' pixels to brightness ----
@@ -194,13 +208,6 @@ export const SCALE = 1.23; // cd/m² of sky per unit the model gives
 const LAMPS = [1.5, 0.92, 0.35];
 const RAYLEIGH_TINT = [0.66, 1, 1.95];
 
-const mercX = (lon, z) => ((lon + 180) / 360) * 2 ** z;
-const mercY = (lat, z) => {
-  const p = (lat * Math.PI) / 180;
-  return ((1 - Math.log(Math.tan(p) + 1 / Math.cos(p)) / Math.PI) / 2) * 2 ** z;
-};
-const latOf = (y, z) => (Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / 2 ** z))) * 180) / Math.PI;
-
 const tileCache = new Map(); // "z/x/y" → Promise<Uint8Array | null>
 function loadTile(z, x, y) {
   const n = 2 ** z;
@@ -214,6 +221,7 @@ function loadTile(z, x, y) {
         .then(async (res) => decodePNG(new Uint8Array(await res.arrayBuffer()), [3]))
         .catch((err) => {
           console.warn(`Night lights tile ${z}/${x}/${y} didn't load`, err);
+          tileCache.delete(key); // (try again next time)
           return null;
         })
     );
@@ -229,52 +237,59 @@ const LEVELS = [
 
 /**
  * The lights around a place, as sources for skyGlow: brightness × km² in each
- * bin of distance and direction. Null if no tiles loaded.
+ * bin of distance and direction, and how many tiles didn't load. Null if none did.
  */
 export async function lightsAround(lat, lon, { gamma = GAMMA } = {}) {
   const sources = new Float32Array(RINGS * AZ_BINS);
   const rad = Math.PI / 180;
   const cosLat = Math.cos(lat * rad);
   const sinLat = Math.sin(lat * rad);
-  let loaded = 0;
+  // Ask for every tile at once, fine and coarse.
+  const jobs = [];
   for (const [z, from, to] of LEVELS) {
     const dLat = to / 111.32;
     const dLon = Math.min(180, to / (111.32 * Math.max(cosLat, 0.01)));
     const tx0 = Math.floor(mercX(lon - dLon, z));
-    const tx1 = Math.floor(mercX(lon + dLon, z));
+    // (Never more than once round the world, near the poles.)
+    const tx1 = Math.min(Math.floor(mercX(lon + dLon, z)), tx0 + 2 ** z - 1);
     const ty0 = Math.max(0, Math.floor(mercY(Math.min(MAX_LAT, lat + dLat), z)));
     const ty1 = Math.min(2 ** z - 1, Math.floor(mercY(Math.max(-MAX_LAT, lat - dLat), z)));
-    const jobs = [];
-    for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) jobs.push([tx, ty, loadTile(z, tx, ty)]);
+    for (let ty = ty0; ty <= ty1; ty++) {
+      for (let tx = tx0; tx <= tx1; tx++) jobs.push({ z, from, to, tx, ty, tile: loadTile(z, tx, ty) });
+    }
+  }
+  let missing = 0;
+  for (const { z, from, to, tx, ty, tile: job } of jobs) {
+    const tile = await job;
+    if (!tile) {
+      missing++;
+      continue;
+    }
+    await pause();
     const pxKm = 40075.017 / (256 * 2 ** z);
-    for (const [tx, ty, job] of jobs) {
-      const tile = await job;
-      if (!tile) continue;
-      loaded++;
-      for (let py = 0; py < 256; py++) {
-        const la = latOf(ty + (py + 0.5) / 256, z);
-        const cl = Math.cos(la * rad);
-        const sl = Math.sin(la * rad);
-        const area = (pxKm * cl) ** 2;
-        for (let px = 0; px < 256; px++) {
-          const v = tile[py * 256 + px];
-          if (!v) continue;
-          const lo = ((tx + (px + 0.5) / 256) / 2 ** z) * 360 - 180;
-          const dl = (lo - lon) * rad;
-          // Distance and bearing, on the sphere.
-          const cosC = sinLat * sl + cosLat * cl * Math.cos(dl);
-          const km = Math.acos(Math.min(1, cosC)) * EARTH_RADIUS_KM;
-          if (km < from || km >= to) continue;
-          const k = ringOf(km);
-          if (k < 0) continue;
-          const bearing = Math.atan2(Math.sin(dl) * cl, cosLat * sl - sinLat * cl * Math.cos(dl));
-          const a = Math.round((bearing / (2 * Math.PI)) * AZ_BINS + AZ_BINS) % AZ_BINS;
-          sources[k * AZ_BINS + a] += (v / 255) ** gamma * area;
-        }
+    for (let py = 0; py < 256; py++) {
+      const la = latOf(ty + (py + 0.5) / 256, z);
+      const cl = Math.cos(la * rad);
+      const sl = Math.sin(la * rad);
+      const area = (pxKm * cl) ** 2;
+      for (let px = 0; px < 256; px++) {
+        const v = tile[py * 256 + px];
+        if (!v) continue;
+        const lo = ((tx + (px + 0.5) / 256) / 2 ** z) * 360 - 180;
+        const dl = (lo - lon) * rad;
+        // Distance and bearing, on the sphere.
+        const cosC = sinLat * sl + cosLat * cl * Math.cos(dl);
+        const km = Math.acos(Math.min(1, cosC)) * EARTH_RADIUS_KM;
+        if (km < from || km >= to) continue;
+        const k = ringOf(km);
+        if (k < 0) continue;
+        const bearing = Math.atan2(Math.sin(dl) * cl, cosLat * sl - sinLat * cl * Math.cos(dl));
+        const a = Math.round((bearing / (2 * Math.PI)) * AZ_BINS + AZ_BINS) % AZ_BINS;
+        sources[k * AZ_BINS + a] += (v / 255) ** gamma * area;
       }
     }
   }
-  return loaded ? sources : null;
+  return missing < jobs.length ? { sources, missing } : null;
 }
 
 /**
@@ -283,7 +298,17 @@ export async function lightsAround(lat, lon, { gamma = GAMMA } = {}) {
  * down (azimuth in degrees, and how much brighter than the average there).
  */
 export function glowTable(sources) {
-  const raw = skyGlow(sources);
+  return tableFrom(skyGlow(sources));
+}
+
+/** glowTable, pausing as it goes so the page keeps drawing. */
+export async function glowTableSoon(sources) {
+  const raw = new Float32Array(GLOW_ROWS * GLOW_AZ * 2);
+  for (const _ of glowSteps(sources, raw)) await pause(); // eslint-disable-line no-unused-vars
+  return tableFrom(raw);
+}
+
+function tableFrom(raw) {
   const rgb = new Float32Array(GLOW_ROWS * GLOW_AZ * 3);
   for (let i = 0; i < GLOW_ROWS * GLOW_AZ; i++) {
     for (let c = 0; c < 3; c++) rgb[i * 3 + c] = SCALE * LAMPS[c] * (raw[i * 2] * RAYLEIGH_TINT[c] + raw[i * 2 + 1]);
@@ -317,11 +342,12 @@ export function glowAt(table, dir) {
   const i2 = (i + 1) % GLOW_AZ;
   const fx = x - Math.floor(x);
   const { rgb } = table;
+  const below = Math.exp(Math.min(alt, 0) / ((BELOW_HORIZON_FADE * Math.PI) / 180));
   const out = [0, 0, 0];
   for (let c = 0; c < 3; c++) {
     const a = rgb[(j * GLOW_AZ + i) * 3 + c] * (1 - fx) + rgb[(j * GLOW_AZ + i2) * 3 + c] * fx;
     const b = rgb[((j + 1) * GLOW_AZ + i) * 3 + c] * (1 - fx) + rgb[((j + 1) * GLOW_AZ + i2) * 3 + c] * fx;
-    out[c] = a * (1 - fy) + b * fy;
+    out[c] = (a * (1 - fy) + b * fy) * below;
   }
   return out;
 }
@@ -355,36 +381,53 @@ export function describeSky(zenith) {
 
 /**
  * Keeps the glow for each place it's asked for, working it out (from tiles
- * fetched in the background) the first time. `onReady` is called with each.
+ * fetched in the background) the first time: one place at a time, and of the
+ * places asked for meanwhile, only the latest. `onReady` is called with each.
  */
 export function createLightPollution({ onReady } = {}) {
-  const done = new Map(); // key → table | null (failed)
-  const jobs = new Set();
+  // key → { table, retryAt }: table is null if no tiles came; retryAt is set when
+  // some didn't (offline, or a dropped request), to try again after a while.
+  const done = new Map();
+  let busy = false;
+  let wanted = null;
   const keyOf = (loc) => `${loc.lat.toFixed(2)},${loc.lon.toFixed(2)}`;
 
   async function run(key, lat, lon) {
+    busy = true;
     let table = null;
+    let retryAt = null;
     try {
-      const sources = await lightsAround(lat, lon);
-      if (sources) table = glowTable(sources);
+      const lights = await lightsAround(lat, lon);
+      if (lights) table = await glowTableSoon(lights.sources);
+      if (!lights || lights.missing) retryAt = Date.now() + RETRY_MS;
     } catch (err) {
       console.warn("Light pollution failed to load", err);
+      retryAt = Date.now() + RETRY_MS;
     }
     if (done.size > 20) done.clear();
-    done.set(key, table);
-    jobs.delete(key);
+    // (Keep what there was, if this try did worse.)
+    done.set(key, { table: table ?? done.get(key)?.table ?? null, retryAt });
+    busy = false;
     onReady?.(table);
+    if (wanted) {
+      const next = wanted;
+      wanted = null;
+      glowFor(next);
+    }
   }
 
   /** The glow over a place if it's ready (else null, and it gets started). */
   function glowFor(loc) {
     const key = keyOf(loc);
-    if (done.has(key)) return done.get(key);
-    if (!jobs.has(key)) {
-      jobs.add(key);
-      run(key, loc.lat, loc.lon);
+    const have = done.get(key);
+    if (!have || (have.retryAt && Date.now() > have.retryAt)) {
+      if (busy) wanted = { lat: loc.lat, lon: loc.lon };
+      else {
+        if (have) have.retryAt = null; // (one try at a time)
+        run(key, loc.lat, loc.lon);
+      }
     }
-    return null;
+    return have?.table ?? null;
   }
 
   return { glowFor };
