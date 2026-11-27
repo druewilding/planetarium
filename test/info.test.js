@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, test } from "vitest";
 
-import { phaseName, starDistance } from "../src/ui/info.js";
+import { lightLeftNote, phaseName, starDistance } from "../src/ui/info.js";
 
 const { stars } = JSON.parse(readFileSync(new URL("../data/stars.json", import.meta.url), "utf8"));
 const star = (hip) => {
@@ -71,5 +71,25 @@ describe("phaseName", () => {
     [-90, "Last quarter"],
   ])("%i° is %s", (angle, name) => {
     expect(phaseName(angle)).toBe(name);
+  });
+});
+
+describe("lightLeftNote", () => {
+  test("sets a star's light against the nearest thing in history", () => {
+    expect(lightLeftNote(1478, false)).toBe(
+      "The light you’re seeing set off 14 years before Columbus sailed to America."
+    );
+    expect(lightLeftNote(2018, false)).toBe(
+      "The light you’re seeing set off 3 years before the James Webb Space Telescope was launched."
+    );
+    expect(lightLeftNote(1969, false)).toBe(
+      "The light you’re seeing set off the year people first walked on the Moon."
+    );
+  });
+
+  test("says 'about' for a distance that isn't known so well, and copes with long ago", () => {
+    expect(lightLeftNote(-20000, true)).toBe(
+      "The light you’re seeing set off about 10,300 years before the end of the last ice age."
+    );
   });
 });

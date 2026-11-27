@@ -106,7 +106,11 @@ sky with no connection (the hills and place names need one the first time you vi
 - **Info panel:** rise, set and transit times, twilight, day length, Moon phases and age, distances, light travel time,
   and the brightest stars in each constellation. Stars have distances too, from their Hipparcos parallaxes: in
   kilometres, in years of light travel (light-years), and the year the light you see left them. Distant stars are hard
-  to measure, so those say "about" or give a range.
+  to measure, so those say "about" or give a range, and what was happening on the Earth when that light set off
+  ("14 years before Columbus sailed to America"). Each planet's card gives its size, whether it's going backwards
+  against the stars, and when it's next best to see (opposite the Sun, or for Mercury and Venus furthest from it),
+  with a note about it, much of it about right now: Venus's phase, how far open Saturn's rings are, how late Jupiter's
+  light makes Io's eclipses (Ole Rømer's speed of light), how far round the Sun Pluto has got since it was found.
 - **Point at sky:** on a phone, hold it up and the sky follows it, so you can aim at a star and read its name. It
   uses the compass for north (via `deviceorientationabsolute` on Android, `webkitCompassHeading` on iOS). Phone
   compasses are often a few degrees out and point to magnetic north, so dragging sideways turns the sky into line.

@@ -1,7 +1,7 @@
 // Info panel: an overview of today (Sun, Moon, visible planets) or details for
 // whatever is selected. Expensive searches are cached per local day.
 
-import { A, AU_KM, Body, compassPoint, planetPole, PLANETS, R2D } from "../astro.js";
+import { A, AU_KM, Body, compassPoint, MOON_RADIUS_KM, planetPole, PLANETS, R2D, SUN_RADIUS_KM } from "../astro.js";
 import { lunarEclipsesFrom, nextTotalSolarEclipse, solarEclipsesFrom } from "../eclipses.js";
 import { glare, moonEventsBetween, MOONS_OF, moonsOf, nextMoonEvents } from "../satellites.js";
 import { seasonAt } from "../season.js";
@@ -76,7 +76,36 @@ export function starDistance(s, star) {
       <dt>Light travel time</dt><dd>${about}${sig(ly, digits)} years</dd>
       <dt>Light you see left</dt><dd>${about ? "around" : "in"} ${year(left)}</dd>`,
     short: `${about ? "~" : ""}${sig(ly, digits)} ly`,
+    left,
+    about: !!about,
   };
+}
+
+// Things that happened, to set a star's light against: [year, what happened].
+const HISTORY = [
+  [-9700, "the end of the last ice age"],
+  [-2560, "the Great Pyramid was built"],
+  [-776, "the first Olympic Games"],
+  [79, "Vesuvius buried Pompeii"],
+  [1066, "the Normans took England"],
+  [1492, "Columbus sailed to America"],
+  [1610, "Galileo first turned a telescope on the sky"],
+  [1687, "Newton explained gravity"],
+  [1781, "William Herschel found Uranus"],
+  [1903, "the Wright brothers first flew"],
+  [1969, "people first walked on the Moon"],
+  [1990, "the Hubble Space Telescope was launched"],
+  [2021, "the James Webb Space Telescope was launched"],
+];
+
+/** "It set off 14 years before Columbus sailed to America." For light that left in `left`. */
+export function lightLeftNote(left, about) {
+  const [y, what] = HISTORY.reduce((a, b) => (Math.abs(b[0] - left) < Math.abs(a[0] - left) ? b : a));
+  const gap = Math.abs(left - y);
+  const years = (n) => `${n.toLocaleString("en-GB")} year${n === 1 ? "" : "s"}`;
+  const when =
+    gap === 0 ? `the year ${what}` : `${about ? "about " : ""}${years(gap)} ${left < y ? "before" : "after"} ${what}`;
+  return `The light you’re seeing set off ${when}.`;
 }
 
 export function phaseName(angle) {
@@ -321,10 +350,22 @@ export function createInfo({
     html += `<div class="section"><h4>Facts</h4><dl>
       <dt>Distance</dt><dd>${((sun.dist * AU_KM) / 1e6).toFixed(2)} million km</dd>
       <dt>Light travel time</dt><dd>${formatDuration((sun.dist * AU_KM) / LIGHT_SPEED_KM_S / 60)}</dd>
+      <dt>Size</dt><dd>${sig(SUN_RADIUS_KM * 2, 4)} km across</dd>
       <dt>Apparent size</dt><dd>${(sun.angularRadius * 2 * R2D * 60).toFixed(1)}′</dd>
       ${next ? `<dt>${next[0]}</dt><dd>${formatShortDate(next[1].date.getTime(), loc)}</dd>` : ""}
-    </dl></div>`;
+      ${apsisRow(s)}
+    </dl>
+    <p class="note">The Earth’s orbit is a little oval: it’s nearest the Sun in early January, 147 million km away, and furthest in early July, 152 million km. So it’s not the distance that makes summer: it’s the Earth’s tilt, turning each half towards the Sun in turn.</p></div>`;
     return html;
+  }
+
+  /** When the Earth's next nearest the Sun, or furthest from it. */
+  function apsisRow(s) {
+    const a = cached(`apsis|${Math.floor(s.ms / DAY)}`, () =>
+      A.SearchPlanetApsis(Body.Earth, A.MakeTime(new Date(s.ms)))
+    );
+    const what = a.kind === 0 ? "Nearest the Sun" : "Furthest from the Sun";
+    return `<dt>${what}</dt><dd>${formatShortDate(a.time.date.getTime(), s.loc)} · ${(a.dist_km / 1e6).toFixed(1)} M km</dd>`;
   }
 
   function moonDetails(s, full) {
@@ -366,10 +407,12 @@ export function createInfo({
       ${phases.age !== null ? `<dt>Age</dt><dd>${phases.age.toFixed(1)} days</dd>` : ""}
       <dt>Distance</dt><dd>${Math.round(moon.dist * AU_KM).toLocaleString()} km</dd>
       <dt>Light travel time</dt><dd>${((moon.dist * AU_KM) / LIGHT_SPEED_KM_S).toFixed(2)} s</dd>
+      <dt>Size</dt><dd>${sig(MOON_RADIUS_KM * 2, 4)} km across</dd>
       <dt>Apparent size</dt><dd>${(moon.angularRadius * 2 * R2D * 60).toFixed(1)}′</dd>
       <dt>Brightness</dt><dd>mag ${moon.mag.toFixed(1)}</dd>
     </dl>
-    <p class="note">The phase is just geometry: you always see the half of the Moon facing the Sun, from a changing angle.</p></div>`;
+    <p class="note">The phase is just geometry: you always see the half of the Moon facing the Sun, from a changing angle.</p>
+    <p class="note">It always turns the same face to us: it spins once each time it goes round. And it’s slowly drifting away, about 3.8 cm a year, as the tides it raises slow the Earth’s spin.</p></div>`;
     return html;
   }
 
@@ -388,14 +431,135 @@ export function createInfo({
         <dt>Brightness</dt><dd>mag ${p.mag.toFixed(1)}${visible ? "" : " (needs a telescope)"}</dd>
         <dt>Distance</dt><dd>${p.dist.toFixed(3)} AU · ${((p.dist * AU_KM) / 1e6).toFixed(0)} M km</dd>
         <dt>Light travel time</dt><dd>${lightMin < 60 ? `${lightMin.toFixed(1)} min` : formatDuration(lightMin)}</dd>
+        <dt>Size</dt><dd>${sig(PLANETS.find((x) => x.id === p.id).radiusKm * 2, 4)} km across</dd>
         <dt>Apparent size</dt><dd>${(p.angularRadius * 2 * R2D * 3600).toFixed(1)}″</dd>
         <dt>Lit</dt><dd>${(p.phaseFraction * 100).toFixed(0)}%</dd>
         <dt>Angle from Sun</dt><dd>${elong.toFixed(0)}°</dd>
         <dt>In</dt><dd>${esc(con.name)}</dd>
+        <dt>Against the stars</dt><dd>${goingBackwards(p.id, ms) ? "Going backwards (west)" : "Moving east, as usual"}</dd>
+        ${nextBestRow(p.id, s)}
       </dl>
       ${elong < 15 ? `<p class="note">${esc(p.name)} is too close to the Sun to see right now.</p>` : ""}
-      ${p.id === "Uranus" ? uranusNote(s, p) : ""}</div>
+      ${planetNote(s, p)}</div>
       ${p.id in MOONS_OF ? moonsSection(s, p) : ""}`;
+  }
+
+  const INNER = new Set(["Mercury", "Venus"]);
+
+  /**
+   * Whether a planet seems to go backwards (west) against the stars at `ms`: the
+   * Earth overtaking it (or, for Mercury and Venus, it overtaking the Earth).
+   */
+  function goingBackwards(id, ms) {
+    const lon = (t) => A.Ecliptic(A.GeoVector(Body[id], new Date(t), true)).elon;
+    const d = lon(ms + DAY / 2) - lon(ms - DAY / 2);
+    return ((d + 540) % 360) - 180 < 0;
+  }
+
+  /**
+   * When a planet's next best for seeing: Mercury and Venus furthest from the Sun
+   * in our sky, the others opposite the Sun (up all night, and nearest).
+   */
+  function nextBestRow(id, s) {
+    const { ms, loc } = s;
+    const day = Math.floor(ms / DAY);
+    if (INNER.has(id)) {
+      const e = cached(`elong|${id}|${day}`, () => A.SearchMaxElongation(Body[id], new Date(ms)));
+      return `<dt>Furthest from the Sun</dt><dd>${formatShortDate(e.time.date.getTime(), loc)}, ${e.visibility} sky, ${e.elongation.toFixed(0)}°</dd>`;
+    }
+    const t = cached(`opp|${id}|${day}`, () => A.SearchRelativeLongitude(Body[id], 0, new Date(ms)).date.getTime());
+    return `<dt>Next opposite the Sun</dt><dd>${formatYearDate(t, loc)}</dd>`;
+  }
+
+  /** A little more about each planet: some of it about how it is right now. */
+  function planetNote(s, p) {
+    const year = new Date(s.ms).getUTCFullYear();
+    const note = (text) => `<p class="note">${text}</p>`;
+    switch (p.id) {
+      case "Mercury":
+        return note(
+          "The smallest planet, and the quickest, round the Sun in 88 days. It spins so slowly that a day there, sunrise to sunrise, lasts two of its years. Always near the Sun in our sky, it’s easiest to catch when it’s furthest from it, low in the twilight."
+        );
+      case "Venus": {
+        const lit = p.phaseFraction;
+        const now =
+          lit < 0.5
+            ? `Right now it’s on our side of the Sun: big (${(p.angularRadius * 2 * R2D * 3600).toFixed(0)}″) but only ${(lit * 100).toFixed(0)}% lit, a crescent in a telescope.`
+            : `Right now it’s far round the Sun from us: small (${(p.angularRadius * 2 * R2D * 3600).toFixed(0)}″) but ${(lit * 100).toFixed(0)}% lit.`;
+        return note(
+          `${now} Galileo saw it go through phases like the Moon’s in 1610, growing as it thinned: proof that it goes round the Sun, not the Earth. It spins backwards, so slowly that one turn takes longer than its year.`
+        );
+      }
+      case "Mars":
+        return note(
+          `${goingBackwards("Mars", s.ms) ? "Right now Mars is going backwards against the stars: the Earth, on the inside track, is overtaking it." : "Every two years or so, when the Earth overtakes it on the inside track, Mars seems to go backwards against the stars for a couple of months."} That loop puzzled astronomers for thousands of years, until it was seen that the Earth goes round the Sun too.`
+        );
+      case "Jupiter": {
+        const lightMin = (p.dist * AU_KM) / LIGHT_SPEED_KM_S / 60;
+        const later = lightMin - CLOSEST_JUPITER_MIN;
+        return note(
+          `In 1676 Ole Rømer noticed that Io’s eclipses came late when Jupiter was far from us, and early when it was near, and worked out why: light takes time to get here. It was the first measure of the speed of light. Right now Jupiter’s light takes ${lightMin.toFixed(0)} minutes, so we see its moons’ eclipses ${later.toFixed(0)} minutes later than we would at its very closest.`
+        );
+      }
+      case "Saturn":
+        return saturnNote(s, p, year);
+      case "Uranus":
+        return (
+          note(
+            "The first planet found with a telescope: William Herschel saw it in 1781 and at first took it for a comet."
+          ) + uranusNote(s, p)
+        );
+      case "Neptune":
+        return note(
+          "Found by maths: in 1846 Urbain Le Verrier worked out where an unseen planet must be, from how it tugged on Uranus, and Johann Galle found it that night. Galileo had drawn it beside Jupiter in 1612, taking it for a star. It first got back round the Sun to where it was found in 2011."
+        );
+      case "Pluto":
+        return plutoNote(s, year);
+      default:
+        return "";
+    }
+  }
+
+  // Jupiter at its very closest (perihelion, at opposition): 3.95 AU, in light-minutes.
+  const CLOSEST_JUPITER_MIN = (3.95 * AU_KM) / LIGHT_SPEED_KM_S / 60;
+
+  /** "we saw them … in 2007" or "we'll see them … in 2049", told from the year you're looking at. */
+  const tense = (year, y, what) =>
+    year < y
+      ? `we’ll see them ${what} in ${y}`
+      : year > y
+        ? `we saw them ${what} in ${y}`
+        : `this year they’re ${what}`;
+  const andList = (parts) => parts.join(", ").replace(/, ([^,]*)$/, ", and $1");
+
+  /** Saturn's rings, tipped like its equator, open and close as it goes round the Sun. */
+  function saturnNote(s, p, year) {
+    // How far the rings are open to us: 0° edge-on, at most about 27°.
+    const open = Math.asin(Math.abs(planetPole("Saturn", s.sky).dot(p.trueDir))) * R2D;
+    const now =
+      open < 4
+        ? `Right now its rings are almost edge-on to us (${open.toFixed(0)}°), so thin they nearly vanish`
+        : open > 22
+          ? `Right now its rings are wide open to us (${open.toFixed(0)}°)`
+          : `Right now its rings are ${open.toFixed(0)}° open to us`;
+    const when = andList([tense(year, 2025, "edge-on"), tense(year, 2032, "widest"), tense(year, 2039, "edge-on")]);
+    return `<p class="note">${now}. Saturn is tipped over 27°, and its rings with it, so as it goes round the Sun, every 29 years, we see them from above, edge-on, then from below: ${when}. It’s so light for its size that it would float in water.</p>`;
+  }
+
+  /** How far round the Sun Pluto has got since it was found. */
+  function plutoNote(s, year) {
+    const FOUND = Date.UTC(1930, 1, 18);
+    let since;
+    if (s.ms < FOUND) since = "Clyde Tombaugh will find it in 1930, on photographs taken weeks apart.";
+    else if (year > 2178)
+      since = "Clyde Tombaugh found it in 1930, and in 2178 it got back round the Sun to where it was found.";
+    else {
+      const swept =
+        (A.EclipticLongitude(Body.Pluto, new Date(s.ms)) - A.EclipticLongitude(Body.Pluto, new Date(FOUND)) + 360) %
+        360;
+      since = `Clyde Tombaugh found it in 1930, spotting it move between photographs taken weeks apart. Since then it has gone ${(swept / 3.6).toFixed(0)}% of the way round the Sun: it gets back to where it was found in 2178.`;
+    }
+    return `<p class="note">${since} Its oval orbit brings it closer to the Sun than Neptune for 20 years in every 248: last from 1979 to 1999.</p>`;
   }
 
   /**
@@ -414,15 +578,7 @@ export function createInfo({
           : "Just now we see its moons’ orbits at a slant, as ovals";
     // Told from the year you're looking at.
     const year = new Date(s.ms).getUTCFullYear();
-    const at = (y, what) =>
-      year < y
-        ? `we’ll see them ${what} in ${y}`
-        : year > y
-          ? `we saw them ${what} in ${y}`
-          : `this year they’re ${what}`;
-    const when = [at(2007, "edge-on"), at(2030, "face-on"), at(2049, "edge-on")]
-      .join(", ")
-      .replace(/, ([^,]*)$/, ", and $1");
+    const when = andList([tense(year, 2007, "edge-on"), tense(year, 2030, "face-on"), tense(year, 2049, "edge-on")]);
     return `<p class="note">Uranus spins on its side, tipped over by 98°, perhaps by a giant collision long ago, and its moons go round its equator, tipped over with it. ${seen}. That changes over its 84 years round the Sun: ${when}.</p>`;
   }
 
@@ -511,12 +667,12 @@ export function createInfo({
       <p class="note">${MOONS_NOTE[planet.id]}</p></div>`;
   }
 
-  const GALILEAN = "One of the four big moons Galileo found in 1610. Zoom in close to Jupiter to see them.";
+  const GALILEAN = "One of the four big moons Galileo found in 1610.";
   const MOON_ABOUT = {
-    Io: GALILEAN,
-    Europa: GALILEAN,
-    Ganymede: GALILEAN,
-    Callisto: GALILEAN,
+    Io: `The most volcanic place known, with hundreds of volcanoes kept molten by Jupiter’s tides squeezing it. ${GALILEAN}`,
+    Europa: `Under its cracked ice lies a salty ocean holding more water than all the Earth’s seas: one of the best places to look for life beyond the Earth. ${GALILEAN}`,
+    Ganymede: `The biggest moon in the Solar System, bigger than the planet Mercury, and the only one with a magnetic field of its own. ${GALILEAN}`,
+    Callisto: `Craters from end to end: its surface has hardly changed in four billion years. ${GALILEAN}`,
     Amalthea:
       "A small, red, potato-shaped moon close in to Jupiter. Edward Barnard found it in 1892, the last moon anyone found by eye, without a camera.",
     Thebe: "A small, dark moon just outside Amalthea’s orbit, found in Voyager 1’s pictures in 1979.",
@@ -618,7 +774,13 @@ export function createInfo({
         <dt>Colour (B−V)</dt><dd>${star.bv.toFixed(2)}</dd>
         <dt>RA / Dec</dt><dd>${(star.ra / 15).toFixed(2)}h / ${star.dec.toFixed(1)}°</dd>
         <dt>Catalogue</dt><dd>HIP ${star.hip}</dd>
-      </dl></div>`;
+      </dl>${starLightNote(s, star)}</div>`;
+  }
+
+  /** When the star's light set off, set against history (if its distance is known well enough). */
+  function starLightNote(s, star) {
+    const d = starDistance(s, star);
+    return d.left == null ? "" : `<p class="note">${lightLeftNote(d.left, d.about)}</p>`;
   }
 
   /** A mountain, town or landmark on the land. */
