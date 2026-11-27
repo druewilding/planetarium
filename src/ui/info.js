@@ -10,7 +10,7 @@ import {
   sunInConstellation,
 } from "../constellations.js";
 import { lunarEclipsesFrom, nextTotalSolarEclipse, solarEclipsesFrom } from "../eclipses.js";
-import { glare, moonEventsBetween, MOONS_OF, moonsOf, nextMoonEvents } from "../satellites.js";
+import { glare, moonEventsBetween, MOONS_OF, moonsOf, nextMoonEvents, SATELLITES } from "../satellites.js";
 import { seasonAt } from "../season.js";
 import { bodyPosition, distanceAU, LIGHT_SPEED_KM_S, LIGHT_YEAR_AU, LIGHT_YEAR_KM, starPosition } from "../space.js";
 import { poleNearness, starFacts, starLuminosity, starTemperature } from "../stars.js";
@@ -153,6 +153,42 @@ export function phaseIcon(angle, southern, litAngle) {
   </svg>`;
 }
 
+/**
+ * Turn mentions in a note's HTML into links: of the things in `targets` ([{ name,
+ * type, id }], the first of any name winning; longer names tried first), and of years, which jump to 1 January that
+ * year. Only exact years, 1000 to 2999: not one said to be "around" or "about"
+ * (rounded), or written with BCE or CE (far off). `self` ({ type, id }) isn't
+ * linked to itself. Text already inside a button is left as it is.
+ */
+export function linkMentions(html, targets, self = null) {
+  // (The first of any name wins.)
+  const byName = new Map();
+  for (const t of targets) if (!byName.has(t.name)) byName.set(t.name, t);
+  const names = [...byName.keys()]
+    .sort((a, b) => b.length - a.length)
+    .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const year = String.raw`(?<!(?:around|about) )([12]\d{3})(?!\d|[.,]\d|\s?(?:BCE|CE|km|light|times|years?|days?|hours?|minutes?|million|trillion|square)\b|[°″′%])`;
+  const re = new RegExp(String.raw`(?<![\p{L}\d.,])(?:${year}|(${names.join("|")})(?![\p{L}\d]))`, "gu");
+  let inButton = 0;
+  return html
+    .split(/(<[^>]+>)/)
+    .map((part) => {
+      if (part.startsWith("<")) {
+        if (/^<button\b/.test(part)) inButton++;
+        else if (/^<\/button>/.test(part)) inButton = Math.max(0, inButton - 1);
+        return part;
+      }
+      if (inButton) return part;
+      return part.replace(re, (m, y, name) => {
+        if (y) return `<button class="jump" data-year="${y}" title="Go to 1 January ${y}">${y}</button>`;
+        const t = byName.get(name);
+        if (self && t.type === self.type && String(t.id) === String(self.id)) return m;
+        return `<button class="jump" data-select="${t.type}" data-id="${esc(String(t.id))}" title="Look at ${esc(name)}">${m}</button>`;
+      });
+    })
+    .join("");
+}
+
 export function createInfo({
   container,
   getState,
@@ -162,6 +198,7 @@ export function createInfo({
   onGo,
   onEclipse,
   onWhen,
+  onYear,
   placeName,
   catalog,
 }) {
@@ -1033,10 +1070,43 @@ export function createInfo({
       <p class="note">Tap anything to look at it.</p>`;
   }
 
+  // Everything a note can link to by name. (Not stars with names of under four
+  // letters, which could be ordinary words. Not the Sun, the Moon or the Earth:
+  // they're everywhere.)
+  let targets = null;
+  function linkTargets() {
+    targets ??= [
+      ...PLANETS.map((p) => ({ name: p.name, type: "planet", id: p.id })),
+      ...SATELLITES.map((m) => ({ name: m.name, type: "satellite", id: m.id })),
+      ...catalog.constellations.flatMap((c) => [
+        { name: c.name, type: "constellation", id: c.id },
+        ...(c.id === "Ser" ? [{ name: "Serpens", type: "constellation", id: "Ser" }] : []),
+      ]),
+      // (Brightest first, so a name two stars share goes to the brighter.)
+      ...catalog.named
+        .filter((st) => st.proper.length >= 4)
+        .sort((a, b) => a.mag - b.mag)
+        .map((st) => ({ name: st.proper, type: "star", id: st.hip })),
+    ];
+    return targets;
+  }
+
+  /** Link the mentions in every note on a card (see linkMentions). */
+  function linkNotes(html, sel) {
+    const self = sel && {
+      type: sel.type,
+      id: sel.type === "star" ? sel.star.hip : sel.type === "constellation" ? sel.constellation.id : sel.id,
+    };
+    return html.replace(
+      /<p class="note">([\s\S]*?)<\/p>/g,
+      (m, inner) => `<p class="note">${linkMentions(inner, linkTargets(), self)}</p>`
+    );
+  }
+
   function build() {
     const s = getState();
     const sel = s.selection;
-    if (!sel) return overview(s);
+    if (!sel) return linkNotes(overview(s), null);
     const title = sel.name;
     let kind = "";
     let body = "";
@@ -1068,7 +1138,7 @@ export function createInfo({
     }
     // A star's kind links to its constellation, and a moon's to its planet, so they're already HTML.
     const kindHtml = sel.type === "star" || sel.type === "satellite" ? kind : esc(kind);
-    return `<h3>${esc(title)}</h3><p class="kind">${kindHtml}</p>${body}
+    return `<h3>${esc(title)}</h3><p class="kind">${kindHtml}</p>${linkNotes(body, sel)}
       <div class="info-actions">
         <button class="chip small" data-action="look">Look at it</button>
         ${sel.type === "feature" ? goButton(sel.feature.group === "peak" ? "Go to the summit" : "Go there") : ""}
@@ -1085,6 +1155,8 @@ export function createInfo({
     if (jump) onSelect(jump.dataset.select, jump.dataset.id);
     const when = e.target.closest("[data-when]")?.dataset.when;
     if (when) onWhen?.(+when);
+    const year = e.target.closest("[data-year]")?.dataset.year;
+    if (year) onYear?.(+year);
     const eclipse = e.target.closest("[data-eclipse]")?.dataset;
     if (eclipse) {
       const place = eclipse.lat != null ? { lat: +eclipse.lat, lon: +eclipse.lon } : null;
