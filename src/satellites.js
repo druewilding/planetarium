@@ -1,6 +1,7 @@
 // Moons of other planets: Mars' two little ones; Jupiter's four big ones, found by
-// Galileo in 1610; Saturn's six brightest, Titan the biggest; Uranus' five big ones;
-// Neptune's Triton; and Pluto's Charon.
+// Galileo in 1610, with little Amalthea and Thebe close in and Himalia and Elara far
+// out; Saturn's six brightest, Titan the biggest; Uranus' five big ones; Neptune's
+// Triton; and Pluto's Charon.
 //
 // Nothing here assumes you're on the Earth. A moon is placed by where it is from
 // its planet, added to where the planet is from you, so the same sums work from
@@ -13,14 +14,16 @@
 import { Vector3 } from "three";
 
 import { A, altAz, AU_KM, D2R, planetPole, PLANETS, SUN_RADIUS_KM, sunVisibleFraction } from "./astro.js";
+import { ELARA, HIMALIA } from "./moon-states.js";
 
 // H: brightness (absolute magnitude) at 1 AU from the Sun and from you; albedo: how
 // much sunlight it sends back; color: as a point, and its surface crossing its
 // planet; reachKm: the furthest it gets from its planet.
 //
-// Jupiter's moons are placed by astronomy-engine's own theory of them (good to a
-// few hundred km). The others follow an average orbit (`orbit`, below), fitted to
-// JPL's ephemerides for 1950–2100.
+// Jupiter's big four are placed by astronomy-engine's own theory of them (good to a
+// few hundred km). Most others follow an average orbit (`orbit`, below), fitted to
+// JPL's ephemerides for 1950–2100; Himalia and Elara, far out, from JPL's own
+// positions (`states`, below).
 const JUPITER_MOONS_DEFS = [
   {
     id: "Io",
@@ -88,6 +91,52 @@ const JUPITER_MOONS_DEFS = [
 // (theirs are Laplace planes too), turned so the moon goes round anticlockwise:
 // Triton's goes round backwards, and Uranus spins (and its moons go round) on its side.
 const ORBIT_MOONS_DEFS = [
+  {
+    id: "Amalthea",
+    name: "Amalthea",
+    parent: "Jupiter",
+    radiusKm: 83.5,
+    H: 7.4,
+    albedo: 0.09,
+    color: [0.9, 0.6, 0.45],
+    fitKm: 22,
+    orbit: {
+      pole: [268.057, 64.495],
+      a: 181365.1,
+      e: 0.003313,
+      i: 0.37559,
+      node: 282.8718,
+      nodeRate: -914.9,
+      peri: 102.9697,
+      periRate: 918.0277,
+      lon: 53.57183,
+      n: 722.631721674,
+      lonAccel: 0.010373,
+    },
+  },
+  {
+    id: "Thebe",
+    name: "Thebe",
+    parent: "Jupiter",
+    radiusKm: 49.3,
+    H: 9.0,
+    albedo: 0.047,
+    color: [0.75, 0.65, 0.58],
+    fitKm: 52,
+    orbit: {
+      pole: [268.057, 64.495],
+      a: 221887.8,
+      e: 0.017603,
+      i: 1.06677,
+      node: 340.3871,
+      nodeRate: -451.5646,
+      peri: 7.0079,
+      periRate: 452.3801,
+      lon: 189.08534,
+      n: 533.700272757,
+      lonAccel: -0.005672,
+    },
+  },
   {
     id: "Phobos",
     name: "Phobos",
@@ -454,11 +503,52 @@ const ORBIT_MOONS_DEFS = [
   },
 ].map((m) => ({ ...m, periodDays: 360 / m.orbit.n, reachKm: m.orbit.a * (1 + m.orbit.e) * 1.02 }));
 
-/** Every moon there is here, in the order of their planets in PLANETS, each { id, name, parent, … }. */
+// Far out from Jupiter, the Sun pulls Himalia and Elara about so much that no
+// average orbit fits them for long. So these keep JPL's own positions and speeds,
+// every 512 days from 1950 to 2100 (see moon-states.js), and go from the nearest one
+// to any moment by working out, a day or two at a time, how Jupiter and the Sun
+// pull them: within a few hundred km of where JPL has them.
+const STATE_MOONS_DEFS = [
+  {
+    id: "Himalia",
+    name: "Himalia",
+    parent: "Jupiter",
+    radiusKm: 70,
+    H: 7.9,
+    albedo: 0.057,
+    color: [0.78, 0.74, 0.7],
+    fitKm: 221,
+    periodDays: 250.6,
+    states: HIMALIA,
+  },
+  {
+    id: "Elara",
+    name: "Elara",
+    parent: "Jupiter",
+    radiusKm: 43,
+    H: 9.6,
+    albedo: 0.046,
+    color: [0.76, 0.72, 0.68],
+    fitKm: 564,
+    periodDays: 259.6,
+    states: ELARA,
+  },
+].map((m) => ({
+  ...m,
+  reachKm: Math.max(...m.states.states.map(([x, y, z]) => Math.hypot(x, y, z))) * 1.05,
+}));
+
+/**
+ * Every moon there is here, in the order of their planets in PLANETS and then
+ * outwards from each, each { id, name, parent, … }.
+ */
 export const SATELLITES = PLANETS.flatMap((p) =>
-  [...JUPITER_MOONS_DEFS, ...ORBIT_MOONS_DEFS].filter((m) => m.parent === p.id)
+  [...JUPITER_MOONS_DEFS, ...ORBIT_MOONS_DEFS, ...STATE_MOONS_DEFS]
+    .filter((m) => m.parent === p.id)
+    .sort((a, b) => a.reachKm - b.reachKm)
 );
-export const JUPITER_MOONS = SATELLITES.filter((m) => m.parent === "Jupiter");
+/** Jupiter's four big moons, found by Galileo. */
+export const JUPITER_MOONS = SATELLITES.filter((m) => m.key);
 /** The planets that have moons here, and theirs. */
 export const MOONS_OF = Object.fromEntries(
   [...new Set(SATELLITES.map((m) => m.parent))].map((p) => [p, SATELLITES.filter((m) => m.parent === p)])
@@ -522,22 +612,155 @@ const NUDGE_DAYS = 0.001;
  * going: { pos (AU), vel (AU/day) }, J2000 equator, keyed by id.
  */
 function offsetsOf(parent, time) {
-  if (parent === "Jupiter") {
-    const found = A.JupiterMoons(time);
-    return Object.fromEntries(
-      JUPITER_MOONS.map((m) => {
-        const st = found[m.key];
-        return [m.id, { pos: new Vector3(st.x, st.y, st.z), vel: new Vector3(st.vx, st.vy, st.vz) }];
-      })
-    );
-  }
+  let galilean = null;
   return Object.fromEntries(
     MOONS_OF[parent].map((m) => {
+      if (m.key) {
+        galilean ??= A.JupiterMoons(time);
+        const st = galilean[m.key];
+        return [m.id, { pos: new Vector3(st.x, st.y, st.z), vel: new Vector3(st.vx, st.vy, st.vz) }];
+      }
+      if (m.states) {
+        const { r, v } = stateAt(m, time.tt);
+        return [m.id, { pos: r.clone().multiplyScalar(KM_TO_AU), vel: v.clone().multiplyScalar(KM_TO_AU * DAY_S) }];
+      }
       const pos = orbitPosition(m.orbit, time.tt).multiplyScalar(KM_TO_AU);
       const ahead = orbitPosition(m.orbit, time.tt + NUDGE_DAYS).multiplyScalar(KM_TO_AU);
       return [m.id, { pos, vel: ahead.sub(pos).divideScalar(NUDGE_DAYS) }];
     })
   );
+}
+
+const DAY_S = 86400;
+const GM_JUPITER = 126712767; // km³/s², Jupiter and its big moons together
+const GM_SUN = 132712440018;
+const STEP_DAYS = 2;
+const lastState = new Map(); // id → { t, r, v }: where it was last asked for, to go on from
+
+/** The Sun from Jupiter, `days` after J2000 (TT), km. */
+function sunFromJupiter(days) {
+  const v = A.HelioVector(A.Body.Jupiter, A.MakeTime(days));
+  return new Vector3(-v.x, -v.y, -v.z).multiplyScalar(AU_KM);
+}
+
+/** The pull on a moon at `r` from Jupiter (km): Jupiter's, and the Sun's difference from its pull on Jupiter. km/s². */
+function pull(r, sun) {
+  const d = sun.clone().sub(r);
+  const a = r.clone().multiplyScalar(-GM_JUPITER / r.length() ** 3);
+  a.addScaledVector(d, GM_SUN / d.length() ** 3);
+  return a.addScaledVector(sun, -GM_SUN / sun.length() ** 3);
+}
+
+/**
+ * Where a moon kept as `states` is, `days` after J2000 (TT): { r (km), v (km/s) }
+ * from Jupiter, J2000 equator. From the nearest of JPL's (or from where it was last
+ * time, if that's nearer), step by step (Runge–Kutta, about 2 days a step).
+ */
+export function stateAt(def, days) {
+  const { from, step, states } = def.states;
+  const k = Math.min(states.length - 1, Math.max(0, Math.round((days - from) / step)));
+  const row = states[k];
+  let start = { t: from + k * step, r: new Vector3(row[0], row[1], row[2]), v: new Vector3(row[3], row[4], row[5]) };
+  const last = lastState.get(def.id);
+  if (last && Math.abs(days - last.t) < Math.abs(days - start.t)) start = last;
+  const n = Math.ceil(Math.abs(days - start.t) / STEP_DAYS);
+  let { r, v } = start;
+  if (n > 0) {
+    const h = (days - start.t) / n;
+    const hs = h * DAY_S;
+    let t = start.t;
+    let sun0 = sunFromJupiter(t);
+    for (let i = 0; i < n; i++) {
+      const sunMid = sunFromJupiter(t + h / 2);
+      const sun1 = sunFromJupiter(t + h);
+      const a1 = pull(r, sun0);
+      const r2 = r.clone().addScaledVector(v, hs / 2);
+      const v2 = v.clone().addScaledVector(a1, hs / 2);
+      const a2 = pull(r2, sunMid);
+      const r3 = r.clone().addScaledVector(v2, hs / 2);
+      const v3 = v.clone().addScaledVector(a2, hs / 2);
+      const a3 = pull(r3, sunMid);
+      const r4 = r.clone().addScaledVector(v3, hs);
+      const v4 = v.clone().addScaledVector(a3, hs);
+      const a4 = pull(r4, sun1);
+      r = r
+        .clone()
+        .addScaledVector(v, hs / 6)
+        .addScaledVector(v2, hs / 3)
+        .addScaledVector(v3, hs / 3)
+        .addScaledVector(v4, hs / 6);
+      v = v
+        .clone()
+        .addScaledVector(a1, hs / 6)
+        .addScaledVector(a2, hs / 3)
+        .addScaledVector(a3, hs / 3)
+        .addScaledVector(a4, hs / 6);
+      t += h;
+      sun0 = sun1;
+    }
+  }
+  const state = { t: days, r, v };
+  lastState.set(def.id, state);
+  return state;
+}
+
+// How strongly each planet (and its moons) pulls, km³/s²: for drawing orbits.
+const GM = {
+  Mars: 42828.37,
+  Jupiter: GM_JUPITER,
+  Saturn: 37940585,
+  Uranus: 5794556,
+  Neptune: 6836527,
+  Pluto: 975.5, // with Charon: they go round each other
+};
+
+/**
+ * The orbit a moon is on right now, from where it is (`offset`, from its planet)
+ * and how it's moving (`velocity`, per day), both in AU in any one frame: `n`
+ * points round the ellipse, in that frame, from its planet. Null if it's not on
+ * one (as it wouldn't be, for a moment, if the numbers were off).
+ */
+export function orbitPath(parent, offset, velocity, n = 128) {
+  const mu = GM[parent];
+  const r = offset.clone().multiplyScalar(AU_KM);
+  const v = velocity.clone().multiplyScalar(AU_KM / DAY_S);
+  const h = r.clone().cross(v);
+  const rl = r.length();
+  const a = 1 / (2 / rl - v.lengthSq() / mu);
+  const eVec = v
+    .clone()
+    .cross(h)
+    .divideScalar(mu)
+    .addScaledVector(r, -1 / rl);
+  const e = eVec.length();
+  if (!(a > 0) || e >= 0.95 || h.lengthSq() === 0) return null;
+  const P = e > 1e-6 ? eVec.clone().divideScalar(e) : r.clone().divideScalar(rl);
+  const Q = h.clone().normalize().cross(P);
+  const b = a * Math.sqrt(1 - e * e);
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    const E = (i / n) * 2 * Math.PI;
+    pts.push(
+      new Vector3().addScaledVector(P, (a * (Math.cos(E) - e)) / AU_KM).addScaledVector(Q, (b * Math.sin(E)) / AU_KM)
+    );
+  }
+  return pts;
+}
+
+/**
+ * How many magnitudes fainter a moon `m` looks for being so near its bright
+ * `planet` (both as in a sky), lost in its glare: nothing for one well clear of it,
+ * up to 8 (gone) for one far fainter right beside it. Through a telescope a moon
+ * this much fainter than its planet can just be seen this close to it: 13½
+ * magnitudes at 20″ (Phobos by Mars, near one of Mars's oppositions), 16 at an
+ * arcminute (Amalthea, which only big telescopes show), 5.2 more for every tenfold
+ * further out.
+ */
+export function glare(m, planet) {
+  const arcsec = m.trueDir.angleTo(planet.trueDir) * (180 / Math.PI) * 3600;
+  const limit = 6.7 + 5.2 * Math.log10(Math.max(arcsec, 0.1));
+  const x = Math.min(1, Math.max(0, (m.mag - planet.mag - (limit - 1)) / 2));
+  return 8 * x * x * (3 - 2 * x);
 }
 
 /**
@@ -629,9 +852,9 @@ const PLANET_DEF = Object.fromEntries(PLANETS.map((p) => [p.id, p]));
 
 /**
  * A planet's moons as seen in `sky`, like its planets: { id, name, parent, def,
- * vecAU, offsetAU, dist, trueDir, dir, alt, az, angularRadius, mag, behind, inFront,
- * shadowOnPlanet, light, entering }. offsetAU is where the moon is from its planet
- * (world frame, AU). Worked out once per sky and planet, and only when asked for.
+ * vecAU, offsetAU, velocity, dist, trueDir, dir, alt, az, angularRadius, mag, behind,
+ * inFront, shadowOnPlanet, light, entering }. offsetAU is where the moon is from its
+ * planet (world frame, AU), and velocity how it's moving (AU a day). Worked out once per sky and planet, and only when asked for.
  */
 export function moonsOf(sky, parent) {
   let bySky = cache.get(sky);
@@ -672,6 +895,7 @@ export function moonsOf(sky, parent) {
       color: m.color,
       vecAU,
       offsetAU,
+      velocity,
       dist,
       trueDir,
       dir,

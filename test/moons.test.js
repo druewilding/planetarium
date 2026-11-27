@@ -19,6 +19,8 @@ const HOUR = 3600000;
 
 const jupiterOf = (sky) => sky.planets.find((p) => p.id === "Jupiter");
 const moon = (sky, id) => jupiterMoons(sky).find((m) => m.id === id);
+// The four big ones, which these are about.
+const galilean = (sky) => jupiterMoons(sky).filter((m) => m.def.key);
 
 // How far each one gets from Jupiter, in km: a little over its average, as the others pull its orbit oval.
 const FURTHEST_KM = { Io: 424500, Europa: 678500, Ganymede: 1073500, Callisto: 1899000 };
@@ -40,7 +42,7 @@ describe("Jupiter's moons", () => {
     for (let h = 0; h < 24 * 20; h += 5) {
       const sky = computeSky(START + h * HOUR, oslo);
       const jupiter = jupiterOf(sky);
-      for (const m of jupiterMoons(sky)) {
+      for (const m of galilean(sky)) {
         const km = m.offsetAU.length() * AU_KM;
         expect(km).toBeLessThan(FURTHEST_KM[m.id]);
         expect(km).toBeGreaterThan(FURTHEST_KM[m.id] * 0.97);
@@ -62,7 +64,7 @@ describe("Jupiter's moons", () => {
 
   test("are magnitude 4.5 to 6.5, and about a second of arc across", () => {
     const sky = computeSky(START, oslo);
-    for (const m of jupiterMoons(sky)) {
+    for (const m of galilean(sky)) {
       expect(m.mag).toBeGreaterThan(4.5);
       expect(m.mag).toBeLessThan(6.5);
       expect(m.angularRadius * 2 * R2D * 3600).toBeGreaterThan(0.7);

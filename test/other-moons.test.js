@@ -3,7 +3,16 @@ import { describe, expect, test } from "vitest";
 
 import { computeSky, planetPole, R2D } from "../src/astro.js";
 import { readLink, writeLink } from "../src/link.js";
-import { moonEventsBetween, MOONS_OF, moonsOf, orbitPosition, SATELLITES } from "../src/satellites.js";
+import {
+  glare,
+  moonEventsBetween,
+  MOONS_OF,
+  moonsOf,
+  orbitPath,
+  orbitPosition,
+  SATELLITES,
+  stateAt,
+} from "../src/satellites.js";
 
 const oslo = { lat: 59.91, lon: 10.75, tz: "Europe/Oslo" };
 const DAY = 86400000;
@@ -11,7 +20,7 @@ const byId = (id) => SATELLITES.find((m) => m.id === id);
 // Days after 1 January 2000, 12:00 TT, of a date at 00:00 TT.
 const days = (y, m, d) => (Date.UTC(y, m - 1, d) - Date.UTC(2000, 0, 1, 12)) / DAY;
 
-// From JPL Horizons (MAR099, SAT441, URA184, NEP098 and PLU060): km from the planet's centre, J2000 equator, at 00:00 TT.
+// From JPL Horizons (MAR099, JUP365, SAT441, URA184, NEP098 and PLU060): km from the planet's centre, J2000 equator, at 00:00 TT.
 const HORIZONS = {
   Phobos: [
     [1960, 1, 1, 5782.2, -4748.3, -5778.8],
@@ -88,13 +97,34 @@ const HORIZONS = {
     [2026, 11, 22, 14382.1, 12973.6, -2955.1],
     [2090, 3, 3, -14318.0, -13381.9, -165.9],
   ],
+  Amalthea: [
+    [1960, 1, 1, -93628.1, 140508.1, 64690.7],
+    [2026, 11, 22, 169364.2, -58298.5, -25053.1],
+    [2090, 3, 3, 145538.7, -99433.2, -43737.1],
+  ],
+  Thebe: [
+    [1960, 1, 1, -206454.4, 76413.3, 37248.8],
+    [2026, 11, 22, 180748.0, -110665.3, -54067.7],
+    [2090, 3, 3, -213589.1, 47712.6, 16117.4],
+  ],
+  Himalia: [
+    [1960, 1, 5, 8755478.7, 1610996.4, -4261052.8],
+    [2026, 11, 26, -11021430.2, -4189938.5, -21007.4],
+    [2090, 3, 7, 2830841.3, -8985786.1, -7250902.0],
+  ],
+  Elara: [
+    [1960, 1, 5, -5127285.3, 10411306.9, -343745.4],
+    [2026, 11, 26, -11056513.6, 2178966.8, 8033064.4],
+    [2090, 3, 7, -13448430.2, -1681759.3, -2304307.3],
+  ],
 };
 
 describe("the moons of Mars, Saturn, Uranus, Neptune and Pluto", () => {
   test.each(Object.keys(HORIZONS))("put %s where JPL does, within what the info box says", (id) => {
     const m = byId(id);
     for (const [y, mo, d, x, yy, z] of HORIZONS[id]) {
-      const off = orbitPosition(m.orbit, days(y, mo, d)).distanceTo(new THREE.Vector3(x, yy, z));
+      const at = m.orbit ? orbitPosition(m.orbit, days(y, mo, d)) : stateAt(m, days(y, mo, d)).r;
+      const off = at.distanceTo(new THREE.Vector3(x, yy, z));
       expect(off).toBeLessThanOrEqual(m.fitKm);
     }
   });
@@ -200,5 +230,52 @@ describe("links to a moon of Saturn", () => {
   test("keep it chosen", () => {
     const link = readLink(`#${writeLink({ place: oslo, selection: { type: "satellite", id: "Titan" } })}`);
     expect(link.selection).toEqual({ type: "satellite", id: "Titan" });
+  });
+});
+
+describe("a planet's glare", () => {
+  const seen = (iso, parent, id) => {
+    const sky = computeSky(Date.parse(iso), oslo);
+    const planet = sky.planets.find((p) => p.id === parent);
+    return glare(
+      moonsOf(sky, parent).find((m) => m.id === id),
+      planet
+    );
+  };
+
+  test("hides little Amalthea and Thebe beside bright Jupiter", () => {
+    expect(seen("2026-11-27T20:00Z", "Jupiter", "Amalthea")).toBeGreaterThan(4);
+    expect(seen("2026-11-27T20:00Z", "Jupiter", "Thebe")).toBeGreaterThan(4);
+  });
+
+  test("leaves the big moons, Himalia far out, and Charon by faint Pluto alone", () => {
+    expect(seen("2026-11-27T20:00Z", "Jupiter", "Callisto")).toBe(0);
+    expect(seen("2026-11-27T20:00Z", "Jupiter", "Himalia")).toBe(0);
+    expect(seen("2026-08-12T01:00Z", "Pluto", "Charon")).toBe(0);
+  });
+
+  test("lets Phobos show at Mars' close opposition of 2035, far out from Mars, and not close in", () => {
+    // 31″ from Mars, then 16″ two hours later.
+    expect(seen("2035-09-15T20:00Z", "Mars", "Phobos")).toBe(0);
+    expect(seen("2035-09-15T22:00Z", "Mars", "Phobos")).toBeGreaterThan(4);
+    expect(seen("2035-09-15T22:00Z", "Mars", "Deimos")).toBe(0);
+  });
+});
+
+describe("a moon's orbit", () => {
+  test("is an ellipse through where the moon is, the size of its orbit", () => {
+    const sky = computeSky(Date.parse("2026-11-27T20:00Z"), oslo);
+    for (const parent of Object.keys(MOONS_OF)) {
+      for (const m of moonsOf(sky, parent)) {
+        const path = orbitPath(parent, m.offsetAU, m.velocity, 512);
+        const km = (v) => v.length() * 149597870.7;
+        const nearest = Math.min(...path.map((p) => km(p.clone().sub(m.offsetAU))));
+        const furthest = Math.max(...path.map(km));
+        // (Points 1/512 of the way round apart: the nearest is within half a step.)
+        expect(nearest).toBeLessThan((km(m.offsetAU) * Math.PI) / 512 + 1);
+        expect(furthest).toBeLessThan(m.def.reachKm * 1.05);
+        expect(furthest).toBeGreaterThan(km(m.offsetAU) * 0.99);
+      }
+    }
   });
 });

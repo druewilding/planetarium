@@ -10,6 +10,7 @@ import {
   dirFromAltAz,
   eqVector,
   horizonFrame,
+  planetPole,
   PLANETS,
   R2D,
   refract,
@@ -19,7 +20,7 @@ import { Clock } from "./clock.js";
 import { EARTH_RADIUS_KM } from "./constants.js";
 import { DEFAULT_BODY, readLink, writeLink } from "./link.js";
 import { createProjection, eyeScale, telescopeGain } from "./projection.js";
-import { MOON_REACH_KM, MOONS_OF, moonsOf, SATELLITES } from "./satellites.js";
+import { glare, MOON_REACH_KM, MOONS_OF, moonsOf, SATELLITES } from "./satellites.js";
 import {
   ATMOSPHERES,
   averageSkyLuminance,
@@ -35,6 +36,7 @@ import { createEarth } from "./scene/earth.js";
 import * as glsl from "./scene/glsl.js";
 import { setFade } from "./scene/lines.js";
 import { createMilkyWay } from "./scene/milkyway.js";
+import { createMoonOrbits } from "./scene/moonorbits.js";
 import { createOrbits } from "./scene/orbits.js";
 import { createOverlays } from "./scene/overlays.js";
 import { createPlanetDiscs, discExtent } from "./scene/planets.js";
@@ -233,6 +235,8 @@ async function main() {
   const satellitePoints = createPlanetPoints(SATELLITES, planetPoints.points.material);
   satellitePoints.points.renderOrder = 5.3;
   scene.add(satellitePoints.points);
+  const moonOrbits = createMoonOrbits(shared, glsl, SATELLITES);
+  scene.add(moonOrbits.group);
 
   moonTex.texture.colorSpace = THREE.NoColorSpace;
   moonTex.texture.wrapS = THREE.RepeatWrapping;
@@ -1608,6 +1612,7 @@ async function main() {
     const shown = [];
     const points = [];
     const fades = [];
+    moonOrbits.hideAll();
     for (const [parent, defs] of Object.entries(MOONS_OF)) {
       const planet = sky.planets.find((p) => p.id === parent);
       // (In pixels: from wherever you are, so from nearer, as from Mars, they spread wider.)
@@ -1629,16 +1634,27 @@ async function main() {
       }
       const moons = moonsOf(sky, parent);
       const apart = moons.map((m) => smooth(from, to, m.trueDir.angleTo(planet.trueDir) * perRad));
+      // Lost in the planet's glare, as through a telescope: a faint moon close by it.
+      for (const m of moons) m.glare = glare(m, planet);
       // (Crossing the planet, it's drawn on the disc instead: see planets.js. Zoomed in, so
       // much more shows that fading out has to cover more magnitudes.)
       moons.forEach((m, i) => {
-        points.push(m);
+        points.push({ trueDir: m.trueDir, mag: m.mag + m.glare });
         fades.push(m.behind || m.inFront ? 1 : 1 - apart[i]);
       });
       // Names: once they're apart from the planet, or crossing its disc once that's big.
       const disc = smooth(from, to, shownRadius(planet) * perRad);
-      // (Not while it's dark in the planet's shadow: there's nothing there to name or tap.)
-      shown.push(...moons.filter((m, i) => !m.behind && m.light >= 0.5 && (m.inFront ? disc : apart[i]) > 0.5));
+      // (Not while it's dark in the planet's shadow, or lost in its glare: there's nothing
+      // there to name or tap.)
+      shown.push(
+        ...moons.filter((m, i) => !m.behind && m.light >= 0.5 && m.glare < 4 && (m.inFront ? disc : apart[i]) > 0.5)
+      );
+      // Their orbits, once they're big enough on the screen to tell from the planet.
+      if (layers.moonOrbits) {
+        const pole = planetPole(parent, sky);
+        const size = (m) => (m.offsetAU.length() / planet.dist) * perRad;
+        moonOrbits.draw(planet, moons, pole, planetDef[parent], (m) => smooth(from, to, size(m)));
+      }
     }
     satellitePoints.points.visible = fades.some((f) => f < 1);
     if (satellitePoints.points.visible) satellitePoints.update(points, fades, 16);
@@ -1712,7 +1728,7 @@ async function main() {
           key: m.id,
           text: m.name,
           dir: m.dir,
-          cls: `body small${m.mag > zoomedLimit() ? " dim" : ""}`,
+          cls: `body small${m.mag + m.glare > zoomedLimit() ? " dim" : ""}`,
           priority: 80 - m.mag,
           offset: awayFromPlanet(m),
           pick: () => selectSatellite(m),

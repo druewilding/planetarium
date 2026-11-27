@@ -41,7 +41,8 @@ sky with no connection (the hills and place names need one the first time you vi
   against the clouds, dark Callisto shows as a grey smudge), cast small black shadows on its clouds, and fade out for a
   couple of hours in its shadow. Tap one, or search for it, for how far it is from Jupiter, how long it takes to go
   round, and when its next shadow, crossing, eclipse and disappearance behind Jupiter are: tap one to go there. Jupiter's own card lists the four, and where each one is now.
-- **The other planets' moons:** little Phobos and Deimos round Mars; Saturn's six brightest (Titan, Rhea, Iapetus,
+- **The other planets' moons:** little Phobos and Deimos round Mars; Jupiter's Amalthea and Thebe close in and Himalia
+  and Elara far out; Saturn's six brightest (Titan, Rhea, Iapetus,
   Dione, Tethys and Enceladus); Uranus' five big ones (Miranda, Ariel, Umbriel, Titania and Oberon); Neptune's
   Triton, which goes round backwards; and Pluto's Charon. They work just like Jupiter's (shadows, crossings, eclipses,
   next events), but they're placed by an average orbit for each one, fitted to JPL's ephemerides for 1950 to 2100:
@@ -51,6 +52,14 @@ sky with no connection (the hills and place names need one the first time you vi
   in the years round Saturn's equinoxes (2024–2025, then 2038–2039), when we see its rings edge-on. Charon, never
   more than 0.9″ from Pluto, only just splits from it at the closest zoom. **Look at it** on something too faint to
   show at 0.1°, like Phobos or Pluto, zooms all the way in, and a moon's name sits on the side away from its planet.
+  Himalia and Elara, pulled about by the Sun, can't follow an average orbit: they start from JPL's own positions,
+  kept every 512 days, and are moved on from there by Jupiter's and the Sun's pull (within 600 km).
+- **Lost in the glare:** a faint moon right beside its bright planet doesn't show, as through a telescope. The
+  closer in and the fainter, the harder: Amalthea and Thebe are lost beside Jupiter, and Phobos only shows when
+  it's out at the far side of its little orbit, near one of Mars's close oppositions.
+- **Moons' orbits:** each moon's path round its planet, drawn true to size once you zoom in close enough to see it:
+  edge-on lines across Jupiter, Saturn's tipped ovals, Uranus' near-circles (it lies on its side). Behind the
+  planet they're hidden, and Saturn's rings pass in front of them. Turn them off in Layers.
 - **Zoom in to see fainter things:** a view narrower than the screen is like looking through binoculars or a
   telescope, and each zoom shows as faint as the one it stands for would: about 2½ magnitudes fainter at a few degrees,
   and at the closest zoom (0.04°) about 8, like a 30 cm telescope. Stars, planets and moons alike: under a bright Moon
@@ -184,6 +193,7 @@ planetarium/
 ├── src/
 │   ├── main.js            # app setup, render loop, eye adaptation, picking, labels
 │   ├── astro.js           # astronomy-engine wrapper → horizon (world) frame
+│   ├── moon-states.js     # Himalia's and Elara's positions from JPL (generated)
 │   ├── satellites.js      # the planets' moons: positions, shadows, eclipses, next events (from anywhere)
 │   ├── climb.js           # how high you are, second by second, rising and landing
 │   ├── clock.js           # simulated time, rates, smooth jumps
@@ -204,6 +214,7 @@ planetarium/
 │   │   ├── lines.js       # lines on the sky (refraction-aware)
 │   │   ├── overlays.js    # constellations, grids, paths
 │   │   ├── orbits.js      # the Moon's, the Earth's and the planets' orbits, in perspective
+│   │   ├── moonorbits.js  # the moons' orbits round their planets, on the sky
 │   │   └── glsl.js        # shared shader code: tone mapping, sky lookup, refraction
 │   └── ui/                # time bar, compass, location dialog, info panel, layers, search, labels, camera
 ├── data/                  # stars, constellations, cities, land outlines (compact JSON)

@@ -3,7 +3,7 @@
 
 import { A, AU_KM, Body, compassPoint, PLANETS, R2D } from "../astro.js";
 import { lunarEclipsesFrom, nextTotalSolarEclipse, solarEclipsesFrom } from "../eclipses.js";
-import { moonEventsBetween, MOONS_OF, moonsOf, nextMoonEvents } from "../satellites.js";
+import { glare, moonEventsBetween, MOONS_OF, moonsOf, nextMoonEvents } from "../satellites.js";
 import { seasonAt } from "../season.js";
 import { bodyPosition, distanceAU, LIGHT_SPEED_KM_S, LIGHT_YEAR_AU, LIGHT_YEAR_KM, starPosition } from "../space.js";
 import { skylineAt, spansAboveSkyline } from "../terrain.js";
@@ -444,7 +444,14 @@ export function createInfo({
     if (m.inFront) return `Crossing in front of ${name}`;
     if (m.light < 0.5)
       return `In ${name}’s shadow${m.light < 0.02 ? ", dark" : m.entering ? ", fading out" : ", lighting up"}`;
-    const shadow = m.light < 0.98 ? (m.entering ? ", going into its shadow" : ", coming out of its shadow") : "";
+    const shadow =
+      m.light < 0.98
+        ? m.entering
+          ? ", going into its shadow"
+          : ", coming out of its shadow"
+        : glare(m, planet) >= 4
+          ? ", lost in its glare"
+          : "";
     return `${sep < 1 ? `${(sep * 60).toFixed(sep < 0.1 ? 1 : 0)}″` : `${sep.toFixed(1)}′`} ${side} of ${name}${shadow}`;
   }
 
@@ -452,7 +459,7 @@ export function createInfo({
   const MOONS_NOTE = {
     Mars: "Mars has just these two little moons. They’re so small, and so close to bright Mars, that they’re hard to see even in a big telescope.",
     Jupiter:
-      "Jupiter has nearly a hundred known moons. Only the four big Galilean moons are in the planetarium: the rest are small, and far too faint to see without a big telescope.",
+      "Jupiter has nearly a hundred known moons. The planetarium has the four big Galilean moons, little Amalthea and Thebe close in (lost in Jupiter’s glare in all but big telescopes) and Himalia and Elara far out: the rest are far too faint to see without a very big telescope.",
     Saturn:
       "Saturn has nearly three hundred known moons. Only the six brightest are in the planetarium: the rest are small and faint, or lost in the glare of Saturn and its rings.",
     Uranus:
@@ -481,6 +488,12 @@ export function createInfo({
     Europa: GALILEAN,
     Ganymede: GALILEAN,
     Callisto: GALILEAN,
+    Amalthea:
+      "A small, red, potato-shaped moon close in to Jupiter. Edward Barnard found it in 1892, the last moon anyone found by eye, without a camera.",
+    Thebe: "A small, dark moon just outside Amalthea’s orbit, found in Voyager 1’s pictures in 1979.",
+    Himalia:
+      "The biggest of Jupiter’s far-out moons, probably a caught asteroid, on a tilted, oval orbit the Sun pulls about. Charles Perrine found it in 1904.",
+    Elara: "Himalia’s smaller neighbour, found by Charles Perrine in 1905.",
     Phobos:
       "Mars’ bigger moon, a lumpy rock found by Asaph Hall in 1877. It goes round faster than Mars turns, so seen from Mars it rises in the west, and it’s slowly spiralling in.",
     Deimos: "Mars’ smaller, outer moon, found by Asaph Hall six days before Phobos, in 1877.",
@@ -533,7 +546,10 @@ export function createInfo({
     if (def.fitKm) {
       const arcsec = (def.fitKm / (m.dist * AU_KM)) * R2D * 3600;
       const year = new Date(s.ms).getUTCFullYear();
-      accuracy = `<p class="note">Its place is worked out from its average orbit, which keeps it within about ${sig(def.fitKm, 2)} km (${arcsec < 0.01 ? "under 0.01" : arcsec < 0.1 ? arcsec.toFixed(2) : arcsec.toFixed(1)}″ from here) of where it really is${year < 1950 || year >= 2100 ? " between 1950 and 2100. This far from them, it may be further out" : ""}.</p>`;
+      const how = def.states
+        ? "from JPL’s positions for it a year and a half apart, with Jupiter’s and the Sun’s pull in between"
+        : "from its average orbit";
+      accuracy = `<p class="note">Its place is worked out ${how}, which keeps it within about ${sig(def.fitKm, 2)} km (${arcsec < 0.01 ? "under 0.01" : arcsec < 0.1 ? arcsec.toFixed(2) : arcsec.toFixed(1)}″ from here) of where it really is${year < 1950 || year >= 2100 ? " between 1950 and 2100. This far from them, it may be further out" : ""}.</p>`;
     }
     return `<dl>${position(m, s.skyline)}
         <dt>Seen from here</dt><dd>${where}</dd>
