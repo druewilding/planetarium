@@ -54,8 +54,17 @@ describe("the Sun's real path", () => {
 
   test("never crosses Orion, and goes through Sagittarius across the new year", () => {
     expect(sunInConstellation("Ori", 2026)).toEqual([]);
-    const sgr = sunInConstellation("Sgr", 2026);
-    expect(sgr.map((s) => day(s.start))).toEqual(["01-01", "12-19"]);
+    const [sgr, ...more] = sunInConstellation("Sgr", 2026);
+    expect(more).toEqual([]);
+    expect(new Date(sgr.start).toISOString().slice(0, 10)).toBe("2026-12-19");
+    expect(new Date(sgr.end).toISOString().slice(0, 10)).toMatch(/^2027-01-1/);
+  });
+
+  test("leaves Capricornus, just after the new year, as it is", () => {
+    const [cap, ...more] = sunInConstellation("Cap", 2026);
+    expect(more).toEqual([]);
+    expect(day(cap.start)).toMatch(/^01-/);
+    expect(day(cap.end)).toMatch(/^02-/);
   });
 });
 

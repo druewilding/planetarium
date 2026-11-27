@@ -51,9 +51,10 @@ sky with no connection (the hills and place names need one the first time you vi
   and coal-dark on the other, so it's much brighter west of Saturn than east of it. Titan's shadow only crosses Saturn
   in the years round Saturn's equinoxes (2024–2025, then 2038–2039), when we see its rings edge-on. Charon, never
   more than 0.9″ from Pluto, only just splits from it at the closest zoom. **Look at it** on something too faint to
-  show at 0.1°, like Phobos or Pluto, zooms all the way in, and a moon's name sits on the side away from its planet.
+  show at 0.1°, like Pluto, or Phobos lost in Mars's glare, zooms all the way in, and a moon's name sits on the side away from its planet.
   Himalia and Elara, pulled about by the Sun, can't follow an average orbit: they start from JPL's own positions,
-  kept every 512 days, and are moved on from there by Jupiter's and the Sun's pull (within 600 km).
+  kept every 512 days, are moved on from the ones either side by Jupiter's and the Sun's pull, and blended between
+  them (within 360 km).
 - **Lost in the glare:** a faint moon right beside its bright planet doesn't show, as through a telescope. The
   closer in and the fainter, the harder: Amalthea and Thebe are lost beside Jupiter, and Phobos only shows when
   it's out at the far side of its little orbit, near one of Mars's close oppositions. Its name still shows, dimmed,

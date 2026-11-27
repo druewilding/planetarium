@@ -295,13 +295,26 @@ function sunDays(year) {
 
 /**
  * When the Sun is in front of a constellation in `year`: [{ start, end }] (ms, each
- * day it's there at noon UTC), or [] for one it never passes through. Capricornus's
- * days run on into the next January, and Sagittarius's in from the last December.
+ * day it's there at noon UTC), or [] for one it never passes through. A stay across
+ * the new year (Sagittarius's) is counted from the December it starts in, running on
+ * into the next January.
  */
 export function sunInConstellation(id, year) {
-  const days = sunDays(year);
+  const spans = spansIn(id, year);
+  // (Begun the December before: that year's.)
+  if (spans[0]?.start === Date.UTC(year, 0, 1, 12) && sunDays(year - 1).at(-1).con === id) spans.shift();
+  const last = spans.at(-1);
+  if (last?.end === sunDays(year).at(-1).ms) {
+    const next = spansIn(id, year + 1)[0];
+    if (next?.start === Date.UTC(year + 1, 0, 1, 12)) last.end = next.end;
+  }
+  return spans;
+}
+
+/** The days in `year` the Sun is in front of a constellation, in runs: [{ start, end }]. */
+function spansIn(id, year) {
   const spans = [];
-  for (const d of days) {
+  for (const d of sunDays(year)) {
     const last = spans[spans.length - 1];
     if (d.con !== id) continue;
     if (last && d.ms - last.end <= DAY) last.end = d.ms;

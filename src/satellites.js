@@ -505,8 +505,8 @@ const ORBIT_MOONS_DEFS = [
 
 // Far out from Jupiter, the Sun pulls Himalia and Elara about so much that no
 // average orbit fits them for long. So these keep JPL's own positions and speeds,
-// every 512 days from 1950 to 2100 (see moon-states.js), and go from the nearest one
-// to any moment by working out, a day or two at a time, how Jupiter and the Sun
+// every 512 days from 1950 to 2100 (see moon-states.js), and go from the ones either
+// side of any moment by working out, a day or two at a time, how Jupiter and the Sun
 // pull them: within a few hundred km of where JPL has them.
 const STATE_MOONS_DEFS = [
   {
@@ -517,7 +517,7 @@ const STATE_MOONS_DEFS = [
     H: 7.9,
     albedo: 0.057,
     color: [0.78, 0.74, 0.7],
-    fitKm: 221,
+    fitKm: 350, // (against JPL every 8 days, 1950–2100)
     periodDays: 250.6,
     states: HIMALIA,
   },
@@ -529,7 +529,7 @@ const STATE_MOONS_DEFS = [
     H: 9.6,
     albedo: 0.046,
     color: [0.76, 0.72, 0.68],
-    fitKm: 564,
+    fitKm: 360, // (the same)
     periodDays: 259.6,
     states: ELARA,
   },
@@ -608,34 +608,35 @@ const KM_TO_AU = 1 / AU_KM;
 const NUDGE_DAYS = 0.001;
 
 /**
- * Where each of a planet's moons is from its centre at `time`, and which way it's
- * going: { pos (AU), vel (AU/day) }, J2000 equator, keyed by id.
+ * Where a moon is from its planet's centre at `time`, and which way it's going:
+ * { pos (AU), vel (AU/day) }, J2000 equator. (`jupiter`: Jupiter's big moons at
+ * that time, if they've been worked out already.)
  */
+function offsetOf(m, time, jupiter = null) {
+  if (m.key) {
+    const st = (jupiter ?? A.JupiterMoons(time))[m.key];
+    return { pos: new Vector3(st.x, st.y, st.z), vel: new Vector3(st.vx, st.vy, st.vz) };
+  }
+  if (m.states) {
+    const { r, v } = stateAt(m, time.tt);
+    return { pos: r.clone().multiplyScalar(KM_TO_AU), vel: v.clone().multiplyScalar(KM_TO_AU * DAY_S) };
+  }
+  const pos = orbitPosition(m.orbit, time.tt).multiplyScalar(KM_TO_AU);
+  const ahead = orbitPosition(m.orbit, time.tt + NUDGE_DAYS).multiplyScalar(KM_TO_AU);
+  return { pos, vel: ahead.sub(pos).divideScalar(NUDGE_DAYS) };
+}
+
+/** Where each of a planet's moons is (see offsetOf), keyed by id. */
 function offsetsOf(parent, time) {
-  let galilean = null;
-  return Object.fromEntries(
-    MOONS_OF[parent].map((m) => {
-      if (m.key) {
-        galilean ??= A.JupiterMoons(time);
-        const st = galilean[m.key];
-        return [m.id, { pos: new Vector3(st.x, st.y, st.z), vel: new Vector3(st.vx, st.vy, st.vz) }];
-      }
-      if (m.states) {
-        const { r, v } = stateAt(m, time.tt);
-        return [m.id, { pos: r.clone().multiplyScalar(KM_TO_AU), vel: v.clone().multiplyScalar(KM_TO_AU * DAY_S) }];
-      }
-      const pos = orbitPosition(m.orbit, time.tt).multiplyScalar(KM_TO_AU);
-      const ahead = orbitPosition(m.orbit, time.tt + NUDGE_DAYS).multiplyScalar(KM_TO_AU);
-      return [m.id, { pos, vel: ahead.sub(pos).divideScalar(NUDGE_DAYS) }];
-    })
-  );
+  const jupiter = parent === "Jupiter" ? A.JupiterMoons(time) : null;
+  return Object.fromEntries(MOONS_OF[parent].map((m) => [m.id, offsetOf(m, time, jupiter)]));
 }
 
 const DAY_S = 86400;
 const GM_JUPITER = 126712767; // km³/s², Jupiter and its big moons together
 const GM_SUN = 132712440018;
 const STEP_DAYS = 2;
-const lastState = new Map(); // id → { t, r, v }: where it was last asked for, to go on from
+const lastState = new Map(); // id → (JPL's state number → { t, r, v }): where it was last asked for, from each
 
 /** The Sun from Jupiter, `days` after J2000 (TT), km. */
 function sunFromJupiter(days) {
@@ -653,16 +654,36 @@ function pull(r, sun) {
 
 /**
  * Where a moon kept as `states` is, `days` after J2000 (TT): { r (km), v (km/s) }
- * from Jupiter, J2000 equator. From the nearest of JPL's (or from where it was last
- * time, if that's nearer), step by step (Runge–Kutta, about 2 days a step).
+ * from Jupiter, J2000 equator. Worked out step by step (Runge–Kutta, about 2 days a
+ * step) from JPL's on either side, forward from the one before and back from the
+ * one after, and blended between them as it goes from one to the other: so there's
+ * no jump halfway, and each is only trusted near where it came from.
  */
 export function stateAt(def, days) {
   const { from, step, states } = def.states;
-  const k = Math.min(states.length - 1, Math.max(0, Math.round((days - from) / step)));
+  const x = (days - from) / step;
+  const k = Math.min(states.length - 2, Math.max(0, Math.floor(x)));
+  const f = Math.min(1, Math.max(0, x - k));
+  if (f === 0) return fromState(def, k, days);
+  if (f === 1) return fromState(def, k + 1, days);
+  const a = fromState(def, k, days);
+  const b = fromState(def, k + 1, days);
+  return { r: a.r.clone().lerp(b.r, f), v: a.v.clone().lerp(b.v, f) };
+}
+
+/**
+ * Where a moon is at `days`, worked out from JPL's state number `k`. Going on from
+ * where it was last asked for from that same one, if that's nearer (so the clock
+ * running on doesn't step it all the way again each frame).
+ */
+function fromState(def, k, days) {
+  const { from, step, states } = def.states;
   const row = states[k];
   let start = { t: from + k * step, r: new Vector3(row[0], row[1], row[2]), v: new Vector3(row[3], row[4], row[5]) };
-  const last = lastState.get(def.id);
-  if (last && Math.abs(days - last.t) < Math.abs(days - start.t)) start = last;
+  let last = lastState.get(def.id);
+  if (!last) lastState.set(def.id, (last = new Map()));
+  const before = last.get(k);
+  if (before && Math.abs(days - before.t) < Math.abs(days - start.t)) start = before;
   const n = Math.ceil(Math.abs(days - start.t) / STEP_DAYS);
   let { r, v } = start;
   if (n > 0) {
@@ -700,7 +721,9 @@ export function stateAt(def, days) {
     }
   }
   const state = { t: days, r, v };
-  lastState.set(def.id, state);
+  // (Only the two in use: the clock moves on from one pair to the next.)
+  for (const key of last.keys()) if (Math.abs(key - k) > 1) last.delete(key);
+  last.set(k, state);
   return state;
 }
 
@@ -934,14 +957,15 @@ export const MOON_EVENT_KINDS = ["transit", "shadow", "eclipse", "hidden"];
  * Earth's centre is near enough for anywhere on or above the Earth.
  */
 export function moonEventsBetween(id, fromMs, untilMs, { seenFrom } = {}) {
-  const { radiusKm, parent, periodDays } = SATELLITES.find((m) => m.id === id);
+  const def = SATELLITES.find((m) => m.id === id);
+  const { radiusKm, parent, periodDays } = def;
   // (Small enough steps not to miss Phobos' quick crossings, a few minutes long.)
   const step = Math.min(STEP_MS, (periodDays * DAY_MS) / 100);
   seenFrom ??= fromEarth(parent);
   const state = (ms) => {
     const time = A.MakeTime(new Date(ms));
     const { planet, sun } = seenFrom(time);
-    const offset = offsetsOf(parent, time.AddDays(-planet.length() * LIGHT_DAYS_PER_AU))[id].pos;
+    const offset = offsetOf(def, time.AddDays(-planet.length() * LIGHT_DAYS_PER_AU)).pos;
     const n = A.RotationAxis(A.Body[parent], time).north;
     const g = satelliteGeometry(offset, radiusKm, planet, sun, vec(n), PLANET_DEF[parent]);
     return { transit: g.inFront, shadow: g.shadowOnPlanet, eclipse: g.light < 0.5, hidden: g.behind };

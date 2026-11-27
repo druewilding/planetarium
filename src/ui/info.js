@@ -600,14 +600,14 @@ export function createInfo({
   function plutoNote(s, year) {
     const FOUND = Date.UTC(1930, 1, 18);
     let since;
+    // (How far round it's gone: in 2178, only a little once it's got back.)
+    const swept = () =>
+      (A.EclipticLongitude(Body.Pluto, new Date(s.ms)) - A.EclipticLongitude(Body.Pluto, new Date(FOUND)) + 360) % 360;
     if (s.ms < FOUND) since = "Clyde Tombaugh will find it in 1930, on photographs taken weeks apart.";
-    else if (year > 2178)
+    else if (year > 2178 || (year === 2178 && swept() < 180))
       since = "Clyde Tombaugh found it in 1930, and in 2178 it got back round the Sun to where it was found.";
     else {
-      const swept =
-        (A.EclipticLongitude(Body.Pluto, new Date(s.ms)) - A.EclipticLongitude(Body.Pluto, new Date(FOUND)) + 360) %
-        360;
-      since = `Clyde Tombaugh found it in 1930, spotting it move between photographs taken weeks apart. Since then it has gone ${(swept / 3.6).toFixed(0)}% of the way round the Sun: it gets back to where it was found in 2178.`;
+      since = `Clyde Tombaugh found it in 1930, spotting it move between photographs taken weeks apart. Since then it has gone ${(swept() / 3.6).toFixed(0)}% of the way round the Sun: it gets back to where it was found in 2178.`;
     }
     return `<p class="note">${since} Its oval orbit brings it closer to the Sun than Neptune for 20 years in every 248: last from 1979 to 1999.</p>`;
   }
@@ -782,7 +782,7 @@ export function createInfo({
       const arcsec = (def.fitKm / (m.dist * AU_KM)) * R2D * 3600;
       const year = new Date(s.ms).getUTCFullYear();
       const how = def.states
-        ? "from JPL’s positions for it a year and a half apart, with Jupiter’s and the Sun’s pull in between"
+        ? "from JPL’s positions for it either side, a year and a half apart, with Jupiter’s and the Sun’s pull in between"
         : "from its average orbit";
       accuracy = `<p class="note">Its place is worked out ${how}, which keeps it within about ${sig(def.fitKm, 2)} km (${arcsec < 0.01 ? "under 0.01" : arcsec < 0.1 ? arcsec.toFixed(2) : arcsec.toFixed(1)}″ from here) of where it really is${year < 1950 || year >= 2100 ? " between 1950 and 2100. This far from them, it may be further out" : ""}.</p>`;
     }
@@ -851,7 +851,8 @@ export function createInfo({
   /** Near a pole of the sky now, or one day (or once), as the poles slowly circle round. */
   function poleNote(s, star, pos) {
     const now = new Date(s.ms).getUTCFullYear();
-    const p = poleNearness(star.ra, star.dec, now);
+    // (A sweep over 26,000 years: once a year is plenty.)
+    const p = cached(`pole ${star.hip} ${now}`, () => poleNearness(star.ra, star.dec, now));
     const deg = (d) => (d < 1 ? d.toFixed(1) : d.toFixed(0));
     const parts = [];
     if (p.now.deg < 2) {
@@ -870,7 +871,7 @@ export function createInfo({
     }
     const n = p.nearest;
     if (n.deg < 5) {
-      const when = yearText(n.year);
+      const when = yearText(n.year, now);
       if (Math.abs(n.year - now) <= 150) {
         parts.push(
           n.year > now
@@ -886,10 +887,10 @@ export function createInfo({
     return parts.length ? `<p class="note">${parts.join(" ")}</p>` : "";
   }
 
-  /** "2100", "2830 BCE", "13,800 CE": rounded to the century when it's far off. */
-  function yearText(y) {
+  /** "2100", "2830 BCE", "13,800 CE": rounded to the century when it's far off from `now` (a year). */
+  function yearText(y, now) {
     // (The sums are good to a few decades: more exact would be pretending.)
-    const gap = Math.abs(y - new Date().getUTCFullYear());
+    const gap = Math.abs(y - now);
     const round = (v) => Math.round(v / (gap > 1000 ? 100 : 50)) * (gap > 1000 ? 100 : 50);
     if (y <= 0) return `${round(1 - y)} BCE`;
     return y > 9999 ? `${round(y).toLocaleString("en-GB")} CE` : String(round(y));
@@ -975,14 +976,9 @@ export function createInfo({
     return `${rank}${suffix} biggest of the 88`;
   }
 
-  /** When the Sun's in front of it this year, with Sagittarius's December and January as one. */
+  /** When the Sun's in front of it this year (Sagittarius's: from December into January). */
   function sunSpans(id, year) {
-    const spans = cached(`sunIn|${id}|${year}`, () => sunInConstellation(id, year));
-    const first = spans[0];
-    const last = spans[spans.length - 1];
-    if (spans.length > 1 && new Date(first.start).getUTCMonth() === 0 && new Date(last.end).getUTCMonth() === 11)
-      return [{ start: last.start, end: sunInConstellation(id, year + 1)[0].end }, ...spans.slice(1, -1)];
-    return spans;
+    return cached(`sunIn|${id}|${year}`, () => sunInConstellation(id, year));
   }
 
   /** The Sun's real dates, set against the horoscope's. */

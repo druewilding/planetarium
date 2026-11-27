@@ -129,6 +129,15 @@ describe("the moons of Mars, Saturn, Uranus, Neptune and Pluto", () => {
     }
   });
 
+  test("Himalia stays as close to JPL with the clock running on for years as jumped to", () => {
+    const m = byId("Himalia");
+    for (let t = days(2000, 1, 1); t < days(2030, 1, 1); t += 0.5) stateAt(m, t);
+    const run = stateAt(m, days(2030, 1, 1)).r.clone();
+    stateAt(m, days(1960, 1, 1));
+    const jumped = stateAt(m, days(2030, 1, 1)).r;
+    expect(run.distanceTo(jumped)).toBeLessThan(1);
+  });
+
   test("go round in the right time", () => {
     // Phobos: 7 h 39 min; Titan: 15.95 days; Iapetus: 79.3 days.
     expect(byId("Phobos").periodDays * 24).toBeCloseTo(7.65, 2);

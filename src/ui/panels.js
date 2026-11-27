@@ -261,9 +261,13 @@ export function createSearch(items) {
       input.blur();
     }
   });
-  // Cmd-K (Ctrl-K off a Mac), from anywhere: straight to the box.
+  // Cmd-K, from anywhere: straight to the box. (Ctrl-K off a Mac, but not while typing
+  // somewhere else; and never on a Mac, where Ctrl-K deletes to the end of the line.)
+  const mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
   window.addEventListener("keydown", (e) => {
-    if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") {
+    const typing = e.target !== input && e.target.closest?.("input, textarea, select, [contenteditable]");
+    const command = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey && !typing;
+    if (command && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") {
       e.preventDefault();
       input.focus();
       input.select();

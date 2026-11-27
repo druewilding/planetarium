@@ -78,7 +78,7 @@ const RING_SHADOW = /* glsl */ `
 // themselves when they cross in front of it. How much of the Sun a moon hides
 // from a point on the globe is the area two overlapping discs share (as with
 // sunVisibleFraction in astro.js).
-const MAX_CASTERS = 6; // (Saturn has six moons here)
+const MAX_CASTERS = 8; // (Jupiter has eight moons here)
 const CASTERS = /* glsl */ `
   uniform vec4 uCasters[${MAX_CASTERS}];    // centre (planet radii), radius
   uniform vec4 uCasterLook[${MAX_CASTERS}]; // colour × brightness next to the planet's; w: 1 if there

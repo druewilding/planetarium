@@ -1351,13 +1351,17 @@ async function main() {
     if (selection.type === "moon" || selection.type === "sun") fov = Math.min(fov, 20);
     // A planet is only a point until you're zoomed right in: look at it as through a telescope.
     // (Close enough for Saturn's rings, or Jupiter with its moons around it. Something as
-    // faint as Pluto or Mars' moons needs all the zoom there is to show.)
+    // faint as Pluto or Mars' moons needs all the zoom there is to show; and a moon
+    // in its planet's glare shows as faint as that makes it.)
     if (selection.type === "planet" || selection.type === "satellite") {
-      const body =
-        selection.type === "planet"
-          ? sky.planets.find((p) => p.id === selection.id)
-          : moonsOf(sky, selection.parent).find((m) => m.id === selection.id);
-      fov = body.mag > FAINT_MAG ? MIN_FOV : LOOK_FOV;
+      let mag;
+      if (selection.type === "planet") mag = sky.planets.find((p) => p.id === selection.id).mag;
+      else {
+        const planet = sky.planets.find((p) => p.id === selection.parent);
+        const m = moonsOf(sky, selection.parent).find((x) => x.id === selection.id);
+        mag = m.mag + glare(m, planet);
+      }
+      fov = mag > FAINT_MAG ? MIN_FOV : LOOK_FOV;
     }
     // A star is a point however close you get: look at it as through binoculars, among its
     // neighbours (fainter ones show, zoomed in: see telescopeGain).
