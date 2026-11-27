@@ -111,6 +111,10 @@ sky with no connection (the hills and place names need one the first time you vi
   against the stars, and when it's next best to see (opposite the Sun, or for Mercury and Venus furthest from it),
   with a note about it, much of it about right now: Venus's phase, how far open Saturn's rings are, how late Jupiter's
   light makes Io's eclipses (Ole Rømer's speed of light), how far round the Sun Pluto has got since it was found.
+  Each constellation's card gives its size (from the IAU's boundaries, and its rank of the 88), its story, who first
+  drew it, its nearest star, when it's highest at midnight, how much of it you can see from where you are, and, for
+  the 13 the Sun passes through, the dates it really does: not the horoscope's, which the sky has drifted from by
+  almost a month (and which leave out Ophiuchus).
 - **Point at sky:** on a phone, hold it up and the sky follows it, so you can aim at a star and read its name. It
   uses the compass for north (via `deviceorientationabsolute` on Android, `webkitCompassHeading` on iOS). Phone
   compasses are often a few degrees out and point to magnetic north, so dragging sideways turns the sky into line.
@@ -210,6 +214,7 @@ planetarium/
 │   ├── space.js           # positions in space (Sun-centred, J2000), for distances from wherever you stand
 │   ├── eclipses.js        # the Earth's shadow on the Moon, and finding eclipses
 │   ├── constants.js       # sizes and distances shared by the astronomy and the drawing
+│   ├── constellations.js  # the constellations: sizes, stories, who drew them, the Sun’s real dates
 │   ├── scene/
 │   │   ├── atmosphere.js  # scattering model (GLSL + JS twin)
 │   │   ├── earth.js       # the Earth seen from above, drawn into the sky

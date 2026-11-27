@@ -36,6 +36,7 @@ const APP_SHELL = [
   "./src/climb.js",
   "./src/clock.js",
   "./src/constants.js",
+  "./src/constellations.js",
   "./src/eclipses.js",
   "./src/landnames.js",
   "./src/link.js",

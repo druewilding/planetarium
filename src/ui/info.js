@@ -2,6 +2,13 @@
 // whatever is selected. Expensive searches are cached per local day.
 
 import { A, AU_KM, Body, compassPoint, MOON_RADIUS_KM, planetPole, PLANETS, R2D, SUN_RADIUS_KM } from "../astro.js";
+import {
+  constellationFacts,
+  fromLatitude,
+  highestAtMidnight,
+  HOROSCOPE,
+  sunInConstellation,
+} from "../constellations.js";
 import { lunarEclipsesFrom, nextTotalSolarEclipse, solarEclipsesFrom } from "../eclipses.js";
 import { glare, moonEventsBetween, MOONS_OF, moonsOf, nextMoonEvents } from "../satellites.js";
 import { seasonAt } from "../season.js";
@@ -825,8 +832,87 @@ export function createInfo({
   function constellationDetails(s, c) {
     const pos = c.position(s.sky);
     const stars = catalog.starsIn(c.id).slice(0, 5);
+    const f = constellationFacts(c.id);
+    const year = new Date(s.ms).getUTCFullYear();
+    const date = (ms) => formatShortDate(ms, s.loc);
+    const range = (span) => `${date(span.start)} – ${date(span.end)}`;
+    const sun = sunSpans(c.id, year);
+    const nearest = nearestStarIn(s, c.id);
+    const notes = [f.story, sunNote(c, sun, year, s.loc), fromHereNote(c, s.loc), f.origin].filter(Boolean);
     return `<dl>${position(pos, s.skyline)}</dl>
+      <div class="section"><h4>Facts</h4><dl>
+        <dt>Size</dt><dd>${Math.round(f.area).toLocaleString("en-GB")} square degrees · ${sizeRank(f.rank)}</dd>
+        <dt>Highest at midnight</dt><dd>Around ${date(highestAtMidnight(c.id, year))}</dd>
+        ${sun.length ? `<dt>The Sun’s in front</dt><dd>${sun.map(range).join(", ")}</dd>` : ""}
+        ${nearest ? `<dt>Nearest star</dt><dd><button class="jump" data-select="star" data-id="${nearest.star.hip}" title="Look at ${esc(nearest.star.name)}">${esc(nearest.star.label)}</button> · ${sig(nearest.ly, nearest.ly < 10 ? 2 : 3)} light-years</dd>` : ""}
+      </dl>${notes.map((n) => `<p class="note">${n}</p>`).join("")}</div>
       ${stars.length ? `<div class="section"><h4>Brightest stars</h4><dl>${stars.map((st) => `<dt><button class="jump" data-select="star" data-id="${st.hip}" title="Look at ${esc(st.name)}">${esc(st.label)}</button></dt><dd>${["mag " + st.mag.toFixed(1), starDistance(s, st).short].filter(Boolean).join(" · ")}</dd>`).join("")}</dl></div>` : ""}`;
+  }
+
+  /** "the biggest of the 88", "12th biggest of the 88", "the smallest of the 88". */
+  function sizeRank(rank) {
+    if (rank === 1) return "the biggest of the 88";
+    if (rank === 88) return "the smallest of the 88";
+    const suffix = rank % 100 >= 11 && rank % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][rank % 10] || "th";
+    return `${rank}${suffix} biggest of the 88`;
+  }
+
+  /** When the Sun's in front of it this year, with Sagittarius's December and January as one. */
+  function sunSpans(id, year) {
+    const spans = cached(`sunIn|${id}|${year}`, () => sunInConstellation(id, year));
+    const first = spans[0];
+    const last = spans[spans.length - 1];
+    if (spans.length > 1 && new Date(first.start).getUTCMonth() === 0 && new Date(last.end).getUTCMonth() === 11)
+      return [{ start: last.start, end: sunInConstellation(id, year + 1)[0].end }, ...spans.slice(1, -1)];
+    return spans;
+  }
+
+  /** The Sun's real dates, set against the horoscope's. */
+  function sunNote(c, spans, year, loc) {
+    if (!spans.length) return "";
+    const date = (ms) => formatShortDate(ms, loc);
+    const real = spans.map((sp) => `${date(sp.start)} to ${date(sp.end)}`).join(" and ");
+    if (c.id === "Oph")
+      return `The Sun is in front of Ophiuchus from ${real}, longer than it spends in Scorpius, but horoscopes, with their twelve signs of a month each, leave it out.`;
+    const h = HOROSCOPE[c.id];
+    if (!h) return "";
+    const at = ([m, d], y) => Date.UTC(y, m - 1, d, 12);
+    const horo = `${date(at(h[0], year))} to ${date(at(h[1], h[1][0] < h[0][0] ? year + 1 : year))}`;
+    return `The Sun is really in front of ${esc(c.name)} from ${real}, not from ${horo} as horoscopes say: their dates were fixed some 2,000 years ago, and the Earth’s slow wobble (precession) has turned the sky by almost a month since.`;
+  }
+
+  /** How much of it you can see from where you are. */
+  function fromHereNote(c, loc) {
+    const decs = c.lines.flat().map(([, dec]) => dec);
+    if (!decs.length) return "";
+    const v = fromLatitude(decs, loc.lat);
+    if (v.all === "sets") return "From here it never sets: it circles the pole, all night, every night.";
+    if (v.all === "rises")
+      return `From here it never rises: you’d have to go ${v.toward} of ${v.seeFrom} to see any of it.`;
+    if (v.someNeverRise)
+      return `From here part of it never rises above the horizon: to see all of it, go ${v.toward} of ${v.seeAllFrom}.`;
+    if (v.someNeverSet) return "From here part of it never sets, circling the pole all night.";
+    return "";
+  }
+
+  /**
+   * The nearest star in a constellation whose distance is known well, and how far:
+   * { star, ly }. Of a close pair (as near as each other within their errors, like
+   * the two stars of Alpha Centauri), the brighter one.
+   */
+  function nearestStarIn(s, id) {
+    return cached(`nearest|${id}`, () => {
+      const known = [];
+      for (const star of catalog.stars) {
+        if (star.con !== id) continue;
+        const pos = starPosition(star);
+        if (!pos || pos.relError > 0.1) continue;
+        known.push({ star, ly: distanceAU(pos, bodyPosition(s.standingOn, s.ms)) / LIGHT_YEAR_AU });
+      }
+      if (!known.length) return null;
+      const least = Math.min(...known.map((k) => k.ly));
+      return known.filter((k) => k.ly < least * 1.1).sort((a, b) => a.star.mag - b.star.mag)[0];
+    });
   }
 
   function eclipseOverview(s) {
