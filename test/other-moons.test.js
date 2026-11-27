@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { describe, expect, test } from "vitest";
 
-import { computeSky, R2D } from "../src/astro.js";
+import { computeSky, planetPole, R2D } from "../src/astro.js";
 import { readLink, writeLink } from "../src/link.js";
 import { moonEventsBetween, MOONS_OF, moonsOf, orbitPosition, SATELLITES } from "../src/satellites.js";
 
@@ -11,7 +11,7 @@ const byId = (id) => SATELLITES.find((m) => m.id === id);
 // Days after 1 January 2000, 12:00 TT, of a date at 00:00 TT.
 const days = (y, m, d) => (Date.UTC(y, m - 1, d) - Date.UTC(2000, 0, 1, 12)) / DAY;
 
-// From JPL Horizons (MAR099 and SAT441): km from the planet's centre, J2000 equator, at 00:00 TT.
+// From JPL Horizons (MAR099, SAT441, URA184, NEP098 and PLU060): km from the planet's centre, J2000 equator, at 00:00 TT.
 const HORIZONS = {
   Phobos: [
     [1960, 1, 1, 5782.2, -4748.3, -5778.8],
@@ -53,9 +53,44 @@ const HORIZONS = {
     [2026, 11, 22, -3101467.8, 1657178.1, 924183.3],
     [2090, 3, 3, -252662.9, -3526862.3, -668650.1],
   ],
+  Miranda: [
+    [1960, 1, 1, 72586.9, -51827.3, 94172.7],
+    [2026, 11, 22, 80140.9, -49265.9, 89394.2],
+    [2090, 3, 3, 128542.4, -17097.3, -6211.6],
+  ],
+  Ariel: [
+    [1960, 1, 1, 143586.5, 2327.5, -125269.9],
+    [2026, 11, 22, 142994.4, -62704.1, 109888.0],
+    [2090, 3, 3, 172135.3, -55868.6, 61260.0],
+  ],
+  Umbriel: [
+    [1960, 1, 1, -166754.7, -19654.4, 207650.4],
+    [2026, 11, 22, 165525.6, 20984.7, -208529.9],
+    [2090, 3, 3, 186985.3, 9699.6, -187498.2],
+  ],
+  Titania: [
+    [1960, 1, 1, 413841.4, -59266.6, -122320.0],
+    [2026, 11, 22, -374325.6, 134066.4, -179591.6],
+    [2090, 3, 3, 179866.8, 67862.2, -392023.0],
+  ],
+  Oberon: [
+    [1960, 1, 1, -20776.9, 159520.1, -560111.0],
+    [2026, 11, 22, 562929.6, -141143.9, 55425.7],
+    [2090, 3, 3, -335859.8, -55086.9, 475839.1],
+  ],
+  Triton: [
+    [1960, 1, 1, -332842.6, -80780.5, 92307.3],
+    [2026, 11, 22, 185750.1, 221100.9, 206020.3],
+    [2090, 3, 3, -246004.3, -101911.4, 234401.1],
+  ],
+  Charon: [
+    [1960, 1, 1, 9927.8, 11157.1, 12681.9],
+    [2026, 11, 22, 14382.1, 12973.6, -2955.1],
+    [2090, 3, 3, -14318.0, -13381.9, -165.9],
+  ],
 };
 
-describe("the moons of Mars and Saturn", () => {
+describe("the moons of Mars, Saturn, Uranus, Neptune and Pluto", () => {
   test.each(Object.keys(HORIZONS))("put %s where JPL does, within what the info box says", (id) => {
     const m = byId(id);
     for (const [y, mo, d, x, yy, z] of HORIZONS[id]) {
@@ -72,7 +107,8 @@ describe("the moons of Mars and Saturn", () => {
   });
 
   test("are listed with their planets, Mars' first", () => {
-    expect(Object.keys(MOONS_OF)).toEqual(["Mars", "Jupiter", "Saturn"]);
+    expect(Object.keys(MOONS_OF)).toEqual(["Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"]);
+    expect(MOONS_OF.Uranus.map((m) => m.id)).toEqual(["Miranda", "Ariel", "Umbriel", "Titania", "Oberon"]);
     expect(MOONS_OF.Saturn.map((m) => m.id)).toEqual(["Enceladus", "Tethys", "Dione", "Rhea", "Titan", "Iapetus"]);
     expect(SATELLITES.map((m) => m.id)).toEqual(Object.values(MOONS_OF).flatMap((ms) => ms.map((m) => m.id)));
   });
@@ -90,9 +126,31 @@ describe("the moons of Mars and Saturn", () => {
     expect(mag("Saturn", "Rhea")).toBeLessThan(mag("Saturn", "Enceladus"));
   });
 
+  test("further out, are as faint as big telescopes find them", () => {
+    const sky = computeSky(Date.parse("2026-11-27T20:00Z"), oslo);
+    const mag = (parent, id) => moonsOf(sky, parent).find((m) => m.id === id).mag;
+    expect(mag("Uranus", "Titania")).toBeGreaterThan(13.5);
+    expect(mag("Uranus", "Titania")).toBeLessThan(14.2);
+    expect(mag("Uranus", "Miranda")).toBeGreaterThan(15.5);
+    expect(mag("Neptune", "Triton")).toBeGreaterThan(13.2);
+    expect(mag("Neptune", "Triton")).toBeLessThan(13.9);
+    expect(mag("Pluto", "Charon")).toBeGreaterThan(16.5);
+    expect(mag("Pluto", "Charon")).toBeLessThan(17.3);
+  });
+
+  test("Triton goes round backwards, against Neptune's spin", () => {
+    const sky = computeSky(Date.parse("2026-11-27T20:00Z"), oslo);
+    const triton = moonsOf(sky, "Neptune")[0];
+    const pole = planetPole("Neptune", sky);
+    // Its orbit's own spin (position × velocity) points away from Neptune's north pole.
+    const later = computeSky(Date.parse("2026-11-27T22:00Z"), oslo);
+    const moved = moonsOf(later, "Neptune")[0].offsetAU;
+    expect(triton.offsetAU.clone().cross(moved).dot(pole)).toBeLessThan(0);
+  });
+
   test("stay near their planets on the sky", () => {
     const sky = computeSky(Date.parse("2026-11-27T20:00Z"), oslo);
-    for (const parent of ["Mars", "Saturn"]) {
+    for (const parent of ["Mars", "Saturn", "Uranus", "Neptune", "Pluto"]) {
       const planet = sky.planets.find((p) => p.id === parent);
       for (const m of moonsOf(sky, parent)) {
         const reach = (m.def.reachKm / 149597870.7 / planet.dist) * R2D;

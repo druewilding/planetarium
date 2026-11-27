@@ -1595,6 +1595,9 @@ async function main() {
   // telescope. (Only worked out then, too.) Their distances from it are true to life.
   const SATELLITE_FROM = 8; // pixels from the planet's centre where they start to show
   const SATELLITE_TO = 16; // and where they're fully there
+  // Pluto is so faint, its point so small, that Charon can be told apart much closer
+  // in: just, at the closest zoom, when it's furthest out.
+  const SPLIT = { Pluto: 1 / 3 };
   let satellitesShown = [];
   let lookWhenThere = false; // after jumping to a moon's next event (see onWhen)
   const HIDDEN = { mag: 99, trueDir: new THREE.Vector3(0, 1, 0) };
@@ -1616,13 +1619,16 @@ async function main() {
         at[1] > -reach &&
         at[0] < canvas.clientWidth + reach &&
         at[1] < canvas.clientHeight + reach;
-      if (glasses || reach < SATELLITE_FROM || !near) {
+      const k = SPLIT[parent] ?? 1;
+      const from = SATELLITE_FROM * k;
+      const to = SATELLITE_TO * k;
+      if (glasses || reach < from || !near) {
         points.push(...defs.map(() => HIDDEN));
         fades.push(...defs.map(() => 1));
         continue;
       }
       const moons = moonsOf(sky, parent);
-      const apart = moons.map((m) => smooth(SATELLITE_FROM, SATELLITE_TO, m.trueDir.angleTo(planet.trueDir) * perRad));
+      const apart = moons.map((m) => smooth(from, to, m.trueDir.angleTo(planet.trueDir) * perRad));
       // (Crossing the planet, it's drawn on the disc instead: see planets.js. Zoomed in, so
       // much more shows that fading out has to cover more magnitudes.)
       moons.forEach((m, i) => {
@@ -1630,13 +1636,23 @@ async function main() {
         fades.push(m.behind || m.inFront ? 1 : 1 - apart[i]);
       });
       // Names: once they're apart from the planet, or crossing its disc once that's big.
-      const disc = smooth(SATELLITE_FROM, SATELLITE_TO, shownRadius(planet) * perRad);
+      const disc = smooth(from, to, shownRadius(planet) * perRad);
       // (Not while it's dark in the planet's shadow: there's nothing there to name or tap.)
       shown.push(...moons.filter((m, i) => !m.behind && m.light >= 0.5 && (m.inFront ? disc : apart[i]) > 0.5));
     }
     satellitePoints.points.visible = fades.some((f) => f < 1);
     if (satellitePoints.points.visible) satellitePoints.update(points, fades, 16);
     return shown;
+  }
+
+  // A moon's name goes on the side away from its planet, clear of the planet's own
+  // (Charon is only a few pixels from Pluto, even zoomed right in).
+  function awayFromPlanet(m) {
+    const at = screenOf(m.dir);
+    const from = screenOf(sky.planets.find((p) => p.id === m.parent).dir);
+    if (!at || !from) return [6, -6];
+    const width = m.name.length * 7 + 4; // (as labels.js reckons it)
+    return [at[0] < from[0] ? -width - 6 : 6, at[1] > from[1] ? 8 : -6];
   }
 
   // Put a disc's label just outside its edge, however far you zoom in.
@@ -1698,7 +1714,7 @@ async function main() {
           dir: m.dir,
           cls: `body small${m.mag > zoomedLimit() ? " dim" : ""}`,
           priority: 80 - m.mag,
-          offset: [6, -6],
+          offset: awayFromPlanet(m),
           pick: () => selectSatellite(m),
         });
       }

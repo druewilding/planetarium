@@ -455,6 +455,12 @@ export function createInfo({
       "Jupiter has nearly a hundred known moons. Only the four big Galilean moons are in the planetarium: the rest are small, and far too faint to see without a big telescope.",
     Saturn:
       "Saturn has nearly three hundred known moons. Only the six brightest are in the planetarium: the rest are small and faint, or lost in the glare of Saturn and its rings.",
+    Uranus:
+      "Uranus has nearly thirty known moons. Only the five big ones are in the planetarium: the rest are small, dark and far too faint.",
+    Neptune:
+      "Neptune has sixteen known moons. Only Triton, by far the biggest, is in the planetarium: the next brightest, Nereid, is fainter than magnitude 19.",
+    Pluto:
+      "Pluto has five known moons. Only Charon, half Pluto’s size, is in the planetarium: the other four are tiny. Charon only just shows, zoomed in all the way, when it’s furthest from Pluto.",
   };
 
   /** A planet's moons, each a link, and where they are now. */
@@ -487,6 +493,16 @@ export function createInfo({
       "Saturn’s biggest moon, bigger than the planet Mercury, wrapped in thick orange haze. Christiaan Huygens found it in 1655.",
     Iapetus:
       "One side is as bright as snow, the side it leads with as dark as coal, so it’s much brighter west of Saturn, going away from you, than east of it. Found by Giovanni Cassini in 1671.",
+    Miranda:
+      "The smallest of Uranus’ big moons, patched together with grooves, ridges and cliffs up to 20 km high. Gerard Kuiper found it in 1948.",
+    Ariel: "The brightest of Uranus’ moons, found by William Lassell in 1851, with Umbriel.",
+    Umbriel: "The darkest of Uranus’ big moons, found by William Lassell in 1851, with Ariel.",
+    Titania: "Uranus’ biggest moon, found by William Herschel in 1787, with Oberon.",
+    Oberon: "The furthest out of Uranus’ big moons, found by William Herschel in 1787, with Titania.",
+    Triton:
+      "Neptune’s big moon goes round backwards, against Neptune’s spin, so it was probably caught from beyond Neptune. William Lassell found it in 1846, just 17 days after Neptune itself.",
+    Charon:
+      "Half as wide as Pluto, so big that the two swing round a point between them, each always turning the same face to the other. James Christy found it in 1978.",
   };
 
   /** "1 day 18 hours", or "7 hours 39 minutes". */
@@ -517,11 +533,11 @@ export function createInfo({
     if (def.fitKm) {
       const arcsec = (def.fitKm / (m.dist * AU_KM)) * R2D * 3600;
       const year = new Date(s.ms).getUTCFullYear();
-      accuracy = `<p class="note">Its place is worked out from its average orbit, which keeps it within about ${sig(def.fitKm, 2)} km (${arcsec < 0.1 ? arcsec.toFixed(2) : arcsec.toFixed(1)}″ from here) of where it really is${year < 1950 || year >= 2100 ? " between 1950 and 2100. This far from them, it may be further out" : ""}.</p>`;
+      accuracy = `<p class="note">Its place is worked out from its average orbit, which keeps it within about ${sig(def.fitKm, 2)} km (${arcsec < 0.01 ? "under 0.01" : arcsec < 0.1 ? arcsec.toFixed(2) : arcsec.toFixed(1)}″ from here) of where it really is${year < 1950 || year >= 2100 ? " between 1950 and 2100. This far from them, it may be further out" : ""}.</p>`;
     }
     return `<dl>${position(m, s.skyline)}
         <dt>Seen from here</dt><dd>${where}</dd>
-        ${m.shadowOnPlanet ? `<dt>Its shadow</dt><dd>On ${planet.name}${parent === "Mars" ? "" : "’s clouds"}</dd>` : ""}</dl>
+        ${m.shadowOnPlanet ? `<dt>Its shadow</dt><dd>On ${planet.name}${PLANETS.find((p) => p.id === parent).rocky ? "" : "’s clouds"}</dd>` : ""}</dl>
       <div class="section"><h4>Coming up</h4><dl>
         ${moonEventLabels(planet.name)
           .map(([key, label]) => moonEventRow(key, label, events[key], s))

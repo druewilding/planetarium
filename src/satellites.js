@@ -1,5 +1,6 @@
-// Moons of other planets: Jupiter's four big ones, found by Galileo in 1610; Mars'
-// two little ones; and Saturn's six you can see in a telescope, Titan the biggest.
+// Moons of other planets: Mars' two little ones; Jupiter's four big ones, found by
+// Galileo in 1610; Saturn's six brightest, Titan the biggest; Uranus' five big ones;
+// Neptune's Triton; and Pluto's Charon.
 //
 // Nothing here assumes you're on the Earth. A moon is placed by where it is from
 // its planet, added to where the planet is from you, so the same sums work from
@@ -75,11 +76,17 @@ const JUPITER_MOONS_DEFS = [
 // equator. n: how fast it goes round (degrees a day), lonAccel: how much that
 // changes (degrees a century²: Phobos is spiralling in); nodeRate and periRate:
 // how fast they turn (degrees a year). libration: [degrees, period in days, phase]
-// for a slow swing back and forth, where a moon's pull on another one adds up
-// orbit after orbit (Tethys with Mimas, Enceladus with Dione).
+// for each slow swing back and forth, where a moon's pull on another one adds up
+// orbit after orbit (Tethys with Mimas, Enceladus with Dione). Miranda, pulled
+// about by its bigger neighbours, needs several: only its 12½-year swing and a
+// couple of smaller ones are real; the slow ones together just follow its drift
+// over these 150 years, and soon go wrong outside them.
 //
-// Fitted by least squares to JPL Horizons (MAR099 for Mars, SAT441 for Saturn),
-// every 4 days from 1950 to 2100. fitKm: the furthest out it was then.
+// Fitted by least squares to JPL Horizons (MAR099 for Mars, SAT441 for Saturn,
+// URA184 for Uranus, NEP098 for Neptune, PLU060 for Pluto), every 4 days from 1950
+// to 2100. fitKm: the furthest out it was then. The pole is the planet's equator's
+// (theirs are Laplace planes too), turned so the moon goes round anticlockwise:
+// Triton's goes round backwards, and Uranus spins (and its moons go round) on its side.
 const ORBIT_MOONS_DEFS = [
   {
     id: "Phobos",
@@ -150,7 +157,7 @@ const ORBIT_MOONS_DEFS = [
       lon: 182.21844,
       n: 262.731893254,
       lonAccel: 0.26818,
-      libration: [0.2618, 4034.27, 72.38],
+      libration: [[0.261785, 4034.267, 72.38034]],
     },
   },
   {
@@ -174,7 +181,7 @@ const ORBIT_MOONS_DEFS = [
       lon: 188.39378,
       n: 190.697912507,
       lonAccel: -0.10952,
-      libration: [-2.0939, 25757.72, 140.52],
+      libration: [[2.093931, 25757.721, 320.52028]],
     },
   },
   {
@@ -272,11 +279,184 @@ const ORBIT_MOONS_DEFS = [
       lonAccel: -0.081113,
     },
   },
+  {
+    id: "Miranda",
+    name: "Miranda",
+    parent: "Uranus",
+    radiusKm: 235.8,
+    H: 3.5,
+    albedo: 0.32,
+    color: [0.8, 0.8, 0.8],
+    fitKm: 143,
+    orbit: {
+      pole: [77.311, 15.175],
+      a: 129848.3,
+      e: 0.001359,
+      i: 4.4271,
+      node: 100.8611,
+      nodeRate: -20.23971,
+      peri: 255.9125,
+      periRate: 20.0262,
+      lon: 315.5025,
+      n: 254.677707812,
+      lonAccel: 699.63,
+      libration: [
+        [356.771032, 79993.435, 14.28258],
+        [1.435992, 4583.499, 318.02506],
+        [256.647526, 45624.355, 170.69429],
+        [0.17668, 2291.448, 275.70626],
+        [215.914553, 62440695.735, 270.3358],
+        [148.416973, 37573.287, 312.06219],
+        [24.647838, 29442.424, 167.47177],
+        [168.288144, 75066.541, 79.87244],
+        [52.620188, 32792.139, 48.13555],
+        [0.438555, 20333.331, 260.92039],
+      ],
+    },
+  },
+  {
+    id: "Ariel",
+    name: "Ariel",
+    parent: "Uranus",
+    radiusKm: 578.9,
+    H: 1.45,
+    albedo: 0.53,
+    color: [0.88, 0.88, 0.88],
+    fitKm: 946,
+    orbit: {
+      pole: [77.311, 15.175],
+      a: 190920.7,
+      e: 0.001451,
+      i: 0.01196,
+      node: 272.8889,
+      nodeRate: -20.0478,
+      peri: 83.4278,
+      periRate: 6.2408,
+      lon: 203.14692,
+      n: 142.835656004,
+      lonAccel: -0.51634,
+    },
+  },
+  {
+    id: "Umbriel",
+    name: "Umbriel",
+    parent: "Uranus",
+    radiusKm: 584.7,
+    H: 2.1,
+    albedo: 0.26,
+    color: [0.7, 0.7, 0.7],
+    fitKm: 862,
+    orbit: {
+      pole: [77.311, 15.175],
+      a: 265979.8,
+      e: 0.003759,
+      i: 0.07645,
+      node: 196.2704,
+      nodeRate: -2.77472,
+      peri: 350.8437,
+      periRate: 2.8892,
+      lon: 251.2408,
+      n: 86.8688727688,
+      lonAccel: 0.058559,
+    },
+  },
+  {
+    id: "Titania",
+    name: "Titania",
+    parent: "Uranus",
+    radiusKm: 788.9,
+    H: 1.02,
+    albedo: 0.35,
+    color: [0.85, 0.82, 0.8],
+    fitKm: 3125,
+    orbit: {
+      pole: [77.311, 15.175],
+      a: 436279.6,
+      e: 0.001144,
+      i: 0.10306,
+      node: 13.1547,
+      nodeRate: 0.34841,
+      peri: 229.318,
+      periRate: 1.3697,
+      lon: 281.55605,
+      n: 41.3514138154,
+      lonAccel: 0.072092,
+    },
+  },
+  {
+    id: "Oberon",
+    name: "Oberon",
+    parent: "Uranus",
+    radiusKm: 761.4,
+    H: 1.23,
+    albedo: 0.31,
+    color: [0.82, 0.78, 0.76],
+    fitKm: 2717,
+    orbit: {
+      pole: [77.311, 15.175],
+      a: 583443.7,
+      e: 0.001392,
+      i: 0.17165,
+      node: 37.8148,
+      nodeRate: -0.58125,
+      peri: 194.6144,
+      periRate: 0.5892,
+      lon: 352.54475,
+      n: 26.7394803355,
+      lonAccel: 0.1362,
+    },
+  },
+  {
+    id: "Triton",
+    name: "Triton",
+    parent: "Neptune",
+    radiusKm: 1353.4,
+    H: -1.2,
+    albedo: 0.76,
+    color: [1.0, 0.93, 0.9],
+    fitKm: 177,
+    orbit: {
+      pole: [119.36, -43.46],
+      a: 354760.2,
+      e: 0.000127,
+      i: 23.16905,
+      node: 182.1385,
+      nodeRate: -0.52383,
+      peri: 79.2591,
+      periRate: 0.4077,
+      lon: 60.72761,
+      n: 61.2572603114,
+      lonAccel: 0.0087549,
+    },
+  },
+  {
+    id: "Charon",
+    name: "Charon",
+    parent: "Pluto",
+    radiusKm: 606.0,
+    H: 1.3,
+    albedo: 0.41,
+    color: [0.8, 0.78, 0.76],
+    fitKm: 1,
+    orbit: {
+      pole: [132.993, -6.163],
+      a: 19595.8,
+      e: 0.000161,
+      i: 0.08342,
+      node: 9.9763,
+      nodeRate: 0.03255,
+      peri: 155.3436,
+      periRate: 0.0009,
+      lon: 304.12378,
+      n: 56.3625303407,
+      lonAccel: 0.0031221,
+    },
+  },
 ].map((m) => ({ ...m, periodDays: 360 / m.orbit.n, reachKm: m.orbit.a * (1 + m.orbit.e) * 1.02 }));
 
-/** Every moon there is here, Mars' first (in the order of PLANETS), each { id, name, parent, … }. */
-export const SATELLITES = [...ORBIT_MOONS_DEFS.filter((m) => m.parent === "Mars"), ...JUPITER_MOONS_DEFS].concat(
-  ORBIT_MOONS_DEFS.filter((m) => m.parent === "Saturn")
+/** Every moon there is here, in the order of their planets in PLANETS, each { id, name, parent, … }. */
+export const SATELLITES = PLANETS.flatMap((p) =>
+  [...JUPITER_MOONS_DEFS, ...ORBIT_MOONS_DEFS].filter((m) => m.parent === p.id)
 );
 export const JUPITER_MOONS = SATELLITES.filter((m) => m.parent === "Jupiter");
 /** The planets that have moons here, and theirs. */
@@ -313,8 +493,7 @@ export function orbitPosition(orbit, days) {
   const years = days / 365.25;
   const T = days / 36525;
   let lon = orbit.lon + orbit.n * days + orbit.lonAccel * T * T;
-  if (orbit.libration) {
-    const [amp, period, phase] = orbit.libration;
+  for (const [amp, period, phase] of orbit.libration ?? []) {
     lon += amp * Math.sin(((2 * Math.PI) / period) * days + phase * D2R);
   }
   const e = orbit.e;
