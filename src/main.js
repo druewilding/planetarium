@@ -532,6 +532,7 @@ async function main() {
       standingOn: DEFAULT_BODY,
       ms: clock.ms,
       selection,
+      canLook: canLookAtSelection(),
       earth: selection?.type === "earth" && isAloft() ? earthFacts() : null,
       skyline: !flight && skylineFade > 0.5 ? skyline : null,
     }),
@@ -1308,6 +1309,24 @@ async function main() {
       default:
         return null;
     }
+  }
+
+  /**
+   * Whether Look at it would show the selection: not from the ground when it's below the
+   * horizon or behind the hills (a constellation, while any of its stars is up). Up above
+   * the Earth, always.
+   */
+  const lookTmp = new THREE.Vector3();
+  function canLookAtSelection() {
+    if (!selection || isAloft() || selection.type === "feature" || selection.type === "earth") return true;
+    if (selection.type === "constellation") {
+      const c = selection.constellation;
+      const up = ([ra, dec]) =>
+        !behindLand(refract(eqVector(ra, dec, lookTmp).applyMatrix4(sky.eqjToWorld).normalize()), 0);
+      return up(c.label) || c.lines.some((line) => line.some(up));
+    }
+    const d = selectionDir();
+    return !d || !behindLand(d, 0);
   }
 
   function select(sel, { look = false } = {}) {

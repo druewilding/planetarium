@@ -38,6 +38,7 @@ const FEATURE_KIND = {
   tower: "Tower",
   mast: "Mast",
 };
+const OUT_OF_SIGHT = "Out of sight from here: below the horizon, or behind the hills";
 const NO_PLANETS = "<p class=note>None above the horizon right now.</p>";
 const STARS_TIP =
   "<p class=note>Turn off the <strong>Atmosphere</strong> layer to see the stars and planets that are up there right now.</p>";
@@ -1135,7 +1136,7 @@ export function createInfo({
     const kindHtml = sel.type === "star" || sel.type === "satellite" ? kind : esc(kind);
     return `<h3>${esc(title)}</h3><p class="kind">${kindHtml}</p>${linkNotes(body, sel)}
       <div class="info-actions">
-        <button class="chip small" data-action="look">Look at it</button>
+        <button class="chip small" data-action="look"${s.canLook === false ? ` disabled title="${OUT_OF_SIGHT}"` : ""}>Look at it</button>
         ${sel.type === "feature" ? goButton(sel.feature.group === "peak" ? "Go to the summit" : "Go there") : ""}
         <button class="chip small" data-action="clear">Back to overview</button>
       </div>`;
