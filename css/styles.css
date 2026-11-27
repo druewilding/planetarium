@@ -442,6 +442,14 @@ input[type="number"]:focus {
   z-index: 8;
 }
 
+/* On a big screen, room enough for the longer rows (a moon's next events, its
+   distance from its planet) to sit on one line. */
+@media (min-width: 1000px) {
+  .info-panel {
+    width: 380px;
+  }
+}
+
 .info-panel.collapsed {
   display: none;
 }
