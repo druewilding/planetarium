@@ -584,14 +584,13 @@ async function main() {
       }
     },
   });
-  $("info-btn").addEventListener("click", () => {
-    const collapsed = infoPanel.classList.toggle("collapsed");
-    $("info-btn").setAttribute("aria-pressed", String(!collapsed));
-  });
-  if (window.matchMedia("(max-width: 760px)").matches) {
-    infoPanel.classList.add("collapsed");
-    $("info-btn").setAttribute("aria-pressed", "false");
-  }
+  const showInfo = (open = infoPanel.classList.contains("collapsed")) => {
+    infoPanel.classList.toggle("collapsed", !open);
+    $("info-btn").setAttribute("aria-pressed", String(open));
+  };
+  $("info-btn").addEventListener("click", () => showInfo());
+  infoPanel.querySelector("[data-close]").addEventListener("click", () => showInfo(false));
+  if (window.matchMedia("(max-width: 760px)").matches) showInfo(false);
 
   // ---- Compass ----
   const compass = createCompass($("compass"), {
@@ -1354,10 +1353,7 @@ async function main() {
   function select(sel, { look = false } = {}) {
     selection = sel;
     overlays.selectConstellation(sel?.type === "constellation" ? sel.constellation.id : null);
-    if (sel && infoPanel.classList.contains("collapsed")) {
-      infoPanel.classList.remove("collapsed");
-      $("info-btn").setAttribute("aria-pressed", "true");
-    }
+    if (sel) showInfo(true);
     if (look) lookAtSelection();
     info.update(true);
   }
