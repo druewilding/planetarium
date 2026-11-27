@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, test } from "vitest";
 
-import { phaseName, starDistance } from "../src/ui/info.js";
+import { lightLeftNote, linkMentions, phaseName, starDistance } from "../src/ui/info.js";
 
 const { stars } = JSON.parse(readFileSync(new URL("../data/stars.json", import.meta.url), "utf8"));
 const star = (hip) => {
@@ -71,5 +71,80 @@ describe("phaseName", () => {
     [-90, "Last quarter"],
   ])("%i° is %s", (angle, name) => {
     expect(phaseName(angle)).toBe(name);
+  });
+});
+
+describe("lightLeftNote", () => {
+  test("sets a star's light against the nearest thing in history", () => {
+    expect(lightLeftNote(1478, false)).toBe(
+      "The light you’re seeing set off 14 years before Columbus sailed to America."
+    );
+    expect(lightLeftNote(2018, false)).toBe(
+      "The light you’re seeing set off 3 years before the James Webb Space Telescope was launched."
+    );
+    expect(lightLeftNote(1969, false)).toBe(
+      "The light you’re seeing set off the year people first walked on the Moon."
+    );
+  });
+
+  test("says 'about' for a distance that isn't known so well, and copes with long ago", () => {
+    expect(lightLeftNote(-20000, true)).toBe(
+      "The light you’re seeing set off about 10,000 years before the end of the last ice age."
+    );
+  });
+});
+
+describe("linkMentions", () => {
+  const targets = [
+    { name: "Jupiter", type: "planet", id: "Jupiter" },
+    { name: "Io", type: "satellite", id: "Io" },
+    { name: "Ursa Major", type: "constellation", id: "UMa" },
+    { name: "Orion", type: "constellation", id: "Ori" },
+    { name: "Vega", type: "star", id: 91262 },
+  ];
+  const link = (html, self) => linkMentions(html, targets, self);
+
+  test("links planets, moons, constellations and stars, keeping a possessive outside", () => {
+    const out = link("Io’s eclipses, near Jupiter, by Orion’s belt, in Ursa Major, and Vega.");
+    expect(out).toMatch(/data-select="satellite" data-id="Io" title="Look at Io">Io<\/button>’s/);
+    expect(out).toMatch(/data-select="planet" data-id="Jupiter"/);
+    expect(out).toMatch(/data-select="constellation" data-id="Ori"/);
+    expect(out).toMatch(/data-select="constellation" data-id="UMa" title="Look at Ursa Major">Ursa Major</);
+    expect(out).toMatch(/data-select="star" data-id="91262"/);
+  });
+
+  test("links each thing only once, keeping its ’s on the same line", () => {
+    const out = link("Jupiter’s moon goes against Jupiter’s spin, found just after Jupiter.");
+    expect(out.match(/<button/g)).toHaveLength(1);
+    expect(out).toMatch(
+      /^<span class="nowrap"><button [^>]*>Jupiter<\/button>’s<\/span> moon goes against Jupiter’s spin/
+    );
+  });
+
+  test("doesn't link a name inside a longer word, or the thing the card is about", () => {
+    expect(link("Before the Titans, Iota and Jupiterian things")).not.toContain("<button");
+    expect(link("Vega shines", { type: "star", id: 91262 })).toBe("Vega shines");
+  });
+
+  test("leaves years and other numbers alone", () => {
+    for (const text of [
+      "Found in 1610",
+      "around 2100",
+      "about 1500",
+      "2800 BCE",
+      "150 CE",
+      "13,800 CE",
+      "1,400 years",
+      "2,000 years ago",
+      "within 1250 km",
+      "248: last",
+      "mag 1.25",
+    ])
+      expect(link(text), text).not.toContain("<button");
+  });
+
+  test("leaves buttons already there as they are", () => {
+    const html = `<button class="jump" data-when="${1}">Jupiter in 2027</button>`;
+    expect(link(html)).toBe(html);
   });
 });

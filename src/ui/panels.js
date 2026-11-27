@@ -68,6 +68,12 @@ export const LAYER_GROUPS = [
       { key: "moonOrbit", where: "space", label: "Moon’s orbit round the Earth", color: ORBIT_COLORS.moon },
       { key: "earthOrbit", where: "space", label: "Earth’s orbit round the Sun", color: ORBIT_COLORS.earth },
       { key: "planetOrbits", where: "space", label: "Planets’ orbits", color: ORBIT_COLORS.Mars },
+      {
+        key: "moonOrbits",
+        label: "Moons’ orbits round their planets",
+        color: ORBIT_COLORS.Jupiter,
+        hint: "Zoom in close to a planet to see them",
+      },
       { key: "ecliptic", label: "Ecliptic (planets’ highway)", color: OVERLAY_COLORS.ecliptic },
       { key: "equator", label: "Celestial equator", color: OVERLAY_COLORS.equator },
       { key: "altAzGrid", where: "ground", label: "Altitude / azimuth grid", color: OVERLAY_COLORS.altAzGrid },
@@ -98,6 +104,7 @@ export const DEFAULT_LAYERS = {
   moonOrbit: true,
   earthOrbit: true,
   planetOrbits: true,
+  moonOrbits: true,
   ecliptic: false,
   equator: false,
   altAzGrid: false,
@@ -252,6 +259,18 @@ export function createSearch(items) {
       matches = [];
       render();
       input.blur();
+    }
+  });
+  // Cmd-K, from anywhere: straight to the box. (Ctrl-K off a Mac, but not while typing
+  // somewhere else; and never on a Mac, where Ctrl-K deletes to the end of the line.)
+  const mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+  window.addEventListener("keydown", (e) => {
+    const typing = e.target !== input && e.target.closest?.("input, textarea, select, [contenteditable]");
+    const command = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey && !typing;
+    if (command && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      input.focus();
+      input.select();
     }
   });
   input.addEventListener("blur", () => setTimeout(() => (list.hidden = true), 150));

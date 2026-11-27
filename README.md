@@ -41,6 +41,27 @@ sky with no connection (the hills and place names need one the first time you vi
   against the clouds, dark Callisto shows as a grey smudge), cast small black shadows on its clouds, and fade out for a
   couple of hours in its shadow. Tap one, or search for it, for how far it is from Jupiter, how long it takes to go
   round, and when its next shadow, crossing, eclipse and disappearance behind Jupiter are: tap one to go there. Jupiter's own card lists the four, and where each one is now.
+- **The other planets' moons:** little Phobos and Deimos round Mars; Jupiter's Amalthea and Thebe close in and Himalia
+  and Elara far out; Saturn's six brightest (Titan, Rhea, Iapetus,
+  Dione, Tethys and Enceladus); Uranus' five big ones (Miranda, Ariel, Umbriel, Titania and Oberon); Neptune's
+  Triton, which goes round backwards; and Pluto's Charon. They work just like Jupiter's (shadows, crossings, eclipses,
+  next events), but they're placed by an average orbit for each one, fitted to JPL's ephemerides for 1950 to 2100:
+  within a kilometre for Charon, about 100 km for Phobos, a thousand for Titan, and 13,000 for far-out Iapetus (still
+  only 2″ from the Earth). Each moon's card says how far out it can be. Iapetus is two-toned, snow-bright on one side
+  and coal-dark on the other, so it's much brighter west of Saturn than east of it. Titan's shadow only crosses Saturn
+  in the years round Saturn's equinoxes (2024–2025, then 2038–2039), when we see its rings edge-on. Charon, never
+  more than 0.9″ from Pluto, only just splits from it at the closest zoom. **Look at it** on something too faint to
+  show at 0.1°, like Pluto, or Phobos lost in Mars's glare, zooms all the way in, and a moon's name sits on the side away from its planet.
+  Himalia and Elara, pulled about by the Sun, can't follow an average orbit: they start from JPL's own positions,
+  kept every 512 days, are moved on from the ones either side by Jupiter's and the Sun's pull, and blended between
+  them (within 360 km).
+- **Lost in the glare:** a faint moon right beside its bright planet doesn't show, as through a telescope. The
+  closer in and the fainter, the harder: Amalthea and Thebe are lost beside Jupiter, and Phobos only shows when
+  it's out at the far side of its little orbit, near one of Mars's close oppositions. Its name still shows, dimmed,
+  so you know where to look.
+- **Moons' orbits:** each moon's path round its planet, drawn true to size once you zoom in close enough to see it:
+  edge-on lines across Jupiter, Saturn's tipped ovals, Uranus' near-circles (it lies on its side). Behind the
+  planet they're hidden, and Saturn's rings pass in front of them. Turn them off in Layers.
 - **Zoom in to see fainter things:** a view narrower than the screen is like looking through binoculars or a
   telescope, and each zoom shows as faint as the one it stands for would: about 2½ magnitudes fainter at a few degrees,
   and at the closest zoom (0.04°) about 8, like a 30 cm telescope. Stars, planets and moons alike: under a bright Moon
@@ -86,7 +107,19 @@ sky with no connection (the hills and place names need one the first time you vi
 - **Info panel:** rise, set and transit times, twilight, day length, Moon phases and age, distances, light travel time,
   and the brightest stars in each constellation. Stars have distances too, from their Hipparcos parallaxes: in
   kilometres, in years of light travel (light-years), and the year the light you see left them. Distant stars are hard
-  to measure, so those say "about" or give a range.
+  to measure, so those say "about" or give a range, and what was happening on the Earth when that light set off
+  ("14 years before Columbus sailed to America"). A star's card also gives how hot it is (from its colour), how much
+  light it really gives out (from its distance), how near the poles of the sky come to it as they slowly circle every
+  26,000 years (Thuban was the North Star in 2800 BCE, Vega will be around 13,800 CE), how far you'd have to go to see
+  one that never rises here, and, for 45 famous stars, what the name means and something to know. Each planet's card gives its size, whether it's going backwards
+  against the stars, and when it's next best to see (opposite the Sun, or for Mercury and Venus furthest from it),
+  with a note about it, much of it about right now: Venus's phase, how far open Saturn's rings are, how late Jupiter's
+  light makes Io's eclipses (Ole Rømer's speed of light), how far round the Sun Pluto has got since it was found.
+  In the notes, every planet, moon, constellation and star mentioned is a link to it.
+  Each constellation's card gives its size (from the IAU's boundaries, and its rank of the 88), its story, who first
+  drew it, its nearest star, when it's highest at midnight, how much of it you can see from where you are, and, for
+  the 13 the Sun passes through, the dates it really does: not the horoscope's, which the sky has drifted from by
+  almost a month (and which leave out Ophiuchus).
 - **Point at sky:** on a phone, hold it up and the sky follows it, so you can aim at a star and read its name. It
   uses the compass for north (via `deviceorientationabsolute` on Android, `webkitCompassHeading` on iOS). Phone
   compasses are often a few degrees out and point to magnetic north, so dragging sideways turns the sky into line.
@@ -115,16 +148,17 @@ sky with no connection (the hills and place names need one the first time you vi
 
 ### Controls
 
-| Action           | Mouse / touch                | Keyboard   |
-| ---------------- | ---------------------------- | ---------- |
-| Look around      | Drag the sky, or the compass | Arrow keys |
-| Zoom             | Scroll / pinch / − + buttons | `+` / `-`  |
-| Select an object | Click / tap                  |            |
-| Point at sky     | Point at sky button (phones) |            |
-| Reset view       | Reset view button            | `0`        |
-| Play / pause     | ▶ button                     | Space      |
-| Faster / slower  | ⏩ / ⏪                      | `]` / `[`  |
-| Back to now      | Now                          | `n`        |
+| Action           | Mouse / touch                | Keyboard        |
+| ---------------- | ---------------------------- | --------------- |
+| Look around      | Drag the sky, or the compass | Arrow keys      |
+| Zoom             | Scroll / pinch / − + buttons | `+` / `-`       |
+| Select an object | Click / tap                  |                 |
+| Find an object   | The Find box                 | `⌘K` / `Ctrl+K` |
+| Point at sky     | Point at sky button (phones) |                 |
+| Reset view       | Reset view button            | `0`             |
+| Play / pause     | ▶ button                     | Space           |
+| Faster / slower  | ⏩ / ⏪                      | `]` / `[`       |
+| Back to now      | Now                          | `n`             |
 
 ### Link format
 
@@ -134,7 +168,7 @@ sky with no connection (the hills and place names need one the first time you vi
 
 Every part is optional; whatever a link leaves out stays as it is (here and now, the usual view). `body` is the world
 you're standing on, so `lat` and `lon` will mean the same thing on the Moon or Mars. `sel` is `sun`, `moon`,
-`planet:Mars`, `satellite:Io` (Jupiter's moons), `star:Sirius` (or a Hipparcos number, `star:32349`) or `con:Ori`. Editing the address in place jumps
+`planet:Mars`, `satellite:Io` (a planet's moon), `star:Sirius` (or a Hipparcos number, `star:32349`) or `con:Ori`. Editing the address in place jumps
 there.
 
 From the browser console, `planetarium.clock.set(Date.parse("2027-08-02T10:00Z"))` jumps to any instant.
@@ -174,7 +208,8 @@ planetarium/
 ├── src/
 │   ├── main.js            # app setup, render loop, eye adaptation, picking, labels
 │   ├── astro.js           # astronomy-engine wrapper → horizon (world) frame
-│   ├── satellites.js      # Jupiter's moons: positions, shadows, eclipses, next events (from anywhere)
+│   ├── moon-states.js     # Himalia's and Elara's positions from JPL (generated)
+│   ├── satellites.js      # the planets' moons: positions, shadows, eclipses, next events (from anywhere)
 │   ├── climb.js           # how high you are, second by second, rising and landing
 │   ├── clock.js           # simulated time, rates, smooth jumps
 │   ├── timezone.js        # wall-clock time for any location
@@ -183,8 +218,10 @@ planetarium/
 │   ├── water.js           # map tiles → where the sea, lakes and rivers are
 │   ├── cachedfetch.js     # fetch, keeping a copy in Cache Storage
 │   ├── space.js           # positions in space (Sun-centred, J2000), for distances from wherever you stand
+│   ├── stars.js           # more about the stars: names, temperatures, true brightness, pole stars
 │   ├── eclipses.js        # the Earth's shadow on the Moon, and finding eclipses
 │   ├── constants.js       # sizes and distances shared by the astronomy and the drawing
+│   ├── constellations.js  # the constellations: sizes, stories, who drew them, the Sun’s real dates
 │   ├── scene/
 │   │   ├── atmosphere.js  # scattering model (GLSL + JS twin)
 │   │   ├── earth.js       # the Earth seen from above, drawn into the sky
@@ -194,6 +231,7 @@ planetarium/
 │   │   ├── lines.js       # lines on the sky (refraction-aware)
 │   │   ├── overlays.js    # constellations, grids, paths
 │   │   ├── orbits.js      # the Moon's, the Earth's and the planets' orbits, in perspective
+│   │   ├── moonorbits.js  # the moons' orbits round their planets, on the sky
 │   │   └── glsl.js        # shared shader code: tone mapping, sky lookup, refraction
 │   └── ui/                # time bar, compass, location dialog, info panel, layers, search, labels, camera
 ├── data/                  # stars, constellations, cities, land outlines (compact JSON)
@@ -232,7 +270,7 @@ planetarium/
 3. Fly-to travel between bodies, orbit trails
 4. Standing on the Moon: Earth's phases, the two-week day
 5. Planets and moons: ✅ discs with phases and Saturn's rings, ✅ Jupiter's four big moons, their shadows and
-   eclipses, ✅ Pluto; still to come: Titan, Mars' moons
+   eclipses, ✅ Pluto, ✅ the big moons of Mars, Saturn, Uranus, Neptune and Pluto
 6. The Martian sky, with its blue sunset
 7. ✅ Eclipses: find them and jump to them, the red Moon, the Moon's shadow on the Earth
 8. ✅ Shareable links (place, time, view in the URL)
