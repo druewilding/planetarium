@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.7.0](https://github.com/druewilding/planetarium/compare/v1.6.0...v1.7.0) (2026-11-28)
+
+
+### Features
+
+* Add clusters, nebulae and galaxies, what's up tonight, and a back arrow that remembers where you've been ([#73](https://github.com/druewilding/planetarium/issues/73)) ([dcdda49](https://github.com/druewilding/planetarium/commit/dcdda49111cf33266dcabadb9a60b00b5b41d22a))
+* Keep panel titles and buttons in view while the details scroll ([#68](https://github.com/druewilding/planetarium/issues/68)) ([22a2d02](https://github.com/druewilding/planetarium/commit/22a2d02df450f9f5f7f0417a95c7f330df76ef04))
+* Keep panel titles and buttons in view while the details scroll ([#69](https://github.com/druewilding/planetarium/issues/69)) ([a1988a9](https://github.com/druewilding/planetarium/commit/a1988a92c24a9b9e0e8ff9b5e42084148f6d1f6a))
+* Move the info button to the left, above its panel ([#71](https://github.com/druewilding/planetarium/issues/71)) ([0594229](https://github.com/druewilding/planetarium/commit/0594229544a98f1922e605888e910a7cf5ca5cb7))
+* Tidy the time bar and link the time and date to their sliders ([#72](https://github.com/druewilding/planetarium/issues/72)) ([5d5729b](https://github.com/druewilding/planetarium/commit/5d5729b12fd3c56a8ec40f4efebebcce6a105d52))
+* Understand coordinates pasted or typed in any common format ([#70](https://github.com/druewilding/planetarium/issues/70)) ([dde19f4](https://github.com/druewilding/planetarium/commit/dde19f433c1cea9990c2f3e056224d0e79ea3e42))
+
 ## [1.6.0](https://github.com/druewilding/planetarium/compare/v1.5.1...v1.6.0) (2026-11-27)
 
 
