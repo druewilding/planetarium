@@ -160,18 +160,23 @@
     </div>
 
     <!-- Info panel -->
-    <aside id="info" class="panel info-panel">
-      <button class="icon-btn small info-close" data-close="info" aria-label="Close" title="Close">×</button>
-      <div id="info-content"></div>
+    <aside id="info" class="panel split info-panel">
+      <div class="panel-head">
+        <div id="info-title"></div>
+        <button class="icon-btn small" data-close="info" aria-label="Close" title="Close">×</button>
+      </div>
+      <div id="info-content" class="panel-body"></div>
+      <div id="info-foot" class="panel-foot"></div>
     </aside>
 
     <!-- Layers panel -->
-    <aside id="layers" class="panel layers-panel" hidden>
+    <aside id="layers" class="panel split layers-panel" hidden>
       <div class="panel-head">
         <h2>Layers</h2>
         <button class="icon-btn small" data-close="layers" aria-label="Close">×</button>
       </div>
-      <div id="layers-content"></div>
+      <div id="layers-content" class="panel-body"></div>
+      <div id="layers-foot" class="panel-foot"></div>
     </aside>
 
     <!-- Bottom time bar -->

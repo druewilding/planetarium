@@ -195,6 +195,38 @@ svg {
   gap: 8px;
 }
 
+/* A panel too tall for the screen keeps its head (title, close button) and foot
+   (buttons) in view, and scrolls only what's between. */
+.panel.split {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+
+.split > .panel-head {
+  align-items: flex-start;
+  padding: 12px 10px 10px 16px;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.split > .panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 10px 16px 12px;
+}
+
+.split > .panel-foot {
+  padding: 10px 16px 12px;
+  border-top: 1px solid var(--panel-border);
+}
+
+.split > .panel-foot:empty {
+  display: none;
+}
+
 .panel h2 {
   margin: 0;
   font-size: 15px;
@@ -437,8 +469,6 @@ input[type="number"]:focus {
   left: var(--gutter);
   width: 300px;
   max-height: calc(100vh - var(--timebar-h, 120px) - 100px);
-  overflow: auto;
-  padding: 14px 16px;
   z-index: 8;
 }
 
@@ -454,10 +484,13 @@ input[type="number"]:focus {
   display: none;
 }
 
-/* Sits in the top corner, with the title wrapping round it. */
-.info-close {
-  float: right;
-  margin: -6px -8px 0 4px;
+#info-title {
+  min-width: 0;
+  padding-top: 2px;
+}
+
+#info-title .kind {
+  margin: 0;
 }
 
 .info-panel h3 {
@@ -496,6 +529,13 @@ input[type="number"]:focus {
   border-top: 1px solid var(--panel-border);
 }
 
+/* (The header's line is enough above the first one.) */
+.info-panel .section:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
 .info-panel .section h4 {
   margin: 0 0 4px;
   font-size: 12px;
@@ -527,7 +567,6 @@ input[type="number"]:focus {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
-  margin-top: 10px;
 }
 
 .daylight-bar {
@@ -557,8 +596,6 @@ input[type="number"]:focus {
   right: var(--gutter);
   width: 270px;
   max-height: calc(100vh - 240px);
-  overflow: auto;
-  padding: 12px 14px;
   z-index: 12;
 }
 
@@ -571,8 +608,12 @@ input[type="number"]:focus {
   color: var(--text-dim);
 }
 
+.layers-panel h3:first-child {
+  margin-top: 0;
+}
+
 .layers-panel .version {
-  margin: 14px 0 2px;
+  margin: 0;
   font-size: 11px;
   color: var(--text-dim);
 }
@@ -1242,7 +1283,6 @@ body:not(.aloft) #look-up {
     left: var(--gutter);
     right: var(--gutter);
     width: auto;
-    padding: 10px 14px;
   }
 
   .rate-label {
@@ -1262,7 +1302,7 @@ body:not(.aloft) #look-up {
   }
 
   .info-panel {
-    max-height: min(30vh, calc(100vh - var(--timebar-h, 200px) - 230px));
+    max-height: min(40vh, calc(100vh - var(--timebar-h, 200px) - 230px));
   }
 }
 
