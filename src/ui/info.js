@@ -193,8 +193,11 @@ export function linkMentions(html, targets, self = null) {
     .join("");
 }
 
+/** head, body and foot: the panel's top (which stays put), middle (which scrolls) and bottom. */
 export function createInfo({
-  container,
+  head: headEl,
+  body: bodyEl,
+  foot: footEl,
   getState,
   onLook,
   onClear,
@@ -206,7 +209,7 @@ export function createInfo({
   catalog,
 }) {
   const cache = new Map();
-  let lastHtml = "";
+  const last = { head: "", body: "", foot: "" };
   let lastBuild = 0;
 
   function cached(key, fn) {
@@ -1076,14 +1079,17 @@ export function createInfo({
       const days = Math.ceil(season.daysToNext);
       seasonText = `${season.label} · ${days === 1 ? "1 day" : `${days} days`} to the ${season.nextEvent}`;
     }
-    return `<h3>${esc(loc.name)}</h3><p class="kind">${seasonText}</p>
-      <div class="section"><h4><button class="jump" data-select="sun" title="Look at the Sun">Sun</button></h4>${sunDetails(s, false)}</div>
+    return {
+      head: `<h3>${esc(loc.name)}</h3><p class="kind">${seasonText}</p>`,
+      body: `<div class="section"><h4><button class="jump" data-select="sun" title="Look at the Sun">Sun</button></h4>${sunDetails(s, false)}</div>
       <div class="section"><h4><button class="jump" data-select="moon" title="Look at the Moon">Moon</button></h4>${moonDetails(s, false)}</div>
       <div class="section"><h4>Planets up now</h4>${visible ? `<dl>${visible}</dl>` : NO_PLANETS}</div>
       ${darkness(s)}
       ${eclipseOverview(s)}
       ${sunUp ? STARS_TIP : ""}
-      <p class="note">Tap anything to look at it.</p>`;
+      <p class="note">Tap anything to look at it.</p>`,
+      foot: "",
+    };
   }
 
   // Everything a note can link to by name. (Not stars with names of under four
@@ -1122,7 +1128,10 @@ export function createInfo({
   function build() {
     const s = getState();
     const sel = s.selection;
-    if (!sel) return linkNotes(overview(s), null);
+    if (!sel) {
+      const card = overview(s);
+      return { ...card, body: linkNotes(card.body, null) };
+    }
     const title = sel.name;
     let kind = "";
     let body = "";
@@ -1154,15 +1163,19 @@ export function createInfo({
     }
     // A star's kind links to its constellation, and a moon's to its planet, so they're already HTML.
     const kindHtml = sel.type === "star" || sel.type === "satellite" ? kind : esc(kind);
-    return `<h3>${esc(title)}</h3><p class="kind">${kindHtml}</p>${linkNotes(body, sel)}
-      <div class="info-actions">
+    return {
+      head: `<h3>${esc(title)}</h3><p class="kind">${kindHtml}</p>`,
+      body: linkNotes(body, sel),
+      foot: `<div class="info-actions">
         <button class="chip small" data-action="look"${s.canLook === false ? ` disabled title="${OUT_OF_SIGHT}"` : ""}>Look at it</button>
         ${sel.type === "feature" ? goButton(sel.feature.group === "peak" ? "Go to the summit" : "Go there") : ""}
         <button class="chip small" data-action="clear">Back to overview</button>
-      </div>`;
+      </div>`,
+    };
   }
 
-  container.addEventListener("click", (e) => {
+  const parts = { head: headEl, body: bodyEl, foot: footEl };
+  const onClick = (e) => {
     const action = e.target.closest("[data-action]")?.dataset.action;
     if (action === "look") onLook();
     if (action === "clear") onClear();
@@ -1176,7 +1189,8 @@ export function createInfo({
       const place = eclipse.lat != null ? { lat: +eclipse.lat, lon: +eclipse.lon } : null;
       onEclipse(eclipse.eclipse, +eclipse.time, place);
     }
-  });
+  };
+  for (const el of Object.values(parts)) el.addEventListener("click", onClick);
 
   function update(force = false) {
     const now = performance.now();
@@ -1189,9 +1203,10 @@ export function createInfo({
       console.error(err);
       return;
     }
-    if (html !== lastHtml) {
-      container.innerHTML = html;
-      lastHtml = html;
+    for (const [part, el] of Object.entries(parts)) {
+      if (html[part] === last[part]) continue;
+      el.innerHTML = html[part];
+      last[part] = html[part];
     }
   }
 

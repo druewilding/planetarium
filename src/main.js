@@ -544,7 +544,9 @@ async function main() {
     return groundSky;
   }
   info = createInfo({
-    container: $("info-content"),
+    head: $("info-title"),
+    body: $("info-content"),
+    foot: $("info-foot"),
     catalog,
     getState: () => ({
       // (Rise and set, up or down: always as seen from where you're standing.)

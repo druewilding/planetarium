@@ -178,7 +178,7 @@ export function createLayersPanel({ onChange }) {
   notes.title = "What's new in this version";
   notes.textContent = `Planetarium ${VERSION}`;
   version.appendChild(notes);
-  content.appendChild(version);
+  document.getElementById("layers-foot").appendChild(version);
 
   const btn = document.getElementById("layers-btn");
   const toggle = (open = panel.hidden) => {
