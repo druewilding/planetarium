@@ -487,8 +487,21 @@ input[type="text"]:focus {
 }
 
 #info-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
   min-width: 0;
   padding-top: 2px;
+}
+
+#info-title .info-heading {
+  min-width: 0;
+}
+
+/* Back to the overview: beside the title, lined up with its first line. */
+.info-back {
+  flex: none;
+  margin: -1px 0 0 -8px;
 }
 
 #info-title .kind {

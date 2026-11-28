@@ -30,6 +30,9 @@ import { planTonight } from "../tonight.js";
 const ENTITIES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\u0022": "&quot;" };
 const esc = (s) => String(s).replace(/[&<>\u0022]/g, (c) => ENTITIES[c]);
 
+// Back to the overview, from whatever's chosen: top left, as in most apps.
+const BACK = `<button class="icon-btn small info-back" data-action="clear" aria-label="Back to overview" title="Back to overview">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.4 5.4 14 4l-8 8 8 8 1.4-1.4L8.8 12z"/></svg></button>`;
 const goButton = (text) => `<button class='chip small' data-action=go>${text}</button>`;
 const FEATURE_KIND = {
   peak: "Mountain",
@@ -1372,12 +1375,11 @@ export function createInfo({
     // A star's kind links to its constellation, and a moon's to its planet, so they're already HTML.
     const kindHtml = ["star", "satellite", "dso"].includes(sel.type) ? kind : esc(kind);
     return {
-      head: `<h3>${esc(title)}</h3><p class="kind">${kindHtml}</p>`,
+      head: `${BACK}<div class="info-heading"><h3>${esc(title)}</h3><p class="kind">${kindHtml}</p></div>`,
       body: linkNotes(body, sel),
       foot: `<div class="info-actions">
         <button class="chip small" data-action="look"${s.canLook === false ? ` disabled title="${OUT_OF_SIGHT}"` : ""}>Look at it</button>
         ${sel.type === "feature" ? goButton(sel.feature.group === "peak" ? "Go to the summit" : "Go there") : ""}
-        <button class="chip small" data-action="clear">Back to overview</button>
       </div>`,
     };
   }
