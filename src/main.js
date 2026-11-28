@@ -62,7 +62,7 @@ import { createLocation } from "./ui/location.js";
 import { createLayersPanel, createSearch } from "./ui/panels.js";
 import { createSensor, sensorSupported } from "./ui/sensor.js";
 import { createTimebar } from "./ui/timebar.js";
-import { createView, MIN_FOV } from "./ui/view.js";
+import { createView, DEFAULT_FOV, MIN_FOV, orbitFov, overviewZoom } from "./ui/view.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -436,7 +436,6 @@ async function main() {
   if (link?.time != null) clock.set(link.time, { animate: false });
 
   // ---- View ----
-  const DEFAULT_FOV = 80;
   /** Altitude to look at so the horizon sits just above the time controls. */
   function horizonAltitude(fov) {
     const h = window.innerHeight;
@@ -466,7 +465,7 @@ async function main() {
     faceEuler.setFromQuaternion(camera.quaternion.clone().multiply(turn), "YXZ");
     view.lookTo({ alt: faceEuler.x * R2D, az: -faceEuler.y * R2D, roll: faceEuler.z * R2D }, { duration });
   }
-  const faceFov = () => Math.max(50, Math.min(view.state.fov, 100));
+  const faceFov = () => orbitFov(view.state.fov);
   /** The Earth's direction in the camera's own frame. */
   const earthSeen = () => aloft.earthDir.clone().applyQuaternion(camera.quaternion.clone().invert());
   const MIDDLE = new THREE.Vector3(0, 0, -1); // straight ahead
@@ -1392,8 +1391,12 @@ async function main() {
   /** Back to what you were looking at before (turning to it), or to the overview once the trail runs out. */
   function goBack() {
     const prev = trail.back();
-    if (prev) select(prev, { look: true, back: true });
-    else select(null);
+    if (prev) return select(prev, { look: true, back: true });
+    select(null);
+    // Back at the overview: zoomed back out, still looking the same way (in orbit, as
+    // Reset zoom does). A view already wider, like Look up's, stays as it is.
+    const fov = overviewZoom(view.state.fov, isAloft());
+    if (fov) view.lookTo({ fov });
   }
 
   function select(sel, { look = false, back = false } = {}) {
