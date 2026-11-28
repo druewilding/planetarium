@@ -20,6 +20,108 @@ export function formatLatLon(lat, lon) {
   return `${f(lat, "N", "S")} ${f(lon, "E", "W")}`;
 }
 
+// Words that say which side of the equator or Greenwich, in English and the
+// Scandinavian languages. (Not "O", which is east in German but west in Spanish.)
+const HEMISPHERES = {
+  n: "N",
+  north: "N",
+  nord: "N",
+  s: "S",
+  south: "S",
+  syd: "S",
+  sør: "S",
+  e: "E",
+  east: "E",
+  ø: "E",
+  øst: "E",
+  ost: "E",
+  ö: "E",
+  öst: "E",
+  w: "W",
+  west: "W",
+  v: "W",
+  vest: "W",
+  väst: "W",
+};
+
+/** The latitude and longitude in a bit of text, however it's written, or null. */
+export function parseLatLon(text) {
+  let s = String(text)
+    .normalize("NFC")
+    .replace(/[′’‘´`]/g, "'")
+    .replace(/[″“”]|''/g, "\u0022")
+    .replace(/[º˚]/g, "°")
+    .replace(/[−–]/g, "-")
+    .trim();
+  // A map link: …/@55.77,11.62,15z… or geo:55.77,11.62
+  const at = s.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+  if (at) s = `${at[1]}, ${at[2]}`;
+  s = s.replace(/^geo:/i, "");
+  // With no points in it, a comma between digits is a decimal comma (55,68 12,32).
+  if (!s.includes(".")) {
+    const decimal = readLatLon(s.replace(/(\d),(\d)/g, "$1.$2"));
+    if (decimal) return decimal;
+  }
+  return readLatLon(s);
+}
+
+function readLatLon(s) {
+  const tokens = s.match(/[-+]?\d+(?:\.\d+)?|[a-zæøåäö]+|[°'",;/]/gi) ?? [];
+  const groups = [];
+  let cur = null;
+  const close = () => {
+    if (cur?.nums.length) groups.push(cur);
+    cur = null;
+  };
+  const open = () => (cur ??= { nums: [], hemi: null, units: false });
+  tokens.forEach((t, i) => {
+    if (/\d/.test(t)) {
+      const n = parseFloat(t);
+      const last = cur?.nums.at(-1);
+      // A new coordinate when: this one's had its letter after it, or three numbers, or ended
+      // on a fraction (69.5 can't be followed by minutes), or this number has its own °.
+      if (cur?.nums.length && (cur.suffix || cur.nums.length === 3 || !Number.isInteger(last) || tokens[i + 1] === "°"))
+        close();
+      open().nums.push(n);
+    } else if ("°'\"".includes(t)) {
+      if (cur) cur.units = true;
+    } else if (",;/".includes(t)) close();
+    else {
+      const hemi = HEMISPHERES[t.toLowerCase()];
+      if (!hemi) return; // lat, lon, deg and other words
+      if (cur?.nums.length && !cur.hemi) {
+        cur.hemi = hemi;
+        cur.suffix = true;
+      } else {
+        close();
+        open().hemi = hemi;
+      }
+    }
+  });
+  close();
+  // Two bare numbers with nothing between: "55 12" is 55 and 12, not 55°12′.
+  if (groups.length === 1 && groups[0].nums.length === 2 && !groups[0].units && !groups[0].hemi) {
+    const [a, b] = groups[0].nums;
+    groups.splice(0, 1, { nums: [a] }, { nums: [b] });
+  }
+  if (groups.length !== 2) return null;
+
+  const values = groups.map(({ nums: [d, m = 0, sec = 0], hemi }) => {
+    if (m < 0 || m >= 60 || sec < 0 || sec >= 60) return null;
+    let v = Math.abs(d) + m / 60 + sec / 3600;
+    if (d < 0 || Object.is(d, -0) || hemi === "S" || hemi === "W") v = -v; // (-0° 30′ is west)
+    return { v, axis: hemi === "N" || hemi === "S" ? "lat" : hemi ? "lon" : null };
+  });
+  if (values.includes(null)) return null;
+  let [a, b] = values;
+  if (a.axis === "lon" || b.axis === "lat") [a, b] = [b, a];
+  if (a.axis === "lon" || b.axis === "lat") return null; // both the same way
+  const lat = a.v;
+  const lon = b.v;
+  if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+  return { lat, lon };
+}
+
 function distanceKm(lat1, lon1, lat2, lon2) {
   const a =
     Math.sin(((lat2 - lat1) * D2R) / 2) ** 2 +
@@ -334,9 +436,20 @@ export function createLocation({ cities, land, onChange, getTime }) {
     }
   }
 
+  // The latitude and longitude box (see below).
+  const coords = $("coords-input");
+  let applied = ""; // (so Enter and then leaving the box don't go there twice)
+  function showRead(text, bad = false) {
+    $("coords-read").textContent = text;
+    coords.toggleAttribute("aria-invalid", bad);
+    $("coords-go").disabled = !parseLatLon(coords.value);
+  }
+
   function setInputs(loc) {
-    $("lat-input").value = loc.lat.toFixed(2);
-    $("lon-input").value = loc.lon.toFixed(2);
+    const short = (v) => String(+v.toFixed(5)); // (with points, whatever the language)
+    coords.value = `${short(loc.lat)}, ${short(loc.lon)}`;
+    showRead("");
+    applied = coords.value;
   }
 
   function choose(loc) {
@@ -457,15 +570,35 @@ export function createLocation({ cities, land, onChange, getTime }) {
     redraw();
   });
 
-  for (const id of ["lat-input", "lon-input"]) {
-    $(id).addEventListener("change", () => {
-      const lat = parseFloat($("lat-input").value);
-      const lon = parseFloat($("lon-input").value);
-      if (Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
-        choose(fromPoint(Math.max(-89.9, Math.min(89.9, lat)), lon));
-      }
-    });
-  }
+  // Latitude and longitude, typed or pasted in any of the usual ways (see parseLatLon).
+  const typed = () => parseLatLon(coords.value);
+  coords.addEventListener("input", () => {
+    const at = typed();
+    if (at) showRead(`That’s ${formatLatLon(at.lat, at.lon)}`);
+    else showRead(coords.value.trim() ? "Not sure where that is. Try 55.68, 12.57" : "", !!coords.value.trim());
+  });
+  const goTo = (at) => {
+    if (coords.value === applied) return;
+    applied = coords.value;
+    choose(fromPoint(Math.max(-89.9, Math.min(89.9, at.lat)), at.lon));
+  };
+  coords.addEventListener("change", () => {
+    const at = typed();
+    if (at) goTo(at);
+  });
+  // Enter, or the Go button (Enter isn't so obvious on a phone): go there and close the map.
+  const goAndClose = () => {
+    const at = typed();
+    if (!at) return;
+    goTo(at);
+    dialog.close();
+  };
+  coords.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault(); // (not the form's Enter, which would close the dialog either way)
+    goAndClose();
+  });
+  $("coords-go").addEventListener("click", goAndClose);
 
   $("geo-btn").addEventListener("click", () => requestGeolocation({ fromButton: true }));
 

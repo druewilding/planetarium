@@ -268,7 +268,8 @@ svg {
 }
 
 input[type="search"],
-input[type="number"] {
+input[type="number"],
+input[type="text"] {
   width: 100%;
   padding: 7px 12px;
   border-radius: 999px;
@@ -278,7 +279,8 @@ input[type="number"] {
 }
 
 input[type="search"]:focus,
-input[type="number"]:focus {
+input[type="number"]:focus,
+input[type="text"]:focus {
   border-color: var(--accent-2);
 }
 
@@ -1240,6 +1242,30 @@ body:not(.aloft) #look-up {
   font-size: 12px;
   color: var(--text-dim);
   width: 130px;
+}
+
+.loc-row .coords {
+  flex: 1 1 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.loc-row .coords label {
+  width: auto;
+}
+
+.coords-field {
+  display: flex;
+  gap: 6px;
+}
+
+.coords-read {
+  min-height: 1.3em;
+}
+
+#coords-input[aria-invalid] {
+  border-color: #e07a6a;
 }
 
 /* ---------- Small screens ---------- */
