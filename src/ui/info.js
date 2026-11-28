@@ -204,6 +204,22 @@ export function linkMentions(html, targets, self = null) {
     .join("");
 }
 
+/**
+ * A day's stretches of time ([[start, end], …] in ms, within dayStart to dayEnd) as
+ * { from, to }, with null for one that runs on past either end of the day. One that's
+ * there at both ends is one stretch carrying on past midnight, so it reads as one, last:
+ * { from: its start this evening, to: its end this morning } ("22.43 – 14.17", not "until
+ * 14.17, from 22.43").
+ */
+export function daySpans(spans, dayStart, dayEnd) {
+  const out = spans.map(([a, b]) => ({ from: a <= dayStart ? null : a, to: b >= dayEnd ? null : b }));
+  if (out.length >= 2 && out[0].from == null && out.at(-1).to == null) {
+    const morning = out.shift();
+    out.at(-1).to = morning.to;
+  }
+  return out;
+}
+
 /** head, body and foot: the panel's top (which stays put), middle (which scrolls) and bottom. */
 export function createInfo({
   head: headEl,
@@ -268,10 +284,16 @@ export function createInfo({
     );
     if (r.hiddenMinutes < 4) return "";
     const tm = (ms) => whenButton(what.type, what.id, ms, loc, what.name);
-    const span = ([a, b]) => (a <= start ? `until ${tm(b)}` : b >= r.endMs ? `from ${tm(a)}` : `${tm(a)} – ${tm(b)}`);
-    const text = r.spans.length
-      ? r.spans.slice(0, 3).map(span).join(", ") + (r.spans.length > 3 ? ", …" : "")
-      : "Hidden all day";
+    const span = ({ from, to }) =>
+      from == null && to == null
+        ? "All day"
+        : from == null
+          ? `until ${tm(to)}`
+          : to == null
+            ? `from ${tm(from)}`
+            : `${tm(from)} – ${tm(to)}`;
+    const parts = daySpans(r.spans, start, r.endMs).map(span);
+    const text = parts.length ? parts.slice(0, 3).join(", ") + (parts.length > 3 ? ", …" : "") : "Hidden all day";
     return `<dt>Over the mountains</dt><dd>${text}</dd>`;
   }
 
