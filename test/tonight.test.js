@@ -4,7 +4,7 @@ import { describe, expect, test } from "vitest";
 
 import { A, Body } from "../src/astro.js";
 import { buildDeepSky } from "../src/deepsky.js";
-import { altAzOf, moonlight, nightWindow, planTonight } from "../src/tonight.js";
+import { altAzOf, moonlight, nightWindow, planTonight, siderealAngle } from "../src/tonight.js";
 
 const objects = buildDeepSky(
   JSON.parse(readFileSync(new URL("../data/deepsky.json", import.meta.url), "utf8")),
@@ -48,6 +48,30 @@ describe("the night", () => {
 });
 
 describe("what's up tonight", () => {
+  test("in the polar night it's only properly dark all day where the Sun stays 18° down", () => {
+    const day = Date.parse("2026-12-21T12:00Z");
+    // 81° north: 12° down all day, but at noon not quite 18°.
+    const svalbard = planTonight({ ms: day, ...place(81, 15) });
+    expect(svalbard.polar).toBe(true);
+    expect(svalbard.darkAllDay).toBe(false);
+    expect(planTonight({ ms: day, ...place(85, 0) }).darkAllDay).toBe(true);
+  });
+
+  test("risings and settings are from now on, not ones already past", () => {
+    // 02:00 in Copenhagen: Saturn set an hour ago, so it isn't listed, and nothing's time is past.
+    const ms = Date.parse("2026-11-29T01:00Z");
+    const plan = planTonight({ ms, ...place(55.68, 12.57) });
+    expect(plan.planets.map((p) => p.id)).not.toContain("Saturn");
+    for (const p of [plan.moon, ...plan.planets]) {
+      if (p.rise) expect(p.rise, p.id ?? "Moon").toBeGreaterThanOrEqual(ms);
+      if (p.set) expect(p.set, p.id ?? "Moon").toBeGreaterThanOrEqual(ms);
+    }
+    // Jupiter rose in the evening: it's up now, and stays up.
+    const jupiter = plan.planets.find((p) => p.id === "Jupiter");
+    expect(jupiter.upAtStart).toBe(true);
+    expect(jupiter.rise).toBeNull();
+  });
+
   test("from a dark site on a moonless December night: the Andromeda Galaxy by eye, and the bright planets", () => {
     const plan = planTonight({ ms: Date.parse("2026-12-10T12:00Z"), ...place(61.64, 8.31), objects });
     const andromeda = plan.deepSky.find((d) => d.id === "M31");
@@ -79,6 +103,8 @@ describe("the sums underneath", () => {
     const eq = A.Equator(Body.Star1, new Date(ms), obs, true, true);
     const hor = A.Horizon(new Date(ms), obs, eq.ra, eq.dec);
     const ours = altAzOf(10.68, 41.27, ms, loc);
+    // (The sidereal time can be worked out once and passed in, for many things at once.)
+    expect(altAzOf(10.68, 41.27, ms, loc, siderealAngle(ms, loc.lon))).toEqual(ours);
     expect(Math.abs(ours.alt - hor.altitude)).toBeLessThan(0.5);
     expect(Math.abs(ours.az - hor.azimuth)).toBeLessThan(0.7);
   });

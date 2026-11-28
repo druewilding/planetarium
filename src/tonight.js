@@ -20,11 +20,16 @@ const NIGHT = -12; // the Sun this far below the horizon: dark enough for the br
 const DARK = -18; // and this far: properly dark (astronomical twilight is over)
 const LOW = 15; // degrees: lower than this, too much air in the way to bother
 
-/** Where something is in the sky ({ alt, az }, degrees), from its J2000 RA and Dec (degrees). */
-export function altAzOf(ra, dec, ms, loc) {
+/** The local sidereal time (degrees) at `ms` and longitude `lon`: the RA that's due south (or north). */
+export const siderealAngle = (ms, lon) => A.SiderealTime(new Date(ms)) * 15 + lon;
+
+/**
+ * Where something is in the sky ({ alt, az }, degrees), from its J2000 RA and Dec
+ * (degrees). Pass `lst` (see siderealAngle) when working out many things at one time.
+ */
+export function altAzOf(ra, dec, ms, loc, lst = siderealAngle(ms, loc.lon)) {
   // (Ignoring the slow drift of the poles since 2000: a few tenths of a degree.)
-  const lst = (A.SiderealTime(new Date(ms)) * 15 + loc.lon) * D2R;
-  const h = lst - ra * D2R;
+  const h = (lst - ra) * D2R;
   const [d, lat] = [dec * D2R, loc.lat * D2R];
   const alt = Math.asin(Math.sin(lat) * Math.sin(d) + Math.cos(lat) * Math.cos(d) * Math.cos(h));
   const az = Math.atan2(
@@ -108,7 +113,7 @@ const angle = (a, b) => {
   return Math.acos(Math.max(-1, Math.min(1, c))) / D2R;
 };
 
-/** When a body rises and sets between `start` and `end`, and whether it's up at the start. */
+/** When a body rises and sets between `start` and `end`, and whether it's up at the start (now, or when the night starts). */
 function upBetween(body, obs, start, end) {
   const days = (end - start) / DAY;
   const rise = A.SearchRiseSet(body, obs, +1, new Date(start), days);
@@ -137,6 +142,8 @@ export function planTonight({ ms, loc, obs, objects = [], constellations = [], g
   // Properly dark, if it gets that dark (within the night).
   const dark = nightWindow(Math.max(ms, window.start), obs, DARK);
   plan.dark = dark && dark.start < window.end ? { start: dark.start, end: Math.min(dark.end, window.end) } : null;
+  // (In the polar night the Sun can stay 12° down all day, but only get 18° down for some of it.)
+  plan.darkAllDay = !!plan.dark && plan.dark.end - plan.dark.start >= DAY - STEP;
   // The darkest moment, for a night that never gets properly dark.
   if (!plan.dark) {
     let best = window.start;
@@ -149,13 +156,20 @@ export function planTonight({ ms, loc, obs, objects = [], constellations = [], g
   const steps = [];
   for (let t = from; t <= window.end; t += STEP) {
     const moon = bodyAltAz(Body.Moon, t, obs);
-    steps.push({ t, sun: sunAlt(t, obs), moon, phase: A.Illumination(Body.Moon, new Date(t)).phase_angle });
+    steps.push({
+      t,
+      lst: siderealAngle(t, loc.lon),
+      sun: sunAlt(t, obs),
+      moon,
+      phase: A.Illumination(Body.Moon, new Date(t)).phase_angle,
+    });
   }
 
   // ---- The Moon ----
   const mid = (window.start + window.end) / 2;
   const lit = A.Illumination(Body.Moon, new Date(mid)).phase_fraction;
-  plan.moon = { ...upBetween(Body.Moon, obs, window.start, window.end), lit };
+  // (When it rises and sets from now on: what's already happened tonight doesn't matter.)
+  plan.moon = { ...upBetween(Body.Moon, obs, from, window.end), lit };
   const moonUp = steps.filter((s) => s.moon.alt > 0).length / Math.max(1, steps.length);
   plan.moon.bright = lit > 0.5 && moonUp > 0.3; // enough to hide the faint things
 
@@ -173,7 +187,7 @@ export function planTonight({ ms, loc, obs, objects = [], constellations = [], g
       if (at.alt > 5 && (!best || at.alt > best.alt)) best = { ...at, t: s.t };
     }
     if (!best) continue;
-    plan.planets.push({ id: p.id, name: p.name, mag, best, ...upBetween(body, obs, window.start, window.end) });
+    plan.planets.push({ id: p.id, name: p.name, mag, best, ...upBetween(body, obs, from, window.end) });
   }
   plan.planets.sort((a, b) => a.mag - b.mag);
 
@@ -189,7 +203,7 @@ export function planTonight({ ms, loc, obs, objects = [], constellations = [], g
     if (o.mag == null || (o.type === "oc" && o.glow == null)) continue;
     let best = null;
     for (const s of steps) {
-      const at = altAzOf(o.ra, o.dec, s.t, loc);
+      const at = altAzOf(o.ra, o.dec, s.t, loc, s.lst);
       if (at.alt < LOW) continue;
       const sky =
         DARK_SKY + skyGlow(at.alt, at.az) + moonlight(angle(at, s.moon), s.moon.alt, at.alt, s.phase) + twilight(s.sun);

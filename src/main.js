@@ -18,7 +18,7 @@ import {
 import { climb, GROUND_KM } from "./climb.js";
 import { Clock } from "./clock.js";
 import { EARTH_RADIUS_KM } from "./constants.js";
-import { airmass, BINOCULARS, buildDeepSky, DARK_SKY, seeing } from "./deepsky.js";
+import { airmass, BINOCULARS, buildDeepSky, DARK_SKY, limitingMag, seeing } from "./deepsky.js";
 import { createLightPollution } from "./lightpollution.js";
 import { DEFAULT_BODY, readLink, writeLink } from "./link.js";
 import { createProjection, eyeScale, telescopeGain } from "./projection.js";
@@ -576,6 +576,7 @@ async function main() {
     }),
     onLook: () => lookAtSelection(),
     onClear: () => goBack(),
+    onOverview: () => toOverview(),
     onGo: () => selection?.type === "feature" && flyTo(selection.feature),
     onEclipse: (body, ms, place) => goToEclipse(body, ms, place),
     // (Look once the sky has caught up with the new time.)
@@ -1391,7 +1392,12 @@ async function main() {
   /** Back to what you were looking at before (turning to it), or to the overview once the trail runs out. */
   function goBack() {
     const prev = trail.back();
-    if (prev) return select(prev, { look: true, back: true });
+    if (prev) select(prev, { look: true, back: true });
+    else toOverview();
+  }
+
+  /** Straight back to the overview, however far along the trail you are. */
+  function toOverview() {
     select(null);
     // Back at the overview: zoomed back out, still looking the same way (in orbit, as
     // Reset zoom does). A view already wider, like Look up's, stays as it is.
@@ -1851,7 +1857,7 @@ async function main() {
         items.push({ key: `s${s.hip}`, text: s.proper, dir: d, cls: "star", priority: 50 - s.mag, pick });
       }
     }
-    if (layers.deepSkyNames) {
+    if (layers.deepSky && layers.deepSkyNames) {
       const perRad = pxPerRad();
       for (const { o, dir, q } of deepSkyShown()) {
         // Ones known only by a number ("M36") only once zoomed in, unless they stand out.
@@ -2026,10 +2032,17 @@ async function main() {
     const trans = 10 ** (-0.4 * shared.uExtK.value * (through ? 1 : airmass(alt)));
     return seeing(o, L, { trans, gain });
   }
-  /** For the info panel: how easily you'd see it now, by eye and with binoculars (null if it's out of sight). */
+  /**
+   * For the info panel: how easily you'd see it now from where you stand, by eye and with
+   * binoculars. Null if it's out of sight (below the skyline, even with the ground see-through),
+   * or you're up above the Earth: the card talks about the sky from the ground (see
+   * skyFromGround), and the sky's brightness here is only known for where you are.
+   */
   function deepSkyNow(o) {
+    if (isAloft()) return null;
     const dir = o.position(sky).dir;
-    if (behindLand(dir, 0)) return null;
+    const { alt, az } = altAz(dir);
+    if (behindLand(dir, 0) || alt < skylineAlt(az)) return null;
     return { eye: seenNow(o, dir, 0), binoculars: seenNow(o, dir, BINOCULARS) };
   }
   /** The ones you can see right now, as drawn (zoomed in or not): [{ o, dir, q }], worked out once a frame. */
@@ -2273,7 +2286,7 @@ async function main() {
       lastNight = night;
       overlays.layers.constellations.material.uniforms.uOpacity.value = 0.14 + 0.24 * night;
     }
-    globalLimit = 7.93 - 5 * Math.log10(1 + 63 * Math.sqrt(zenith));
+    globalLimit = limitingMag(zenith);
     // Stars, planets and moons alike (see the points' shader).
     shared.uBoost.value = telescopeGain(view.state.fov);
     deepSky.update(pxPerRad());

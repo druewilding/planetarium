@@ -141,3 +141,19 @@ float throughEarth(vec3 d) {
 // The natural night-sky glow (cd/m²): the sky "through the earth" is always this dark.
 const vec3 THROUGH_EARTH_SKY = vec3(2.1e-4, 2.5e-4, 3.2e-4);
 `;
+
+/**
+ * Seeing through the air, as the eye does: how many times as much air the light comes
+ * through as from straight up (Kasten–Young), and the faintest star you can see against
+ * sky of luminance L, cd/m² (Schaefer). The same sums as airmass() and limitingMag() in
+ * deepsky.js, which the labels and the info panel use.
+ */
+export const SEEING = /* glsl */ `
+float airmass(float altDeg) {
+  float h = max(altDeg, -1.5);
+  return 1.0 / (sin(radians(h)) + 0.50572 * pow(h + 6.07995, -1.6364));
+}
+float limitingMag(float L) {
+  return 7.93 - 5.0 * log(1.0 + 63.0 * sqrt(L)) / log(10.0);
+}
+`;

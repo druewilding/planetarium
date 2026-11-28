@@ -35,6 +35,7 @@ export function createMilkyWay(shared, glsl, texture) {
     fragmentShader: /* glsl */ `
       ${glsl.SKY_LOOKUP}
       ${glsl.LAND}
+      ${glsl.SEEING}
       uniform sampler2D uMap;
       uniform float uExtK;
       uniform float uOpacity;
@@ -52,9 +53,7 @@ export function createMilkyWay(shared, glsl, texture) {
         float rel = dot(c, vec3(0.2126, 0.7152, 0.0722));
 
         // Dimmed near the horizon by the atmosphere (same airmass model as the stars).
-        float h = max(degrees(asin(clamp(w.y, -1.0, 1.0))), -1.5);
-        float X = 1.0 / (sin(radians(h)) + 0.50572 * pow(h + 6.07995, -1.6364));
-        float trans = pow(10.0, -0.4 * uExtK * X);
+        float trans = pow(10.0, -0.4 * uExtK * airmass(degrees(asin(clamp(w.y, -1.0, 1.0)))));
 
         // Visible only where it stands out against the sky behind it.
         float sky = max(dot(skyAt(w), vec3(0.2126, 0.7152, 0.0722)), 1e-7);

@@ -488,6 +488,7 @@ input[type="text"]:focus {
 
 #info-title {
   display: flex;
+  flex: 1 1 auto;
   align-items: flex-start;
   gap: 4px;
   min-width: 0;
@@ -502,6 +503,12 @@ input[type="text"]:focus {
 .info-back {
   flex: none;
   margin: -1px 0 0 -8px;
+}
+
+/* And straight to the overview, from a long trail: at the end of the title, by the close button. */
+.info-overview {
+  flex: none;
+  margin: -1px -6px 0 auto;
 }
 
 #info-title .kind {

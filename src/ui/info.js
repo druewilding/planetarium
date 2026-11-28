@@ -36,6 +36,9 @@ const backButton = (to) => {
   return `<button class="icon-btn small info-back" data-action="clear" aria-label="${label}" title="${label}">
   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.4 5.4 14 4l-8 8 8 8 1.4-1.4L8.8 12z"/></svg></button>`;
 };
+// Straight back to the overview, from a long trail (when the back arrow wouldn't go there itself).
+const OVERVIEW_BUTTON = `<button class="icon-btn small info-overview" data-action="overview" aria-label="Back to the overview" title="Back to the overview">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 12h3v8h5v-6h4v6h5v-8h3z"/></svg></button>`;
 const goButton = (text) => `<button class='chip small' data-action=go>${text}</button>`;
 const FEATURE_KIND = {
   peak: "Mountain",
@@ -209,6 +212,7 @@ export function createInfo({
   getState,
   onLook,
   onClear,
+  onOverview,
   onSelect,
   onGo,
   onEclipse,
@@ -1046,22 +1050,32 @@ export function createInfo({
 
   // The constellations worth naming as being high up: ones with a bright star.
   let brightConstellations = null;
+  let tonightMemo = null;
+  const TONIGHT_PATIENCE_MS = 2000;
   function tonightPlan(s) {
     const { loc, ms } = s;
     brightConstellations ??= catalog.constellations
       .filter((c) => (catalog.starsIn(c.id)[0]?.mag ?? 99) < 3)
       .map((c) => ({ id: c.id, ra: c.label[0], dec: c.label[1] }));
-    const key = `tonight|${loc.lat.toFixed(3)}|${loc.lon.toFixed(3)}|${Math.floor(ms / (15 * 60000))}|${s.lightPollution ? s.lightPollution.zenith : 0}`;
-    return cached(key, () =>
-      planTonight({
-        ms,
-        loc,
-        obs: s.sky.obs,
-        objects: catalog.deepSky,
-        constellations: brightConstellations,
-        glow: s.lightPollution,
-      })
-    );
+    // It's a lot of sums, so it's kept on its own (not in the shared cache, which it would
+    // keep filling and clearing), worked out again every 15 minutes of the clock's time.
+    // With time running fast that's many times a second, so then it waits a couple of
+    // seconds between goes; moving somewhere else, it's worked out straight away.
+    const place = `${loc.lat.toFixed(3)}|${loc.lon.toFixed(3)}|${s.lightPollution ? s.lightPollution.zenith : 0}`;
+    const key = `${place}|${Math.floor(ms / (15 * 60000))}`;
+    const now = performance.now();
+    const m = tonightMemo;
+    if (m && (m.key === key || (m.place === place && now - m.at < TONIGHT_PATIENCE_MS))) return m.plan;
+    const plan = planTonight({
+      ms,
+      loc,
+      obs: s.sky.obs,
+      objects: catalog.deepSky,
+      constellations: brightConstellations,
+      glow: s.lightPollution,
+    });
+    tonightMemo = { key, place, at: now, plan };
+    return plan;
   }
 
   /** One thing in a night's plan: its name with its best time beside it, and more about it underneath. */
@@ -1077,7 +1091,7 @@ export function createInfo({
     if (plan.sunUp) return "<div class=section><h4>Tonight</h4><p class=note>The Sun doesn’t set tonight.</p></div>";
     const tm = (ms) => formatTime(ms, loc);
     const rows = [];
-    if (plan.polar && plan.dark) rows.push(["Dark", "All day and night"]);
+    if (plan.darkAllDay) rows.push(["Dark", "All day and night"]);
     else if (plan.dark) rows.push(["Dark", `${tm(plan.dark.start)} – ${tm(plan.dark.end)}`]);
     else rows.push(["Dark", `Never quite: twilight all night, darkest at ${tm(plan.darkest)}`]);
     const moon = upText(plan.moon, loc);
@@ -1388,7 +1402,7 @@ export function createInfo({
     // A star's kind links to its constellation, and a moon's to its planet, so they're already HTML.
     const kindHtml = ["star", "satellite", "dso"].includes(sel.type) ? kind : esc(kind);
     return {
-      head: `${backButton(s.backTo)}<div class="info-heading"><h3>${esc(title)}</h3><p class="kind">${kindHtml}</p></div>`,
+      head: `${backButton(s.backTo)}<div class="info-heading"><h3>${esc(title)}</h3><p class="kind">${kindHtml}</p></div>${s.backTo ? OVERVIEW_BUTTON : ""}`,
       body: linkNotes(body, sel),
       foot: `<div class="info-actions">
         <button class="chip small" data-action="look"${s.canLook === false ? ` disabled title="${OUT_OF_SIGHT}"` : ""}>Look at it</button>
@@ -1402,6 +1416,7 @@ export function createInfo({
     const action = e.target.closest("[data-action]")?.dataset.action;
     if (action === "look") onLook();
     if (action === "clear") onClear();
+    if (action === "overview") onOverview?.();
     if (action === "go") onGo?.();
     const jump = e.target.closest("[data-select]");
     if (jump) onSelect(jump.dataset.select, jump.dataset.id);

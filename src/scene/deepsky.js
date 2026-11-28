@@ -30,7 +30,7 @@ export function createDeepSky(shared, glsl, objects, radius = 1000) {
       const v = i * 4 + k;
       pos.set(c, v * 3);
       corner.set([k & 1 ? 1 : -1, k & 2 ? 1 : -1], v * 2);
-      shape.set([((o.major / 120) * D2R) / 1, ((o.minor / 120) * D2R) / 1, o.pa * D2R], v * 3);
+      shape.set([(o.major / 120) * D2R, (o.minor / 120) * D2R, o.pa * D2R], v * 3);
       light.set([10 ** (-0.4 * o.glow), area], v * 2);
       tint.set(deepSkyTint(o.type), v * 3);
     }
@@ -57,6 +57,7 @@ export function createDeepSky(shared, glsl, objects, radius = 1000) {
       ${glsl.LAND}
       ${glsl.REFRACTION}
       ${glsl.PROJECTION}
+      ${glsl.SEEING}
       uniform float uExtK;
       uniform float uBoost;
       uniform float uRadius;
@@ -83,13 +84,12 @@ export function createDeepSky(shared, glsl, objects, radius = 1000) {
 
         // How easily you'd see its middle (see seeing() in deepsky.js): 1 is only just.
         vec3 d0 = refractDir(normalize(mat3(modelMatrix) * c));
-        float h = max(degrees(asin(clamp(d0.y, -1.0, 1.0))), -1.5);
-        float X = 1.0 / (sin(radians(h)) + 0.50572 * pow(h + 6.07995, -1.6364));
+        float X = airmass(degrees(asin(clamp(d0.y, -1.0, 1.0))));
         float te = throughEarth(d0);
         float trans = pow(10.0, -0.4 * uExtK * mix(X, 1.0, te));
         vec3 behind = mix(skyAt(d0), THROUGH_EARTH_SKY, te);
         float L = max(dot(behind, vec3(0.2126, 0.7152, 0.0722)), 1e-6);
-        float mLim = 7.93 - 5.0 * log(1.0 + 63.0 * sqrt(L)) / log(10.0);
+        float mLim = limitingMag(L);
         float g = pow(10.0, 0.4 * uBoost);
         float spread = min(1.0, ${f(SEEING_GLSL.PEAK * SEEING_GLSL.RICCO)} / (aLight.y * g));
         vSeen = aLight.x * trans * g * spread / pow(10.0, -0.4 * mLim);

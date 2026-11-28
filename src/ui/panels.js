@@ -210,13 +210,36 @@ export function createLayersPanel({ onChange }) {
   return { layers, setPlace };
 }
 
-const fold = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+export const fold = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
+/** What the search box looks through: each item, with the names it can be found by folded for matching. */
+export function searchRecords(items) {
+  return items.map((it) => ({
+    ...it,
+    key: fold([it.name, ...(it.aka ?? [])].join(" ")),
+    names: [it.name, ...(it.aka ?? [])].map(fold), // each of them whole, for an exact match
+  }));
+}
+
+/**
+ * The best few matches for what's typed (q, already folded): exactly what you typed first
+ * ("M1" is the Crab Nebula, not M10 to M19), then names starting with it, then any with it
+ * somewhere inside.
+ */
+export function searchMatches(records, q, limit = 8) {
+  const exact = records.filter((r) => r.names.includes(q));
+  const starts = records.filter(
+    (r) => !exact.includes(r) && (r.key.startsWith(q) || r.key.split(/\s+/).some((w) => w.startsWith(q)))
+  );
+  const contains = records.filter((r) => !exact.includes(r) && !starts.includes(r) && r.key.includes(q));
+  return [...exact, ...starts, ...contains].slice(0, limit);
+}
 
 /** items: [{ name, aka (other names it can be found by), kind, select() }] */
 export function createSearch(items) {
   const input = document.getElementById("search");
   const list = document.getElementById("search-results");
-  const records = items.map((it) => ({ ...it, key: fold([it.name, ...(it.aka ?? [])].join(" ")) }));
+  const records = searchRecords(items);
   let matches = [];
   let active = 0;
 
@@ -252,10 +275,10 @@ export function createSearch(items) {
     const q = fold(input.value.trim());
     if (!q) matches = [];
     else {
-      const here = records.filter((r) => !r.shown || r.shown());
-      const starts = here.filter((r) => r.key.startsWith(q) || r.key.split(/\s+/).some((w) => w.startsWith(q)));
-      const contains = here.filter((r) => !starts.includes(r) && r.key.includes(q));
-      matches = [...starts, ...contains].slice(0, 8);
+      matches = searchMatches(
+        records.filter((r) => !r.shown || r.shown()),
+        q
+      );
     }
     active = 0;
     render();
