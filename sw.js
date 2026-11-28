@@ -50,6 +50,7 @@ const APP_SHELL = [
   "./src/space.js",
   "./src/terrain.js",
   "./src/tonight.js",
+  "./src/trail.js",
   "./src/tiles.js",
   "./src/timezone.js",
   "./src/version.js",

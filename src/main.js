@@ -54,6 +54,7 @@ import {
   WATER_ROWS,
 } from "./terrain.js";
 import { formatDateTime, formatTime, startOfLocalDay } from "./timezone.js";
+import { createTrail } from "./trail.js";
 import { createCompass } from "./ui/compass.js";
 import { createInfo } from "./ui/info.js";
 import { createLabels } from "./ui/labels.js";
@@ -568,13 +569,14 @@ async function main() {
       ms: clock.ms,
       selection,
       canLook: canLookAtSelection(),
+      backTo: trail.peek()?.name ?? null,
       earth: selection?.type === "earth" && isAloft() ? earthFacts() : null,
       skyline: !flight && skylineFade > 0.5 ? skyline : null,
       lightPollution: cityGlowHere(),
       deepSkyNow,
     }),
     onLook: () => lookAtSelection(),
-    onClear: () => select(null),
+    onClear: () => goBack(),
     onGo: () => selection?.type === "feature" && flyTo(selection.feature),
     onEclipse: (body, ms, place) => goToEclipse(body, ms, place),
     // (Look once the sky has caught up with the new time.)
@@ -1376,7 +1378,26 @@ async function main() {
     return !d || !behindLand(d, 0);
   }
 
-  function select(sel, { look = false } = {}) {
+  // What you've looked at, for the info panel's back arrow (see trail.js).
+  const trail = createTrail({
+    same: (a, b) =>
+      a.type === b.type &&
+      (a.type === "feature"
+        ? a.feature === b.feature
+        : JSON.stringify(selectionToLink(a)) === JSON.stringify(selectionToLink(b))),
+    stillThere: (sel) =>
+      sel.type === "earth" ? isAloft() : sel.type === "feature" ? shownFeatures().includes(sel.feature) : true,
+  });
+
+  /** Back to what you were looking at before (turning to it), or to the overview once the trail runs out. */
+  function goBack() {
+    const prev = trail.back();
+    if (prev) select(prev, { look: true, back: true });
+    else select(null);
+  }
+
+  function select(sel, { look = false, back = false } = {}) {
+    if (!back) trail.move(selection, sel);
     selection = sel;
     overlays.selectConstellation(sel?.type === "constellation" ? sel.constellation.id : null);
     if (sel) showInfo(true);
