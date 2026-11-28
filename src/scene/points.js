@@ -10,6 +10,7 @@ ${glsl.SKY_LOOKUP}
 ${glsl.LAND}
 ${glsl.REFRACTION}
 ${glsl.PROJECTION}
+${glsl.SEEING}
 uniform float uExtK;
 uniform float uBoost;
 uniform float uPixelRatio;
@@ -25,9 +26,8 @@ void main() {
   vec3 d = refractDir(normalize(mat3(modelMatrix) * position));
   float altDeg = degrees(asin(clamp(d.y, -1.0, 1.0)));
 
-  // Extinction: Kasten–Young airmass.
-  float h = max(altDeg, -1.5);
-  float X = 1.0 / (sin(radians(h)) + 0.50572 * pow(h + 6.07995, -1.6364));
+  // Extinction: dimmed by the air it comes through.
+  float X = airmass(altDeg);
   // Seen through the earth: as if from above the air, against a dark sky.
   float te = throughEarth(d);
   float m = aMag + uExtK * mix(X, 1.0, te);
@@ -35,7 +35,7 @@ void main() {
   // Limiting magnitude from local sky luminance (cd/m²).
   vec3 behind = mix(skyAt(d), THROUGH_EARTH_SKY, te);
   float L = max(dot(behind, vec3(0.2126, 0.7152, 0.0722)), 1e-6);
-  float mLim = 7.93 - 5.0 * log(1.0 + 63.0 * sqrt(L)) / log(10.0) + uBoost;
+  float mLim = limitingMag(L) + uBoost;
   float delta = mLim - m;
 
   vAlpha = smoothstep(-0.4, 1.0, delta);

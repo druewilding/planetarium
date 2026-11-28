@@ -13,6 +13,21 @@ import { altAz } from "../astro.js";
 export const MIN_FOV = 0.04; // as through a big telescope: close enough to pick out Pluto
 const MAX_FOV = 180; // wide views switch to a stereographic projection (see projection.js)
 
+/** The usual view on the ground (degrees across, top to bottom). */
+export const DEFAULT_FOV = 80;
+/** Up above the Earth, zoomed back out: as far as Face the Earth leaves it, 50° to 100°. */
+export const orbitFov = (fov) => Math.max(50, Math.min(fov, 100));
+
+/**
+ * The zoom to go to when the info panel goes back to its overview: back out to the usual
+ * view (in orbit, as Reset zoom does), or null to stay as you are, when you're already
+ * zoomed out that far or wider (like Look up's whole-sky view). The direction never changes.
+ */
+export function overviewZoom(fov, aloft) {
+  const to = aloft ? orbitFov(fov) : DEFAULT_FOV;
+  return fov < to ? to : null;
+}
+
 /**
  * grab: optional { start(x, y), move(x, y, dt), end(gliding) }: while free (up in
  * space), a drag that `start` accepts (it returns true, e.g. one that begins on

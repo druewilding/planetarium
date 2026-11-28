@@ -487,8 +487,28 @@ input[type="text"]:focus {
 }
 
 #info-title {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: flex-start;
+  gap: 4px;
   min-width: 0;
   padding-top: 2px;
+}
+
+#info-title .info-heading {
+  min-width: 0;
+}
+
+/* Back to the overview: beside the title, lined up with its first line. */
+.info-back {
+  flex: none;
+  margin: -1px 0 0 -8px;
+}
+
+/* And straight to the overview, from a long trail: at the end of the title, by the close button. */
+.info-overview {
+  flex: none;
+  margin: -1px -6px 0 auto;
 }
 
 #info-title .kind {
@@ -563,6 +583,43 @@ input[type="text"]:focus {
   width: 44px;
   height: 44px;
   flex: none;
+}
+
+/* Tonight's plan: each thing's name and best time on one line, the rest quieter underneath. */
+.plan-head {
+  display: flex;
+  justify-content: space-between;
+  margin: 10px 0 2px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.plan {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+
+.plan li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 12px;
+  padding: 5px 0;
+}
+
+.plan li + li {
+  border-top: 1px solid rgba(160, 185, 255, 0.07);
+}
+
+.plan-time {
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-more {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  color: var(--text-dim);
 }
 
 .info-actions {
@@ -1069,6 +1126,13 @@ body:not(.aloft) #look-up {
   color: rgba(200, 215, 245, 0.8);
 }
 
+/* Clusters, nebulae and galaxies: soft pink, like a faint glow. */
+.label.deepsky {
+  font-size: 11px;
+  font-style: italic;
+  color: rgba(244, 191, 208, 0.85);
+}
+
 .label.constellation {
   font-size: 11px;
   letter-spacing: 0.14em;
@@ -1382,6 +1446,10 @@ body:not(.aloft) #look-up {
 
 .label.lit.constellation {
   color: rgba(25, 45, 105, 0.65);
+}
+
+.label.lit.deepsky {
+  color: rgba(120, 30, 70, 0.85);
 }
 
 .label.lit.star {

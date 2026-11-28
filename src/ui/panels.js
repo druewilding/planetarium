@@ -12,6 +12,11 @@ export const LAYER_GROUPS = [
     title: "Sky",
     items: [
       { key: "milkyWay", label: "Milky Way", hint: "Shows up on dark, moonless nights, or with the Sun dimmed" },
+      {
+        key: "deepSky",
+        label: "Clusters, nebulae & galaxies",
+        hint: "Faint smudges that show on dark nights, and more of them zoomed in, as through binoculars or a telescope",
+      },
       { key: "atmosphere", label: "Atmosphere", hint: "Turn off to see a Moon-like black sky" },
       {
         key: "ground",
@@ -44,6 +49,7 @@ export const LAYER_GROUPS = [
     items: [
       { key: "planetLabels", label: "Sun, Moon & planets" },
       { key: "starNames", label: "Star names" },
+      { key: "deepSkyNames", label: "Clusters, nebulae & galaxies", color: "#f4bfd0" },
       { key: "constellationNames", label: "Constellation names" },
       {
         key: "peakNames",
@@ -90,6 +96,7 @@ export const LAYER_GROUPS = [
 
 export const DEFAULT_LAYERS = {
   milkyWay: true,
+  deepSky: true,
   atmosphere: true,
   ground: true,
   terrain: true,
@@ -98,6 +105,7 @@ export const DEFAULT_LAYERS = {
   bigBodies: true,
   planetLabels: true,
   starNames: true,
+  deepSkyNames: true,
   constellationNames: true,
   peakNames: true,
   placeNames: true,
@@ -202,13 +210,36 @@ export function createLayersPanel({ onChange }) {
   return { layers, setPlace };
 }
 
-const fold = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+export const fold = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
-/** items: [{ name, kind, select() }] */
+/** What the search box looks through: each item, with the names it can be found by folded for matching. */
+export function searchRecords(items) {
+  return items.map((it) => ({
+    ...it,
+    key: fold([it.name, ...(it.aka ?? [])].join(" ")),
+    names: [it.name, ...(it.aka ?? [])].map(fold), // each of them whole, for an exact match
+  }));
+}
+
+/**
+ * The best few matches for what's typed (q, already folded): exactly what you typed first
+ * ("M1" is the Crab Nebula, not M10 to M19), then names starting with it, then any with it
+ * somewhere inside.
+ */
+export function searchMatches(records, q, limit = 8) {
+  const exact = records.filter((r) => r.names.includes(q));
+  const starts = records.filter(
+    (r) => !exact.includes(r) && (r.key.startsWith(q) || r.key.split(/\s+/).some((w) => w.startsWith(q)))
+  );
+  const contains = records.filter((r) => !exact.includes(r) && !starts.includes(r) && r.key.includes(q));
+  return [...exact, ...starts, ...contains].slice(0, limit);
+}
+
+/** items: [{ name, aka (other names it can be found by), kind, select() }] */
 export function createSearch(items) {
   const input = document.getElementById("search");
   const list = document.getElementById("search-results");
-  const records = items.map((it) => ({ ...it, key: fold(it.name) }));
+  const records = searchRecords(items);
   let matches = [];
   let active = 0;
 
@@ -244,10 +275,10 @@ export function createSearch(items) {
     const q = fold(input.value.trim());
     if (!q) matches = [];
     else {
-      const here = records.filter((r) => !r.shown || r.shown());
-      const starts = here.filter((r) => r.key.startsWith(q) || r.key.split(/\s+/).some((w) => w.startsWith(q)));
-      const contains = here.filter((r) => !starts.includes(r) && r.key.includes(q));
-      matches = [...starts, ...contains].slice(0, 8);
+      matches = searchMatches(
+        records.filter((r) => !r.shown || r.shown()),
+        q
+      );
     }
     active = 0;
     render();

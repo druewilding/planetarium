@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, test } from "vitest";
 
-import { lightLeftNote, linkMentions, phaseName, starDistance } from "../src/ui/info.js";
+import { daySpans, lightLeftNote, linkMentions, phaseName, starDistance } from "../src/ui/info.js";
 
 const { stars } = JSON.parse(readFileSync(new URL("../data/stars.json", import.meta.url), "utf8"));
 const star = (hip) => {
@@ -146,5 +146,49 @@ describe("linkMentions", () => {
   test("leaves buttons already there as they are", () => {
     const html = `<button class="jump" data-when="${1}">Jupiter in 2027</button>`;
     expect(link(html)).toBe(html);
+  });
+});
+
+describe("over the mountains: when something is in sight during the day", () => {
+  const h = (hours) => Date.parse("2026-11-28T00:00Z") + hours * 3600000;
+  const [start, end] = [h(0), h(24)];
+
+  test("in sight past both ends of the day: one stretch over midnight, from this evening to this morning", () => {
+    // The Moon near Reykjavík: until 14.17, and from 20.41.
+    expect(
+      daySpans(
+        [
+          [start, h(14.28)],
+          [h(20.68), end],
+        ],
+        start,
+        end
+      )
+    ).toEqual([{ from: h(20.68), to: h(14.28) }]);
+  });
+
+  test("other stretches in the day stay as they are, before the one over midnight", () => {
+    expect(
+      daySpans(
+        [
+          [start, h(2)],
+          [h(5), h(9)],
+          [h(20), end],
+        ],
+        start,
+        end
+      )
+    ).toEqual([
+      { from: h(5), to: h(9) },
+      { from: h(20), to: h(2) },
+    ]);
+  });
+
+  test("a stretch in the middle of the day, and ones running past only one end", () => {
+    expect(daySpans([[h(10.87), h(15.95)]], start, end)).toEqual([{ from: h(10.87), to: h(15.95) }]); // the Sun
+    expect(daySpans([[start, h(3)]], start, end)).toEqual([{ from: null, to: h(3) }]); // "until 03.00"
+    expect(daySpans([[h(21), end]], start, end)).toEqual([{ from: h(21), to: null }]); // "from 21.00"
+    expect(daySpans([[start, end]], start, end)).toEqual([{ from: null, to: null }]); // all day
+    expect(daySpans([], start, end)).toEqual([]); // hidden all day
   });
 });
