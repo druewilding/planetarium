@@ -232,8 +232,17 @@ export function createInfo({
     return cache.get(key);
   }
 
-  // Accepts an AstroTime or an event holding one in `.time`.
-  const t = (d, loc) => (d ? formatTime((d.date ?? d.time.date).getTime(), loc) : "—");
+  /** A time to jump to, looking at something: the clock goes there, and the view turns to it. */
+  const whenButton = (type, id, ms, loc, name) =>
+    `<button class="jump" data-select="${type}" data-id="${esc(id ?? "")}" data-when="${ms}" title="Go to ${formatTime(ms, loc)} and look at ${esc(name)}">${formatTime(ms, loc)}</button>`;
+  /**
+   * The same for an astronomy-engine time (or an event holding one), looking at `what`
+   * ({ type, id, name }); "—" for none.
+   */
+  const at = (d, loc, what) =>
+    d ? whenButton(what.type, what.id, (d.date ?? d.time.date).getTime(), loc, what.name) : "—";
+  const SUN = { type: "sun", name: "the Sun" };
+  const MOON = { type: "moon", name: "the Moon" };
 
   function riseSet(body, obs, start) {
     const d0 = new Date(start);
@@ -251,14 +260,14 @@ export function createInfo({
   }
 
   /** When the body is actually in sight over the hills today (only if they hide it a while). */
-  function skylineRow(body, s, start, radiusDeg) {
+  function skylineRow(body, s, start, radiusDeg, what) {
     const { sky, loc, skyline } = s;
     if (!skyline) return "";
     const r = cached(`skyline|${body}|${start}|${skyline.key}`, () =>
       spansAboveSkyline(body, sky.obs, start, skyline, radiusDeg)
     );
     if (r.hiddenMinutes < 4) return "";
-    const tm = (ms) => formatTime(ms, loc);
+    const tm = (ms) => whenButton(what.type, what.id, ms, loc, what.name);
     const span = ([a, b]) => (a <= start ? `until ${tm(b)}` : b >= r.endMs ? `from ${tm(a)}` : `${tm(a)} – ${tm(b)}`);
     const text = r.spans.length
       ? r.spans.slice(0, 3).map(span).join(", ") + (r.spans.length > 3 ? ", …" : "")
@@ -266,15 +275,16 @@ export function createInfo({
     return `<dt>Over the mountains</dt><dd>${text}</dd>`;
   }
 
-  function riseSetRows(rs, loc, obj, label = "") {
+  /** Rises, highest and sets; each time a button that goes there, looking at `what` ({ type, id, name }). */
+  function riseSetRows(rs, loc, obj, what, label = "") {
     if (!rs.rise && !rs.set) {
       const up = rs.transit && rs.transit.hor.altitude > 0;
       return `<dt>${label}Rise / set</dt><dd>${up ? "Up all day" : "Below the horizon all day"}</dd>`;
     }
     return `
-      <dt>${label}Rises</dt><dd>${t(rs.rise, loc)}${rs.rise ? ` · ${compassPoint(A.Horizon(rs.rise, obj.obs, obj.raOf(rs.rise), obj.decOf(rs.rise), "normal").azimuth)}` : ""}</dd>
-      <dt>${label}Highest</dt><dd>${t(rs.transit, loc)} · ${(Math.round(rs.transit.hor.altitude) || 0).toString()}°</dd>
-      <dt>${label}Sets</dt><dd>${t(rs.set, loc)}${rs.set ? ` · ${compassPoint(A.Horizon(rs.set, obj.obs, obj.raOf(rs.set), obj.decOf(rs.set), "normal").azimuth)}` : ""}</dd>`;
+      <dt>${label}Rises</dt><dd>${at(rs.rise, loc, what)}${rs.rise ? ` · ${compassPoint(A.Horizon(rs.rise, obj.obs, obj.raOf(rs.rise), obj.decOf(rs.rise), "normal").azimuth)}` : ""}</dd>
+      <dt>${label}Highest</dt><dd>${at(rs.transit, loc, what)} · ${(Math.round(rs.transit.hor.altitude) || 0).toString()}°</dd>
+      <dt>${label}Sets</dt><dd>${at(rs.set, loc, what)}${rs.set ? ` · ${compassPoint(A.Horizon(rs.set, obj.obs, obj.raOf(rs.set), obj.decOf(rs.set), "normal").azimuth)}` : ""}</dd>`;
   }
 
   const bodyRef = (body, obs) => ({
@@ -384,10 +394,10 @@ export function createInfo({
       covered > 0 && sun.alt > -1
         ? `<dt>Eclipse</dt><dd>${covered >= 0.9999 ? "Total!" : `${(covered * 100).toFixed(covered > 0.99 ? 1 : 0)}% covered`}</dd>`
         : "";
-    let html = `<dl>${position(sun, s.skyline)}${eclipseRow}${riseSetRows(ev.rs, loc, bodyRef(Body.Sun, obs))}${skylineRow(Body.Sun, s, start, 0.27)}${dayLen}</dl>`;
+    let html = `<dl>${position(sun, s.skyline)}${eclipseRow}${riseSetRows(ev.rs, loc, bodyRef(Body.Sun, obs), SUN)}${skylineRow(Body.Sun, s, start, 0.27, SUN)}${dayLen}</dl>`;
     html += daylightBar(start, obs, ms);
     if (!full) return html;
-    const twRow = (name, pair) => `<dt>${name}</dt><dd>${t(pair[0], loc)} – ${t(pair[1], loc)}</dd>`;
+    const twRow = (name, pair) => `<dt>${name}</dt><dd>${at(pair[0], loc, SUN)} – ${at(pair[1], loc, SUN)}</dd>`;
     html += `<div class="section"><h4>Twilight (dawn – dusk)</h4><dl>
       ${twRow("Civil (−6°)", ev.civil)}${twRow("Nautical (−12°)", ev.nautical)}${twRow("Astronomical (−18°)", ev.astro)}
     </dl></div>`;
@@ -448,7 +458,7 @@ export function createInfo({
     const head = full
       ? `<div class="info-head">${headInner}</div>`
       : `<button class="info-head jump" data-select="moon" title="Look at the Moon">${headInner}</button>`;
-    let html = `${head}<dl>${position(moon, s.skyline)}${moonEclipseRow(moon)}${riseSetRows(rs, loc, bodyRef(Body.Moon, obs))}${skylineRow(Body.Moon, s, start, 0.26)}</dl>`;
+    let html = `${head}<dl>${position(moon, s.skyline)}${moonEclipseRow(moon)}${riseSetRows(rs, loc, bodyRef(Body.Moon, obs), MOON)}${skylineRow(Body.Moon, s, start, 0.26, MOON)}</dl>`;
     if (!full) return html;
     const phases = cached(`quarters|${Math.floor(ms / 3600000)}`, () => {
       const list = [];
@@ -487,12 +497,13 @@ export function createInfo({
     const obs = sky.obs;
     const start = startOfLocalDay(ms, loc);
     const body = Body[p.id];
+    const planet = { type: "planet", id: p.id, name: p.name };
     const rs = cached(`${p.id}|${start}|${loc.lat.toFixed(3)}|${loc.lon.toFixed(3)}`, () => riseSet(body, obs, start));
     const elong = A.AngleFromSun(body, new Date(ms));
     const con = A.Constellation(p.ra, p.dec);
     const visible = p.mag < 6;
     const lightMin = (p.dist * AU_KM) / LIGHT_SPEED_KM_S / 60;
-    return `<dl>${position(p, s.skyline)}${riseSetRows(rs, loc, bodyRef(body, obs))}${skylineRow(body, s, start, 0)}</dl>
+    return `<dl>${position(p, s.skyline)}${riseSetRows(rs, loc, bodyRef(body, obs), planet)}${skylineRow(body, s, start, 0, planet)}</dl>
       <div class="section"><h4>Facts</h4><dl>
         <dt>Brightness</dt><dd>mag ${p.mag.toFixed(1)}${visible ? "" : " (needs a telescope)"}</dd>
         <dt>Distance</dt><dd>${p.dist.toFixed(3)} AU · ${((p.dist * AU_KM) / 1e6).toFixed(0)} M km</dd>
@@ -833,7 +844,7 @@ export function createInfo({
     const pos = star.position(sky);
     const always = !rs.rise && !rs.set;
     const ref = bodyRef(Body.Star1, obs);
-    return `<dl>${position(pos, s.skyline)}${always ? `<dt>Rise / set</dt><dd>${rs.transit.hor.altitude > 0 ? "Never sets here" : "Never rises here"}</dd>` : riseSetRows(rs, loc, ref)}</dl>
+    return `<dl>${position(pos, s.skyline)}${always ? `<dt>Rise / set</dt><dd>${rs.transit.hor.altitude > 0 ? "Never sets here" : "Never rises here"}</dd>` : riseSetRows(rs, loc, ref, { type: "star", id: star.hip, name: star.name })}</dl>
       <div class="section"><h4>Facts</h4><dl>
         <dt>Brightness</dt><dd>mag ${star.mag.toFixed(2)}</dd>
         ${starDistance(s, star).rows}
@@ -975,7 +986,7 @@ export function createInfo({
     const always = !rs.rise && !rs.set;
     const riseRows = always
       ? `<dt>Rise / set</dt><dd>${rs.transit.hor.altitude > 0 ? "Never sets here" : "Never rises here"}</dd>`
-      : riseSetRows(rs, loc, bodyRef(Body.Star1, obs));
+      : riseSetRows(rs, loc, bodyRef(Body.Star1, obs), { type: "dso", id: o.id, name: o.name });
     const how = howToSee(o);
     let rows = "";
     if (o.mag != null) rows += `<dt>Brightness</dt><dd>mag ${o.mag.toFixed(1)}, spread over its size</dd>`;
@@ -1032,10 +1043,6 @@ export function createInfo({
     if (alt >= 20) return `in the ${way}, ${Math.round(alt)}° up`;
     return `low in the ${way}`;
   }
-
-  /** A time to jump to, looking at something: the clock goes there, and the view turns to it. */
-  const whenButton = (type, id, ms, loc, name) =>
-    `<button class="jump" data-select="${type}" data-id="${esc(id)}" data-when="${ms}" title="Go to ${formatTime(ms, loc)} and look at ${esc(name)}">${formatTime(ms, loc)}</button>`;
 
   /** When it's up through the night: "Up all night", "Sets 01:20", "Rises 21:09", "Rises 21:09, sets 04:30". */
   function upText(u, loc) {

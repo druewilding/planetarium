@@ -139,7 +139,8 @@ sky with no connection (the hills and place names need one the first time you vi
   against the stars, and when it's next best to see (opposite the Sun, or for Mercury and Venus furthest from it),
   with a note about it, much of it about right now: Venus's phase, how far open Saturn's rings are, how late Jupiter's
   light makes Io's eclipses (Ole Rømer's speed of light), how far round the Sun Pluto has got since it was found.
-  In the notes, every planet, moon, constellation and star mentioned is a link to it.
+  In the notes, every planet, moon, constellation and star mentioned is a link to it, and every time (when something
+  rises, is highest, sets or comes over the mountains, and the Sun's twilights) takes you to that moment, looking at it.
   Each constellation's card gives its size (from the IAU's boundaries, and its rank of the 88), its story, who first
   drew it, its nearest star, when it's highest at midnight, how much of it you can see from where you are, and, for
   the 13 the Sun passes through, the dates it really does: not the horoscope's, which the sky has drifted from by
