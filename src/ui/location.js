@@ -522,6 +522,7 @@ export function createLocation({ cities, land, onChange, getTime }) {
   function set(loc) {
     current = loc;
     $("location-name").textContent = loc.name;
+    $("location-title").textContent = loc.name;
   }
 
   return { initialGuess, requestGeolocation, set, fromPoint, fromLink };
