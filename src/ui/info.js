@@ -1061,6 +1061,13 @@ export function createInfo({
     );
   }
 
+  /** One thing in a night's plan: its name with its best time beside it, and more about it underneath. */
+  const planItem = (name, time, more) =>
+    `<li><span class="plan-name">${name}</span><span class="plan-time">${time}</span><span class="plan-more">${more}</span></li>`;
+  /** A list of them, under a heading that says what the times are. */
+  const planList = (title, items) =>
+    `<div class="plan-head"><span>${title}</span><span>Best time</span></div><ul class="plan">${items.join("")}</ul>`;
+
   function tonightSections(s) {
     const { loc } = s;
     const plan = tonightPlan(s);
@@ -1076,32 +1083,36 @@ export function createInfo({
       '<button class="jump" data-select="moon" title="Look at the Moon">Moon</button>',
       `${moon ?? "Down all night"} · ${Math.round(plan.moon.lit * 100)}% lit`,
     ]);
-    for (const p of plan.planets) {
-      const up = upText(p, loc) ?? "Up";
-      const best = whenButton("planet", p.id, p.best.t, loc, p.name);
-      rows.push([
-        `<button class="jump" data-select="planet" data-id="${p.id}" title="Look at ${p.name}">${p.name}</button>`,
-        `${up} · best at ${best}, ${whereIn(p.best.alt, p.best.az)}`,
-      ]);
-    }
     if (plan.constellations.length) {
       const names = plan.constellations.map((c) => catalog.constellations.find((cc) => cc.id === c.id));
       rows.push([`High up at ${tm(plan.middle)}`, names.map((c) => conButton(c)).join(", ")]);
     }
-    let html = `<div class="section"><h4>Tonight</h4><dl>${rows.map(([dt, dd]) => `<dt>${dt}</dt><dd>${dd}</dd>`).join("")}</dl></div>`;
+    const planets = plan.planets.map((p) =>
+      planItem(
+        `<button class="jump" data-select="planet" data-id="${p.id}" title="Look at ${p.name}">${p.name}</button>`,
+        whenButton("planet", p.id, p.best.t, loc, p.name),
+        `${upText(p, loc) ?? "Up"} · ${whereIn(p.best.alt, p.best.az)}`
+      )
+    );
+    let html = `<div class="section"><h4>Tonight</h4><dl>${rows.map(([dt, dd]) => `<dt>${dt}</dt><dd>${dd}</dd>`).join("")}</dl>
+      ${planets.length ? planList("Planets", planets) : ""}</div>`;
 
     if (plan.twilightOnly) return html;
     const finds = plan.deepSky.map((f) => {
       const o = catalog.deepSky.find((x) => x.id === f.id);
       const how = f.how === "eye" ? "By eye" : "Binoculars";
-      return `<dt>${dsoButton(o)}</dt><dd>${how} · best at ${whenButton("dso", o.id, f.best.t, loc, o.name)}, ${whereIn(f.best.alt, f.best.az)}</dd>`;
+      return planItem(
+        dsoButton(o),
+        whenButton("dso", o.id, f.best.t, loc, o.name),
+        `${how} · ${whereIn(f.best.alt, f.best.az)}`
+      );
     });
     const moonNote = plan.moon.bright
       ? "<p class=note>The Moon’s light will hide the faintest of them while it’s up.</p>"
       : "";
     html += `<div class="section"><h4>Faint things to find tonight</h4>${
       finds.length
-        ? `<dl>${finds.join("")}</dl>${moonNote}`
+        ? `${planList("", finds)}${moonNote}`
         : "<p class=note>Nothing faint will show tonight: the sky’s too bright.</p>"
     }</div>`;
     return html;
@@ -1275,7 +1286,7 @@ export function createInfo({
       seasonText = `${season.label} · ${days === 1 ? "1 day" : `${days} days`} to the ${season.nextEvent}`;
     }
     return {
-      head: `<h3>${esc(loc.name)}</h3><p class="kind">${seasonText}</p>`,
+      head: `<div class="info-heading"><h3>${esc(loc.name)}</h3><p class="kind">${seasonText}</p></div>`,
       body: `<div class="section"><h4><button class="jump" data-select="sun" title="Look at the Sun">Sun</button></h4>${sunDetails(s, false)}</div>
       <div class="section"><h4><button class="jump" data-select="moon" title="Look at the Moon">Moon</button></h4>${moonDetails(s, false)}</div>
       <div class="section"><h4>Planets up now</h4>${visible ? `<dl>${visible}</dl>` : NO_PLANETS}</div>
