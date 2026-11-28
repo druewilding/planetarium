@@ -716,40 +716,18 @@ input[type="text"]:focus {
 
 .track-row {
   display: grid;
-  grid-template-columns: 74px minmax(0, 1fr);
+  grid-template-columns: 32px minmax(0, 1fr);
   align-items: start;
   gap: 8px;
 }
 
-.track-label,
-.year-step {
+.track-label {
   height: 22px;
   display: flex;
   align-items: center;
   font-size: 12px;
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
-}
-
-.year-step {
-  gap: 2px;
-  color: var(--text);
-}
-
-.step-btn {
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.06);
-  cursor: pointer;
-  font-size: 15px;
-  line-height: 1;
-}
-
-.step-btn:hover {
-  background: rgba(255, 255, 255, 0.14);
 }
 
 .track-wrap {
@@ -788,6 +766,27 @@ input[type="text"]:focus {
 .track.active .thumb {
   width: 6px;
   margin-left: -3px;
+}
+
+/* Each slider lights up what it sets, and the other way round: the time of day
+   slider and the clock, the year slider and the date. */
+#time-clock,
+#time-date,
+.track-label,
+.track .thumb {
+  transition:
+    color 0.15s,
+    background-color 0.15s;
+}
+
+.timebar:has(#day-track:hover, #day-track.active, #day-track:focus-visible) :is(#time-clock, #day-label),
+.timebar:has(#year-track:hover, #year-track.active, #year-track:focus-visible) :is(#time-date, #year-label) {
+  color: var(--accent);
+}
+
+.timebar:has(.clock-row:hover) #day-track .thumb,
+.timebar:has(.date-row:hover) #year-track .thumb {
+  background: var(--accent);
 }
 
 .ticks {
@@ -892,7 +891,7 @@ input[type="text"]:focus {
 
 .time-readout {
   display: grid;
-  justify-items: start;
+  justify-items: stretch;
   gap: 2px;
   padding: 0;
   border: 0;
@@ -901,12 +900,32 @@ input[type="text"]:focus {
   text-align: left;
 }
 
-/* The clock and season badge share one line, so nothing jumps as the date changes. */
-.clock-row {
+/* The time with its time zone beside it, then the date with its season at the
+   far end (so the badge doesn't jump about as the date changes width). */
+.clock-row,
+.date-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  min-width: 0;
   white-space: nowrap;
+}
+
+.date-row {
+  justify-content: space-between;
+}
+
+.zone {
+  display: grid;
+  min-width: 0;
+  font-size: 11.5px;
+  line-height: 1.25;
+  color: var(--text-dim);
+}
+
+.zone > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 #time-clock {
@@ -917,12 +936,8 @@ input[type="text"]:focus {
 }
 
 #time-date {
-  font-size: 14px;
-}
-
-#time-zone {
-  font-size: 12px;
-  color: var(--text-dim);
+  font-size: 16px;
+  font-weight: 500;
 }
 
 .speed {
@@ -939,6 +954,10 @@ input[type="text"]:focus {
 
 .speed .play {
   color: var(--accent);
+}
+
+#now {
+  margin-left: auto;
 }
 
 .rate-label {
@@ -1288,12 +1307,14 @@ body:not(.aloft) #look-up {
     gap: 4px 10px;
   }
 
-  .track-row {
-    grid-template-columns: 64px minmax(0, 1fr);
-  }
-
   #time-clock {
     font-size: 22px;
+  }
+
+  /* Full width, so the season badge and Now line up at the right. */
+  .time-readout,
+  .speed {
+    flex: 1 1 100%;
   }
 
   .search {

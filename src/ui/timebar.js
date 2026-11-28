@@ -147,15 +147,6 @@ export function createTimebar({ clock, getLocation, onEclipse }) {
     onKey: (dir, big) => clock.nudge(dir * (big ? 7 : 1) * DAY_MS),
   });
 
-  function stepYear(dir) {
-    const d = shifted(clock.ms, getLocation());
-    const y = d.getUTCFullYear();
-    const args = [d.getUTCMonth(), d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds()];
-    clock.set(clock.ms + (Date.UTC(y + dir, ...args) - Date.UTC(y, ...args)), { animate: false });
-  }
-  $("year-prev").addEventListener("click", () => stepYear(-1));
-  $("year-next").addEventListener("click", () => stepYear(1));
-
   // ---- Buttons ----
   $("play").addEventListener("click", () => clock.togglePlay());
   $("faster").addEventListener("click", () => clock.faster());
@@ -356,19 +347,21 @@ export function createTimebar({ clock, getLocation, onEclipse }) {
     yearThumb.style.left = `${(dayOfYear(clock.ms, loc) / n) * 100}%`;
 
     const seconds = clock.playing && Math.abs(clock.rate) === 1;
-    const text = `${formatTime(clock.ms, loc, seconds)}|${formatDate(clock.ms, loc)}|${zoneLabel(clock.ms, loc)}|${clock.rateLabel}|${clock.playing}|${Math.round(loc.lat)}`;
+    const text = `${formatTime(clock.ms, loc, seconds)}|${formatDate(clock.ms, loc)}|${zoneLabel(clock.ms, loc)}|${clock.rateLabel}|${clock.playing}|${clock.following}|${Math.round(loc.lat)}`;
     if (text !== lastText) {
       lastText = text;
       $("time-clock").textContent = formatTime(clock.ms, loc, seconds);
       $("time-date").textContent = formatDate(clock.ms, loc);
-      $("time-zone").textContent = zoneLabel(clock.ms, loc);
+      // "Copenhagen time · UTC+1", on two lines beside the clock.
+      const [zone, utc] = zoneLabel(clock.ms, loc).split(" · ");
+      $("time-zone").textContent = zone;
+      $("time-utc").textContent = utc;
       showSeason(loc);
       $("rate-label").textContent = clock.rateLabel;
-      $("year-label").textContent = String(shifted(clock.ms, loc).getUTCFullYear());
       yearTrack.setAttribute("aria-valuetext", formatDate(clock.ms, loc));
       $("play-icon").setAttribute("d", clock.playing ? "M6 5h4v14H6zm8 0h4v14h-4z" : "M7 4.5v15L19.5 12z");
       $("play").setAttribute("aria-label", clock.playing ? "Pause" : "Play");
-      $("now").hidden = clock.following;
+      $("now").disabled = clock.following; // (already there)
     }
   }
 
