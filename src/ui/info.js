@@ -9,6 +9,7 @@ import {
   HOROSCOPE,
   sunInConstellation,
 } from "../constellations.js";
+import { deepTimeNote, howToSee } from "../deepsky.js";
 import { lunarEclipsesFrom, nextTotalSolarEclipse, solarEclipsesFrom } from "../eclipses.js";
 import { describeSky } from "../lightpollution.js";
 import { glare, moonEventsBetween, MOONS_OF, moonsOf, nextMoonEvents, SATELLITES } from "../satellites.js";
@@ -24,6 +25,7 @@ import {
   formatYearDate,
   startOfLocalDay,
 } from "../timezone.js";
+import { planTonight } from "../tonight.js";
 
 const ENTITIES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\u0022": "&quot;" };
 const esc = (s) => String(s).replace(/[&<>\u0022]/g, (c) => ENTITIES[c]);
@@ -913,6 +915,195 @@ export function createInfo({
     return d.left == null ? "" : `<p class="note">${lightLeftNote(d.left, d.about)}</p>`;
   }
 
+  // ---------------------------------------------------------------- Clusters, nebulae and galaxies
+
+  const conButton = (con) =>
+    `<button class="jump" data-select="constellation" data-id="${esc(con.id)}" title="Look at ${esc(con.name)}">${esc(con.name)}</button>`;
+  const dsoButton = (o, text = o.name) =>
+    `<button class="jump" data-select="dso" data-id="${esc(o.id)}" title="Look at ${esc(o.name)}">${esc(text)}</button>`;
+  const HOW = { eye: "With your eyes, from a dark site", binoculars: "With binoculars", telescope: "With a telescope" };
+
+  /** "3.2° × 1°" or "17′ across", and how that compares with the Moon (about 31′ wide). */
+  function apparentSize(o) {
+    const one = (m) => (m >= 60 ? `${sig(m / 60, 2)}°` : `${sig(m, 2)}′`);
+    const size = o.major === o.minor ? `${one(o.major)} across` : `${one(o.major)} × ${one(o.minor)}`;
+    const moons = o.major / 31;
+    const like =
+      moons >= 1.5
+        ? `about ${Math.round(moons)} times the Moon’s width`
+        : moons >= 0.75
+          ? "about the Moon’s width"
+          : moons >= 0.35
+            ? "about half the Moon’s width"
+            : "";
+    return like ? `${size} · ${like}` : size;
+  }
+
+  /** Whether you can see it now, from here: by eye, with binoculars, or not at all. */
+  function deepSkyNowRow(s, o) {
+    const now = s.deepSkyNow?.(o);
+    if (!now || o.mag == null) return "";
+    let text;
+    if (now.eye >= 5) text = "Easy to see by eye";
+    else if (now.eye >= 1.2) text = "Just visible by eye";
+    else if (now.binoculars >= 1.2) text = "Too faint for your eyes: try binoculars";
+    else if (howToSee(o) === "telescope") text = "Too faint to see without a telescope";
+    else text = "Lost in the glow of the sky";
+    return `<dt>Right now</dt><dd>${text}</dd>`;
+  }
+
+  function deepSkyDetails(s, o) {
+    const { sky, loc, ms } = s;
+    const obs = sky.obs;
+    const start = startOfLocalDay(ms, loc);
+    const rs = cached(`dso${o.id}|${start}|${loc.lat.toFixed(3)}|${loc.lon.toFixed(3)}`, () => {
+      A.DefineStar(Body.Star1, o.ra / 15, o.dec, 1000);
+      return riseSet(Body.Star1, obs, start);
+    });
+    A.DefineStar(Body.Star1, o.ra / 15, o.dec, 1000);
+    const pos = o.position(sky);
+    const always = !rs.rise && !rs.set;
+    const riseRows = always
+      ? `<dt>Rise / set</dt><dd>${rs.transit.hor.altitude > 0 ? "Never sets here" : "Never rises here"}</dd>`
+      : riseSetRows(rs, loc, bodyRef(Body.Star1, obs));
+    const how = howToSee(o);
+    let rows = "";
+    if (o.mag != null) rows += `<dt>Brightness</dt><dd>mag ${o.mag.toFixed(1)}, spread over its size</dd>`;
+    if (o.type !== "pl") rows += `<dt>Size in the sky</dt><dd>${apparentSize(o)}</dd>`;
+    if (o.ly) {
+      const trillionKm = (o.ly * LIGHT_YEAR_KM) / 1e12;
+      const km =
+        trillionKm >= 1e6 ? `${sig(trillionKm / 1e6, 2)} million trillion km` : `${sig(trillionKm, 2)} trillion km`;
+      const years = o.ly >= 1e6 ? `${sig(o.ly / 1e6, 2)} million` : sig(o.ly, 2);
+      rows += `<dt>Distance</dt><dd>about ${km}</dd><dt>Light travel time</dt><dd>about ${years} years</dd>`;
+      if (o.type !== "pl" && o.type !== "as") {
+        const across = o.ly * ((o.major / 60) * (Math.PI / 180));
+        rows += `<dt>Real size</dt><dd>about ${sig(across, 2)} light-years across</dd>`;
+      }
+    }
+    if (o.numbers.length) rows += `<dt>Catalogue</dt><dd>${o.numbers.map(esc).join(" · ")}</dd>`;
+    if (how) rows += `<dt>Best seen</dt><dd>${HOW[how]}</dd>`;
+    const now = 1970 + ms / YEAR_MS;
+    const light = !o.ly ? "" : o.ly < 15000 ? lightLeftNote(Math.round(now - o.ly), true) : deepTimeNote(o.ly);
+    const notes = [...o.about, light, neverRisesDeepNote(s, o, always, rs)].filter(Boolean);
+    return `<dl>${position(pos, s.skyline)}${riseRows}${deepSkyNowRow(s, o)}</dl>
+      <div class="section"><h4>Facts</h4><dl>${rows}</dl>
+      ${notes.map((n) => `<p class="note">${n}</p>`).join("")}</div>`;
+  }
+
+  /** For one that never rises here: how far you'd have to go to see it. */
+  function neverRisesDeepNote(s, o, always, rs) {
+    if (!always || rs.transit.hor.altitude > 0) return "";
+    const v = fromLatitude([o.dec], s.loc.lat);
+    return v.all === "rises" ? `To see it, you’d have to go ${v.toward} of ${v.seeFrom}.` : "";
+  }
+
+  /** The clusters, nebulae and galaxies in a constellation, brightest first. */
+  function deepSkyIn(c) {
+    const list = catalog.deepSky
+      .filter((o) => o.con?.id === c.id && o.mag != null)
+      .sort((a, b) => a.mag - b.mag)
+      .slice(0, 6);
+    if (!list.length) return "";
+    const how = { eye: "by eye", binoculars: "binoculars", telescope: "telescope" };
+    return `<div class="section"><h4>Clusters, nebulae & galaxies</h4><dl>${list
+      .map((o) => `<dt>${dsoButton(o)}</dt><dd>${esc(o.kind)} · ${how[howToSee(o)]}</dd>`)
+      .join("")}</dl></div>`;
+  }
+
+  // ---------------------------------------------------------------- Tonight
+
+  const WAY = ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"];
+  /** "high in the south", "low in the north-east". */
+  function whereIn(alt, az) {
+    const way = WAY[Math.round(az / 45) % 8];
+    if (alt >= 70) return "nearly overhead";
+    if (alt >= 40) return `high in the ${way}`;
+    if (alt >= 20) return `in the ${way}, ${Math.round(alt)}° up`;
+    return `low in the ${way}`;
+  }
+
+  /** A time to jump to, looking at something: the clock goes there, and the view turns to it. */
+  const whenButton = (type, id, ms, loc, name) =>
+    `<button class="jump" data-select="${type}" data-id="${esc(id)}" data-when="${ms}" title="Go to ${formatTime(ms, loc)} and look at ${esc(name)}">${formatTime(ms, loc)}</button>`;
+
+  /** When it's up through the night: "Up all night", "Sets 01:20", "Rises 21:09", "Rises 21:09, sets 04:30". */
+  function upText(u, loc) {
+    const tm = (ms) => formatTime(ms, loc);
+    if (u.upAtStart) {
+      if (!u.set) return "Up all night";
+      return u.rise && u.rise > u.set ? `Sets ${tm(u.set)}, rises again ${tm(u.rise)}` : `Sets ${tm(u.set)}`;
+    }
+    if (!u.rise) return null;
+    return u.set && u.set > u.rise ? `Rises ${tm(u.rise)}, sets ${tm(u.set)}` : `Rises ${tm(u.rise)}`;
+  }
+
+  // The constellations worth naming as being high up: ones with a bright star.
+  let brightConstellations = null;
+  function tonightPlan(s) {
+    const { loc, ms } = s;
+    brightConstellations ??= catalog.constellations
+      .filter((c) => (catalog.starsIn(c.id)[0]?.mag ?? 99) < 3)
+      .map((c) => ({ id: c.id, ra: c.label[0], dec: c.label[1] }));
+    const key = `tonight|${loc.lat.toFixed(3)}|${loc.lon.toFixed(3)}|${Math.floor(ms / (15 * 60000))}|${s.lightPollution ? s.lightPollution.zenith : 0}`;
+    return cached(key, () =>
+      planTonight({
+        ms,
+        loc,
+        obs: s.sky.obs,
+        objects: catalog.deepSky,
+        constellations: brightConstellations,
+        glow: s.lightPollution,
+      })
+    );
+  }
+
+  function tonightSections(s) {
+    const { loc } = s;
+    const plan = tonightPlan(s);
+    if (plan.sunUp)
+      return '<div class="section"><h4>Tonight</h4><p class="note">The Sun doesn’t set tonight.</p></div>';
+    const tm = (ms) => formatTime(ms, loc);
+    const rows = [];
+    if (plan.polar && plan.dark) rows.push(["Dark", "All day and night"]);
+    else if (plan.dark) rows.push(["Dark", `${tm(plan.dark.start)} – ${tm(plan.dark.end)}`]);
+    else rows.push(["Dark", `Never quite: twilight all night, darkest at ${tm(plan.darkest)}`]);
+    const moon = upText(plan.moon, loc);
+    rows.push([
+      '<button class="jump" data-select="moon" title="Look at the Moon">Moon</button>',
+      `${moon ?? "Down all night"} · ${Math.round(plan.moon.lit * 100)}% lit`,
+    ]);
+    for (const p of plan.planets) {
+      const up = upText(p, loc) ?? "Up";
+      const best = whenButton("planet", p.id, p.best.t, loc, p.name);
+      rows.push([
+        `<button class="jump" data-select="planet" data-id="${p.id}" title="Look at ${p.name}">${p.name}</button>`,
+        `${up} · best at ${best}, ${whereIn(p.best.alt, p.best.az)}`,
+      ]);
+    }
+    if (plan.constellations.length) {
+      const names = plan.constellations.map((c) => catalog.constellations.find((cc) => cc.id === c.id));
+      rows.push([`High up at ${tm(plan.middle)}`, names.map((c) => conButton(c)).join(", ")]);
+    }
+    let html = `<div class="section"><h4>Tonight</h4><dl>${rows.map(([dt, dd]) => `<dt>${dt}</dt><dd>${dd}</dd>`).join("")}</dl></div>`;
+
+    if (plan.twilightOnly) return html;
+    const finds = plan.deepSky.map((f) => {
+      const o = catalog.deepSky.find((x) => x.id === f.id);
+      const how = f.how === "eye" ? "By eye" : "Binoculars";
+      return `<dt>${dsoButton(o)}</dt><dd>${how} · best at ${whenButton("dso", o.id, f.best.t, loc, o.name)}, ${whereIn(f.best.alt, f.best.az)}</dd>`;
+    });
+    const moonNote = plan.moon.bright
+      ? "<p class=note>The Moon’s light will hide the faintest of them while it’s up.</p>"
+      : "";
+    html += `<div class="section"><h4>Faint things to find tonight</h4>${
+      finds.length
+        ? `<dl>${finds.join("")}</dl>${moonNote}`
+        : "<p class=note>Nothing faint will show tonight: the sky’s too bright.</p>"
+    }</div>`;
+    return html;
+  }
+
   /** A mountain, town or landmark on the land. */
   function featureDetails(s, f) {
     const m = (v) => `${Math.round(v).toLocaleString()} m`;
@@ -969,6 +1160,7 @@ export function createInfo({
         ${sun.length ? `<dt>The Sun’s in front</dt><dd>${sun.map(range).join(", ")}</dd>` : ""}
         ${nearest ? `<dt>Nearest star</dt><dd><button class="jump" data-select="star" data-id="${nearest.star.hip}" title="Look at ${esc(nearest.star.name)}">${esc(nearest.star.label)}</button> · ${sig(nearest.ly, nearest.ly < 10 ? 2 : 3)} light-years</dd>` : ""}
       </dl>${notes.map((n) => `<p class="note">${n}</p>`).join("")}</div>
+      ${deepSkyIn(c)}
       ${stars.length ? `<div class="section"><h4>Brightest stars</h4><dl>${stars.map((st) => `<dt><button class="jump" data-select="star" data-id="${st.hip}" title="Look at ${esc(st.name)}">${esc(st.label)}</button></dt><dd>${["mag " + st.mag.toFixed(1), starDistance(s, st).short].filter(Boolean).join(" · ")}</dd>`).join("")}</dl></div>` : ""}`;
   }
 
@@ -1084,6 +1276,7 @@ export function createInfo({
       body: `<div class="section"><h4><button class="jump" data-select="sun" title="Look at the Sun">Sun</button></h4>${sunDetails(s, false)}</div>
       <div class="section"><h4><button class="jump" data-select="moon" title="Look at the Moon">Moon</button></h4>${moonDetails(s, false)}</div>
       <div class="section"><h4>Planets up now</h4>${visible ? `<dl>${visible}</dl>` : NO_PLANETS}</div>
+      ${tonightSections(s)}
       ${darkness(s)}
       ${eclipseOverview(s)}
       ${sunUp ? STARS_TIP : ""}
@@ -1104,6 +1297,10 @@ export function createInfo({
         { name: c.name, type: "constellation", id: c.id },
         ...(c.id === "Ser" ? [{ name: "Serpens", type: "constellation", id: "Ser" }] : []),
       ]),
+      // (Clusters, nebulae and galaxies with names of their own: "the Pleiades", not "M2".)
+      ...catalog.deepSky
+        .filter((o) => !/^(M\d|NGC |IC |Collinder )/.test(o.name))
+        .map((o) => ({ name: o.name, type: "dso", id: o.id })),
       // (Brightest first, so a name two stars share goes to the brighter.)
       ...catalog.named
         .filter((st) => st.proper.length >= 4)
@@ -1117,7 +1314,14 @@ export function createInfo({
   function linkNotes(html, sel) {
     const self = sel && {
       type: sel.type,
-      id: sel.type === "star" ? sel.star.hip : sel.type === "constellation" ? sel.constellation.id : sel.id,
+      id:
+        sel.type === "star"
+          ? sel.star.hip
+          : sel.type === "constellation"
+            ? sel.constellation.id
+            : sel.type === "dso"
+              ? sel.dso.id
+              : sel.id,
     };
     return html.replace(
       /<p class="note">([\s\S]*?)<\/p>/g,
@@ -1154,6 +1358,10 @@ export function createInfo({
     } else if (sel.type === "constellation") {
       kind = "Constellation";
       body = constellationDetails(s, sel.constellation);
+    } else if (sel.type === "dso") {
+      const o = sel.dso;
+      kind = o.con ? `${esc(o.kind)} in ${conButton(o.con)}` : esc(o.kind);
+      body = deepSkyDetails(s, o);
     } else if (sel.type === "feature") {
       kind = FEATURE_KIND[sel.feature.kind];
       body = featureDetails(s, sel.feature);
@@ -1162,7 +1370,7 @@ export function createInfo({
       body = earthDetails(s.earth);
     }
     // A star's kind links to its constellation, and a moon's to its planet, so they're already HTML.
-    const kindHtml = sel.type === "star" || sel.type === "satellite" ? kind : esc(kind);
+    const kindHtml = ["star", "satellite", "dso"].includes(sel.type) ? kind : esc(kind);
     return {
       head: `<h3>${esc(title)}</h3><p class="kind">${kindHtml}</p>`,
       body: linkNotes(body, sel),

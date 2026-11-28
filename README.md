@@ -23,6 +23,17 @@ sky with no connection (the hills and place names need one the first time you vi
 - **The Milky Way:** NASA's all-sky map of its glow, dust lanes and Magellanic Clouds included. Like the stars, it
   shows only where it stands out from the sky, so it's at its best on dark, moonless nights and washes out under a
   bright Moon or twilight.
+- **Clusters, nebulae and galaxies:** all 110 of Messier's, and the best of the southern sky (Omega Centauri, 47
+  Tucanae, the Carina Nebula, the Jewel Box, the Magellanic Clouds…), each a soft glow true to its size and tilt.
+  Whether you can see one comes from how bright it is against the sky behind it: a small one by its total light,
+  like a star, and a big one by how much brighter its surface is than the sky, since the eye pools faint light
+  over a patch about a degree across. So the Andromeda Galaxy and the Orion Nebula show from a dark site and fade
+  over a city or under a bright Moon, the Hercules Cluster only just shows by eye on a dark night, and the Ring
+  Nebula needs a telescope: zoom right in and it appears. A cluster's bright stars are drawn as stars, so only the
+  light of its fainter ones glows. Tap one, or search for it by name or number (M31, NGC 5139), for how far away
+  it is, how big it really is, how long its light has been travelling (Andromeda's set off before our species
+  existed), whether you can see it right now, and whether you'd need binoculars or a telescope. Each
+  constellation's card lists the ones in it.
 - **Light pollution:** the glow of towns and cities, worked out from NASA's Black Marble (the VIIRS satellite's
   picture of the Earth at night) for 300 km around you. A single-scattering model, like the one behind Falchi's World
   Atlas of night sky brightness, sends each town's light up into the air and haze and back down to you, so a city
@@ -87,8 +98,8 @@ sky with no connection (the hills and place names need one the first time you vi
   is partly covered. A lunar eclipse turns you to the red Moon, which looks the same from up there.
 - **Time tracks:** drag along a 24-hour track shaded by where the Sun is (night, twilight, day), or along a date track
   shaded by day length through the year. Dots mark the solstices, the equinoxes and the eclipses you can see from where
-  you are on the date track, and an eclipse's moment on the time track (with a band for how long it lasts). Hover for what each one is, or tap to go there. A year stepper sits beside it, and
-  time can play from −12 hours/s to +12 hours/s.
+  you are on the date track, and an eclipse's moment on the time track (with a band for how long it lasts). Hover for what each one is, or tap to go there.
+  Time can play from −12 hours/s to +12 hours/s.
 - **Wide views without distortion:** zoomed in, the view uses ordinary perspective. Zoom out past about 70° and it
   blends into a stereographic ("fisheye") projection, which keeps circles round, so the Sun's daily arc reads
   correctly. **Look up** shows the whole sky as a dome; press it again to return to the horizon.
@@ -111,6 +122,12 @@ sky with no connection (the hills and place names need one the first time you vi
   to the ground** brings you down over wherever your spot has turned to, turning back to the view you had.
 - **Overlays:** the Sun's path today with hour marks, the solstice and equinox paths, the Moon's path, the ecliptic,
   the celestial equator, and alt/az and RA/Dec grids.
+- **What's up tonight:** the info panel plans the night ahead from where you are: when it's dark, when the Moon
+  is up and how much of it is lit, each planet you can see with when it rises or sets and when it's best, the
+  constellations high up in the middle of the night, and the clusters, nebulae and galaxies worth looking for,
+  by eye or with binoculars. That last list takes in your sky's light pollution, the moonlight (Krisciunas and
+  Schaefer's model of a moonlit sky) and how high each one gets. Tap a time to go to it, looking at it. In a
+  light summer night, under the midnight Sun or in the polar night, it says so.
 - **Info panel:** rise, set and transit times, twilight, day length, Moon phases and age, distances, light travel time,
   and the brightest stars in each constellation. Stars have distances too, from their Hipparcos parallaxes: in
   kilometres, in years of light travel (light-years), and the year the light you see left them. Distant stars are hard
@@ -175,7 +192,8 @@ sky with no connection (the hills and place names need one the first time you vi
 
 Every part is optional; whatever a link leaves out stays as it is (here and now, the usual view). `body` is the world
 you're standing on, so `lat` and `lon` will mean the same thing on the Moon or Mars. `sel` is `sun`, `moon`,
-`planet:Mars`, `satellite:Io` (a planet's moon), `star:Sirius` (or a Hipparcos number, `star:32349`) or `con:Ori`. Editing the address in place jumps
+`planet:Mars`, `satellite:Io` (a planet's moon), `star:Sirius` (or a Hipparcos number, `star:32349`), `con:Ori` or
+`dso:M31` (a cluster, nebula or galaxy: `dso:NGC5139`, `dso:LMC`). Editing the address in place jumps
 there.
 
 From the browser console, `planetarium.clock.set(Date.parse("2027-08-02T10:00Z"))` jumps to any instant.
@@ -231,11 +249,14 @@ planetarium/
 │   ├── eclipses.js        # the Earth's shadow on the Moon, and finding eclipses
 │   ├── constants.js       # sizes and distances shared by the astronomy and the drawing
 │   ├── constellations.js  # the constellations: sizes, stories, who drew them, the Sun’s real dates
+│   ├── deepsky.js         # clusters, nebulae and galaxies: names, distances, notes, and when you can see them
+│   ├── tonight.js         # what's up tonight: the dark hours, the Moon, the planets, faint things to find
 │   ├── scene/
 │   │   ├── atmosphere.js  # scattering model (GLSL + JS twin)
 │   │   ├── earth.js       # the Earth seen from above, drawn into the sky
 │   │   ├── bodies.js      # Sun, Moon, ground
 │   │   ├── points.js      # stars and planets as points
+│   │   ├── deepsky.js     # clusters, nebulae and galaxies as soft glows
 │   │   ├── planets.js     # planets as discs, zoomed right in (phases, Saturn's rings)
 │   │   ├── lines.js       # lines on the sky (refraction-aware)
 │   │   ├── overlays.js    # constellations, grids, paths
@@ -258,7 +279,12 @@ planetarium/
 - Star distances: parallaxes from the Hipparcos new reduction (van Leeuwen 2007, ESA), via the
   [Gaia archive](https://gea.esac.esa.int/archive/)
 - Milky Way: [NASA SVS Deep Star Maps 2020](https://svs.gsfc.nasa.gov/4851) (the star-free Milky Way layer,
-  public domain)
+  public domain), with the blurry glows of clusters and galaxies filled in (`tools/clean-milkyway.py`), since
+  they're drawn on their own
+- Clusters, nebulae and galaxies: places, brightness and sizes from [d3-celestial](https://github.com/ofrohn/d3-celestial)'s
+  Messier and bright deep-sky lists (BSD-3-Clause), with a few more added by hand (`tools/convert-deepsky.mjs`);
+  distances are the usual modern estimates
+- Moonlit sky (for what's up tonight): Krisciunas & Schaefer, [A model of the brightness of moonlight](https://doi.org/10.1086/132921) (1991)
 - Moon texture: [NASA SVS CGI Moon Kit](https://svs.gsfc.nasa.gov/4720) (LRO, public domain)
 - Earth by day, its city lights and its seas: NASA's Blue Marble and Earth at Night (public domain), as prepared for
   the [three.js examples](https://github.com/mrdoob/three.js/tree/dev/examples/textures/planets)
@@ -286,14 +312,12 @@ planetarium/
 6. The Martian sky, with its blue sunset
 7. ✅ Eclipses: find them and jump to them, the red Moon, the Moon's shadow on the Earth
 8. ✅ Shareable links (place, time, view in the URL)
-9. More of the night sky from the ground: ✅ light pollution; still to come:
+9. More of the night sky from the ground: ✅ light pollution, ✅ the deep-sky objects, ✅ "what's up tonight";
+   still to come:
    - meteor showers: where each one's radiant is, when it peaks, how many you'd see an hour with the Moon and the
      radiant where they are, and the odd streak
-   - the deep-sky objects you can see by eye or with binoculars (the Andromeda Galaxy, the Orion Nebula, the Beehive,
-     Omega Centauri…), as faint smudges that fade like the stars do
    - variable stars that really vary as the clock runs: Algol dimming every 2 days 21 hours, Mira over 11 months
-   - twinkling low down, the Earth's shadow and the Belt of Venus after sunset, and "what's up tonight" in the
-     info panel
+   - twinkling low down, and the Earth's shadow and the Belt of Venus after sunset
 10. The International Space Station: see it cross the sky, flare and vanish into the Earth's shadow, with its next
     passes, then ride on it, with the Earth close below, its cities' lights drawn from the same night-lights tiles as
     the light pollution

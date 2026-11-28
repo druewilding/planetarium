@@ -18,6 +18,7 @@ import {
 import { climb, GROUND_KM } from "./climb.js";
 import { Clock } from "./clock.js";
 import { EARTH_RADIUS_KM } from "./constants.js";
+import { airmass, BINOCULARS, buildDeepSky, DARK_SKY, seeing } from "./deepsky.js";
 import { createLightPollution } from "./lightpollution.js";
 import { DEFAULT_BODY, readLink, writeLink } from "./link.js";
 import { createProjection, eyeScale, telescopeGain } from "./projection.js";
@@ -33,6 +34,7 @@ import {
   transmittance,
 } from "./scene/atmosphere.js";
 import { createGround, createMoon, createSkylineTexture, createSun, SUN_LUMINANCE } from "./scene/bodies.js";
+import { createDeepSky } from "./scene/deepsky.js";
 import { createEarth } from "./scene/earth.js";
 import * as glsl from "./scene/glsl.js";
 import { setFade } from "./scene/lines.js";
@@ -123,7 +125,7 @@ const GREEK = {
   ω: 1,
 };
 
-function buildCatalog(starData, constellations) {
+function buildCatalog(starData, constellations, deepSkyRows) {
   const gen = Object.fromEntries(constellations.map((c) => [c.id, c.gen]));
   const conName = Object.fromEntries(constellations.map((c) => [c.id, c.name]));
   const tmp = new THREE.Vector3();
@@ -162,8 +164,14 @@ function buildCatalog(starData, constellations) {
     .filter((c) => (seen.has(c.id) ? false : seen.add(c.id)))
     .map((c) => ({ ...c, position: positionOf(c.label[0], c.label[1]) }));
 
+  const deepSky = buildDeepSky(deepSkyRows, (ra, dec) => {
+    const id = A.Constellation(ra / 15, dec).symbol;
+    return { id, name: conName[id] || id };
+  }).map((o) => ({ ...o, position: positionOf(o.ra, o.dec) }));
+
   return {
     stars,
+    deepSky,
     named: stars.filter((s) => s.proper),
     constellations: cons,
     constellationLabels: constellations.map((c, i) => ({
@@ -181,15 +189,16 @@ function buildCatalog(starData, constellations) {
 
 async function main() {
   const canvas = $("sky");
-  const [starData, constellationData, cities, land, moonTex, milkyWayTex] = await Promise.all([
+  const [starData, constellationData, deepSkyData, cities, land, moonTex, milkyWayTex] = await Promise.all([
     loadJSON("data/stars.json"),
     loadJSON("data/constellations.json"),
+    loadJSON("data/deepsky.json"),
     loadJSON("data/cities.json"),
     loadJSON("data/land.json"),
     loadTexture("textures/moon.jpg"),
     new THREE.TextureLoader().loadAsync("textures/milkyway.jpg"),
   ]);
-  const catalog = buildCatalog(starData, constellationData);
+  const catalog = buildCatalog(starData, constellationData, deepSkyData);
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -224,6 +233,8 @@ async function main() {
   const starMaterial = createPointsMaterial(shared, glsl, 1000);
   const milkyWay = createMilkyWay(shared, glsl, milkyWayTex);
   overlays.eqj.add(milkyWay);
+  const deepSky = createDeepSky(shared, glsl, catalog.deepSky);
+  overlays.eqj.add(deepSky.mesh);
   overlays.eqj.add(createStars(starData, starMaterial));
   const planetPoints = createPlanetPoints(PLANETS, createPointsMaterial(shared, glsl, 1000));
   // Orbits (shown from up above the Earth), in the same J2000 frame as the stars.
@@ -530,6 +541,7 @@ async function main() {
       layers = { ...l };
       for (const [key, obj] of Object.entries(overlays.layers)) obj.visible = !!layers[key];
       milkyWay.visible = !!layers.milkyWay;
+      deepSky.mesh.visible = !!layers.deepSky;
     },
   });
 
@@ -559,6 +571,7 @@ async function main() {
       earth: selection?.type === "earth" && isAloft() ? earthFacts() : null,
       skyline: !flight && skylineFade > 0.5 ? skyline : null,
       lightPollution: cityGlowHere(),
+      deepSkyNow,
     }),
     onLook: () => lookAtSelection(),
     onClear: () => select(null),
@@ -580,6 +593,9 @@ async function main() {
       else if (type === "star") {
         const star = catalog.stars.find((st) => String(st.hip) === id);
         if (star) select(selectStar(star), { look: true });
+      } else if (type === "dso") {
+        const o = catalog.deepSky.find((x) => x.id === id);
+        if (o) select(selectDeepSky(o), { look: true });
       } else if (type === "constellation") {
         const c = catalog.constellations.find((cc) => cc.id === id);
         if (c) select(selectConstellation(c), { look: true });
@@ -1180,6 +1196,8 @@ async function main() {
         return { type: "star", id: sel.star.proper || sel.star.hip };
       case "constellation":
         return { type: "con", id: sel.constellation.id };
+      case "dso":
+        return { type: "dso", id: sel.dso.id };
       default:
         return null;
     }
@@ -1209,6 +1227,10 @@ async function main() {
       case "con": {
         const c = catalog.constellations.find((cc) => cc.id.toLowerCase() === id);
         return c ? selectConstellation(c) : null;
+      }
+      case "dso": {
+        const o = catalog.deepSky.find((x) => x.id.toLowerCase() === id);
+        return o ? selectDeepSky(o) : null;
       }
       default:
         return null;
@@ -1325,6 +1347,8 @@ async function main() {
         return selection.star.position(sky).dir;
       case "constellation":
         return selection.constellation.position(sky).dir;
+      case "dso":
+        return selection.dso.position(sky).dir;
       case "feature":
         return (selection.feature.dir ??= dirFromAltAz(selection.feature.alt, selection.feature.az));
       case "earth":
@@ -1387,6 +1411,8 @@ async function main() {
     // neighbours (fainter ones show, zoomed in: see telescopeGain).
     if (selection.type === "star") fov = Math.min(fov, STAR_FOV);
     if (selection.type === "constellation") fov = Math.max(fov, 50);
+    // A cluster, nebula or galaxy: zoomed in to show all of it, with some sky round it.
+    if (selection.type === "dso") fov = Math.min(60, Math.max(0.5, (selection.dso.major / 60) * 2.5));
     const { az } = altAz(d);
     // Behind the ground or the hills: face its direction, just above the skyline.
     if (selection.type !== "feature" && behindLand(d, 0))
@@ -1438,6 +1464,7 @@ async function main() {
   const selectSatellite = (m) => ({ type: "satellite", id: m.id, name: m.name, parent: m.parent });
   const selectStar = (s) => ({ type: "star", name: s.name, star: s });
   const selectConstellation = (c) => ({ type: "constellation", name: c.name, constellation: c });
+  const selectDeepSky = (o) => ({ type: "dso", name: o.name, dso: o });
   const selectFeature = (f) => ({ type: "feature", name: f.name, feature: f });
 
   /** Mountains, towns and landmarks to label, as the layers allow. */
@@ -1535,6 +1562,12 @@ async function main() {
       kind: "Constellation",
       select: () => select(selectConstellation(c), { look: true }),
     })),
+    ...catalog.deepSky.map((o) => ({
+      name: o.name,
+      aka: o.numbers,
+      kind: [o.kind, ...o.numbers.slice(0, 1)].join(" · "),
+      select: () => select(selectDeepSky(o), { look: true }),
+    })),
   ]);
 
   // ---- Picking ----
@@ -1572,6 +1605,12 @@ async function main() {
       if (s.mag > zoomedLimit() + 0.5) break; // sorted by magnitude
       consider(s.position(sky).dir, 14, Math.max(0, 4 - s.mag) * 1.5, () => selectStar(s));
     }
+    // A cluster, nebula or galaxy you can see: anywhere on it (a star on it wins, nearby).
+    if (layers.deepSky)
+      for (const { o, dir } of deepSkyShown()) {
+        const r = Math.min(80, Math.max(14, (o.major / 120) * D2R * perRad));
+        consider(dir, r, -Math.min(r, 40) * 0.5, () => selectDeepSky(o));
+      }
     if (best) return select(best());
     // Up above it: the Earth itself.
     const dir = view.dirAt(x, y);
@@ -1788,6 +1827,24 @@ async function main() {
         items.push({ key: `s${s.hip}`, text: s.proper, dir: d, cls: "star", priority: 50 - s.mag, pick });
       }
     }
+    if (layers.deepSkyNames) {
+      const perRad = pxPerRad();
+      for (const { o, dir, q } of deepSkyShown()) {
+        // Ones known only by a number ("M36") only once zoomed in, unless they stand out.
+        if (/^(M|NGC |IC |Collinder )\d/.test(o.name) && q < 3 && view.state.fov > 45) continue;
+        // Below the middle of it, clear of its glow (or of the star at the heart of a cluster).
+        const below = Math.min(60, Math.max(8, (o.major / 120) * D2R * perRad * 0.6));
+        items.push({
+          key: `d${o.id}`,
+          text: o.name,
+          dir,
+          cls: "deepsky",
+          priority: Math.min(48, 36 + 4 * Math.log10(q)),
+          offset: [-o.name.length * 3, below + 4],
+          pick: () => selectDeepSky(o),
+        });
+      }
+    }
     if (layers.constellationNames) {
       for (const c of catalog.constellationLabels) {
         const d = refract(eqVector(c.ra, c.dec, tmp).applyMatrix4(sky.eqjToWorld).normalize()).clone();
@@ -1915,6 +1972,11 @@ async function main() {
     const { alt, az } = altAz(dir);
     // Below the skyline it's the land behind the label (or the dark seen through it).
     if (alt < skylineAlt(az) - 0.3) return false;
+    // Brightness on screen, before tone mapping: a mid-tone sky and up wants dark text.
+    return skyBehind(alt, az) * exposure > 0.22;
+  }
+  /** The sky's luminance (cd/m²) at altitude `alt` and azimuth `az` (degrees), from the grid. */
+  function skyBehind(alt, az) {
     const a = Math.min(GLOW_ALTS[GLOW_ALTS.length - 1] - 1e-6, Math.max(GLOW_ALTS[0], alt));
     let j = 0;
     while (a > GLOW_ALTS[j + 1]) j++;
@@ -1924,8 +1986,43 @@ async function main() {
     const i2 = (i + 1) % GLOW_AZ;
     const fx = x - Math.floor(x);
     const row = (r) => glow[r * GLOW_AZ + i] * (1 - fx) + glow[r * GLOW_AZ + i2] * fx;
-    // Brightness on screen, before tone mapping: a mid-tone sky and up wants dark text.
-    return (row(j) * (1 - fy) + row(j + 1) * fy) * exposure > 0.22;
+    return row(j) * (1 - fy) + row(j + 1) * fy;
+  }
+
+  // ---- Clusters, nebulae and galaxies: which you can see, and how easily ----
+  /**
+   * How easily you'd see it (see seeing() in deepsky.js: 1 is only just) towards `dir`,
+   * against the sky behind it, zoomed in by `gain` magnitudes. Seen through the earth,
+   * against the dark there, as if from above the air (like the stars).
+   */
+  function seenNow(o, dir, gain) {
+    const { alt, az } = altAz(dir);
+    const through = !isAloft() && !layers.ground && alt < skylineAlt(az);
+    const L = through ? DARK_SKY : skyBehind(alt, az);
+    const trans = 10 ** (-0.4 * shared.uExtK.value * (through ? 1 : airmass(alt)));
+    return seeing(o, L, { trans, gain });
+  }
+  /** For the info panel: how easily you'd see it now, by eye and with binoculars (null if it's out of sight). */
+  function deepSkyNow(o) {
+    const dir = o.position(sky).dir;
+    if (behindLand(dir, 0)) return null;
+    return { eye: seenNow(o, dir, 0), binoculars: seenNow(o, dir, BINOCULARS) };
+  }
+  /** The ones you can see right now, as drawn (zoomed in or not): [{ o, dir, q }], worked out once a frame. */
+  let deepSkyCache = null;
+  function deepSkyShown() {
+    const gain = shared.uBoost.value;
+    if (deepSkyCache?.sky === sky && deepSkyCache.gain === gain) return deepSkyCache.list;
+    const list = [];
+    for (const o of catalog.deepSky) {
+      if (o.mag == null) continue;
+      const dir = o.position(sky).dir;
+      if (behindLand(dir)) continue;
+      const q = seenNow(o, dir, gain);
+      if (q >= 1) list.push({ o, dir, q });
+    }
+    deepSkyCache = { sky, gain, list };
+    return list;
   }
 
   // ---- Resize ----
@@ -2155,6 +2252,7 @@ async function main() {
     globalLimit = 7.93 - 5 * Math.log10(1 + 63 * Math.sqrt(zenith));
     // Stars, planets and moons alike (see the points' shader).
     shared.uBoost.value = telescopeGain(view.state.fov);
+    deepSky.update(pxPerRad());
     updateGlow(now, atm, lights, ambient);
 
     updateSkyline(dt);

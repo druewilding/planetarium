@@ -12,6 +12,11 @@ export const LAYER_GROUPS = [
     title: "Sky",
     items: [
       { key: "milkyWay", label: "Milky Way", hint: "Shows up on dark, moonless nights, or with the Sun dimmed" },
+      {
+        key: "deepSky",
+        label: "Clusters, nebulae & galaxies",
+        hint: "Faint smudges that show on dark nights, and more of them zoomed in, as through binoculars or a telescope",
+      },
       { key: "atmosphere", label: "Atmosphere", hint: "Turn off to see a Moon-like black sky" },
       {
         key: "ground",
@@ -44,6 +49,7 @@ export const LAYER_GROUPS = [
     items: [
       { key: "planetLabels", label: "Sun, Moon & planets" },
       { key: "starNames", label: "Star names" },
+      { key: "deepSkyNames", label: "Clusters, nebulae & galaxies", color: "#f4bfd0" },
       { key: "constellationNames", label: "Constellation names" },
       {
         key: "peakNames",
@@ -90,6 +96,7 @@ export const LAYER_GROUPS = [
 
 export const DEFAULT_LAYERS = {
   milkyWay: true,
+  deepSky: true,
   atmosphere: true,
   ground: true,
   terrain: true,
@@ -98,6 +105,7 @@ export const DEFAULT_LAYERS = {
   bigBodies: true,
   planetLabels: true,
   starNames: true,
+  deepSkyNames: true,
   constellationNames: true,
   peakNames: true,
   placeNames: true,
@@ -204,11 +212,11 @@ export function createLayersPanel({ onChange }) {
 
 const fold = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
-/** items: [{ name, kind, select() }] */
+/** items: [{ name, aka (other names it can be found by), kind, select() }] */
 export function createSearch(items) {
   const input = document.getElementById("search");
   const list = document.getElementById("search-results");
-  const records = items.map((it) => ({ ...it, key: fold(it.name) }));
+  const records = items.map((it) => ({ ...it, key: fold([it.name, ...(it.aka ?? [])].join(" ")) }));
   let matches = [];
   let active = 0;
 
