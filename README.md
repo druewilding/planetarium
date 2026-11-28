@@ -144,6 +144,11 @@ sky with no connection (the hills and place names need one the first time you vi
   drew it, its nearest star, when it's highest at midnight, how much of it you can see from where you are, and, for
   the 13 the Sun passes through, the dates it really does: not the horoscope's, which the sky has drifted from by
   almost a month (and which leave out Ophiuchus).
+  The back arrow at the top of a card retraces your steps: go from Saturn to Tethys, and from there to Dione, and it
+  takes you back to Tethys, then Saturn, turning to each one, then to the overview (its tooltip says where it goes).
+  Back at the overview it zooms back out, still looking the same way: to the usual view on the ground, or as far as
+  Reset zoom goes up above the Earth. Things you can't go back to any more (a mountain you've left, the Earth once
+  you've landed) are skipped.
 - **Point at sky:** on a phone, hold it up and the sky follows it, so you can aim at a star and read its name. It
   uses the compass for north (via `deviceorientationabsolute` on Android, `webkitCompassHeading` on iOS). Phone
   compasses are often a few degrees out and point to magnetic north, so dragging sideways turns the sky into line.
@@ -251,6 +256,7 @@ planetarium/
 │   ├── constellations.js  # the constellations: sizes, stories, who drew them, the Sun’s real dates
 │   ├── deepsky.js         # clusters, nebulae and galaxies: names, distances, notes, and when you can see them
 │   ├── tonight.js         # what's up tonight: the dark hours, the Moon, the planets, faint things to find
+│   ├── trail.js           # the trail of what you've looked at, for the info panel's back arrow
 │   ├── scene/
 │   │   ├── atmosphere.js  # scattering model (GLSL + JS twin)
 │   │   ├── earth.js       # the Earth seen from above, drawn into the sky
